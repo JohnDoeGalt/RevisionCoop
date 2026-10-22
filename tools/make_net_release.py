@@ -39,6 +39,9 @@ def main(version):
     dist = os.path.join(here, 'dist', 'net')
     for f in ('Install.bat', 'Uninstall.bat', 'README.txt'):
         shutil.copy(os.path.join(dist, f), stage)
+    # The MIT notices: ours, and deus-ex-coop's (the relay in the zip is built from it).
+    for f in ('LICENSE', os.path.join('src', 'relay', 'LICENSE-hxcoop')):
+        shutil.copy(os.path.join(here, f), stage)
     for f in ('Install-RevNet.ps1', 'Uninstall-RevNet.ps1'):
         text = open(os.path.join(dist, f), encoding='utf-8').read()
         open(os.path.join(pay, f), 'w', encoding='utf-8-sig', newline='\r\n').write(text)

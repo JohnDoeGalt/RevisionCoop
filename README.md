@@ -56,9 +56,25 @@ one PC and runs the scenario `src/RevNet/Classes/CoopTest<Name>.uc` (results are
 
 ## Credits and license
 
-MIT (see `LICENSE`). The Steam relay is a fork of cranebeaker's
-[HXCoop](https://github.com/cranebeaker/deus-ex-coop) (MIT, `src/relay/LICENSE-hxcoop`) and
-uses Steam's networking test app (AppID 480).
+Revision Co-op started from [deus-ex-coop](https://github.com/cranebeaker/deus-ex-coop) by
+cranebeaker and contributors: HXFix (fixes and co-op saves for HX) and HXCoop (its Steam
+relay). deus-ex-coop builds on [HX](https://builds.hx.hanfling.de/) by Hanfling, the
+original Deus Ex co-op mod. Our first prototype ran on both. Thank you!
+
+It has since been rebuilt and extended far beyond them. The co-op game itself (RevNet) is
+new code on Revision's own classes, so every Revision mode plays as in single-player:
+one shared world with map memory, downed and revive, team travel, shared conversations,
+per-mission story fixes, host-owned modes and settings, rejoin with your gear, and a live
+test suite that crawls the whole campaign in every mode. What comes from deus-ex-coop:
+
+- the Steam relay launcher (`src/relay`): host / join / continue and finding friends are
+  HXCoop's; we added host-owned modes that joiners switch to automatically, host settings,
+  Revision's launch, Steam names, and the lobby-only security check;
+- the co-op save format (`CoopSave`), from HXFix;
+- two dev tools, `tools/crash_text.ps1` and `tools/log_text.ps1`, unchanged.
+
+Those parts are MIT under `src/relay/LICENSE-hxcoop`; everything else is MIT under `LICENSE`.
+The relay uses Steam's networking test app (AppID 480).
 
 Not affiliated with or endorsed by the Revision team, Square Enix or Eidos. Deus Ex and
 Deus Ex: Revision belong to their owners; this project contains none of their files.

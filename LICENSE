@@ -20,8 +20,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-This license covers the code in this repository (RevCoop, the relay changes, tools).
-It does not cover Deus Ex, Deus Ex: Revision, HX or Steam, which belong to their owners
-and are not included. The relay is based on HXCoop by cranebeaker (MIT, LICENSE-hxcoop).
-Revision's maps and packages are never redistributed: the installer patches the
-player's own copies.
+This license covers the code in this repository. It does not cover Deus Ex,
+Deus Ex: Revision or Steam, which belong to their owners and are not included: the
+installer uses the player's own copies. Parts come from cranebeaker's deus-ex-coop
+(MIT, see LICENSE-hxcoop): the Steam relay (src/relay), the co-op save format
+(CoopSave) and tools/crash_text.ps1, tools/log_text.ps1.

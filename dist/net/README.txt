@@ -89,4 +89,10 @@ Uninstall
 
 Credits
   Deus Ex: Revision by the Revision team (Caustic Creative). Deus Ex by Ion Storm / Eidos.
-  Co-op save and Steam relay code based on HXFix by cranebeaker and contributors (MIT).
+  Revision Co-op started from deus-ex-coop by cranebeaker and contributors (HXFix and its
+  HXCoop Steam relay, MIT), which builds on HX by Hanfling, the original Deus Ex co-op
+  mod. It has since been rebuilt and extended far beyond them: the co-op game is new code
+  on Revision's own, so every Revision mode plays as in single-player. The Steam launcher
+  (host, join, continue) and the co-op save format come from deus-ex-coop.
+  Not affiliated with the Revision team, Square Enix or Eidos.
+  Source and licenses: https://github.com/JohnDoeGalt/RevisionCoop

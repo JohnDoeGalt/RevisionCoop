@@ -2,7 +2,9 @@
 // CoopSave.
 //
 // A co-op saved game, one per gameplay mode: section "[<Mode> CoopSave]" of
-// RevNetSave.ini (the launcher's "continue" reads SavedMap there).
+// RevNetSave.ini (the launcher's "continue" reads SavedMap there). The save
+// format comes from HXFix's co-op save (cranebeaker's deus-ex-coop, MIT, see
+// src/relay/LICENSE-hxcoop).
 //
 // A saved level can't be served to clients (they only have the map's own
 // package, a saved one crashes them), so a save is a checkpoint: the host's

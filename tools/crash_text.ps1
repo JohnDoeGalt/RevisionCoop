@@ -1,4 +1,5 @@
 # Prints the text of the "Critical Error" dialog of process <Pid> (UE1 crash history), if any.
+# From cranebeaker's deus-ex-coop (MIT, see src/relay/LICENSE-hxcoop).
 param([int]$ProcessId)
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices; using System.Collections.Generic;

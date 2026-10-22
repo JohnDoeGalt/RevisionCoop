@@ -1,5 +1,6 @@
 # Prints the last lines of an Unreal Engine 1 game's on-screen log window (the log file only
 # flushes on a clean exit). Uses SendMessageTimeout, so a hung game can't hang the caller.
+# From cranebeaker's deus-ex-coop (MIT, see src/relay/LICENSE-hxcoop).
 param([int]$ProcessId, [int]$Lines = 15)
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices; using System.Collections.Generic;
