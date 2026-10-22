@@ -1,0 +1,7 @@
+downloads/
+ref/
+build/
+*.log
+.claude/
+src/relay/RevCoop.exe
+__pycache__/
