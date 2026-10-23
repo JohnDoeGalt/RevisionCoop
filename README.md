@@ -19,7 +19,7 @@ Year Edition and Deus Ex: Revision (free for Deus Ex owners).
   `docs/netmode_audit.json` and `docs/REVNET_DEV.md`).
 - **Saves** are co-op checkpoints (`CoopSave`) with map memory (`CoopMapMemory`): flags,
   goals, notes, inventory per player, and the state of every map visited.
-- **Steam relay** (`src/relay`): a small launcher that creates a friends-only Steam lobby and
+- **Steam relay** (`src/relay`): the launcher window (plain Win32, one exe) that creates a friends-only Steam lobby and
   carries the game's UDP traffic over Steam networking. Joiners take the host's mode from the
   lobby automatically.
 
@@ -68,8 +68,9 @@ per-mission story fixes, host-owned modes and settings, rejoin with your gear, a
 test suite that crawls the whole campaign in every mode. What comes from deus-ex-coop:
 
 - the Steam relay launcher (`src/relay`): host / join / continue and finding friends are
-  HXCoop's; we added host-owned modes that joiners switch to automatically, host settings,
-  Revision's launch, Steam names, and the lobby-only security check;
+  HXCoop's; we added the window (HXCoop is a console), host-owned modes that joiners switch
+  to automatically, host settings, Revision's launch, Steam names, and the lobby-only
+  security check;
 - the co-op save format (`CoopSave`), from HXFix;
 - two dev tools, `tools/crash_text.ps1` and `tools/log_text.ps1`, unchanged.
 

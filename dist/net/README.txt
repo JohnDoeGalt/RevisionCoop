@@ -20,14 +20,20 @@ Install
      along.
 
 Play
-  Open "Revision Co-op" on the desktop.
-    1  Host a game          (you start the campaign, friends can join)
-    2  Join a friend's game (finds a Steam friend who is hosting)
-    3  Continue             (the host continues the saved co-op game)
-    4  Mode                 (host only: which gameplay mode everyone plays)
-    5  Settings             (host only: difficulty, friendly fire, death and saves)
+  Open "Revision Co-op" on the desktop. Its window signs in to Steam by itself.
+  Host
+    Choose the mode (which gameplay mode everyone plays), difficulty, friendly fire,
+    what happens when a player dies, and saves; then click "Host a new game", or
+    "Continue saved game" to pick up where your team left off. Your choices are
+    remembered.
+  Join
+    Friends who are hosting appear under "Join a friend": choose one and click Join
+    (or double-click them). You can also type the lobby id the host sees, accept a
+    Steam invite, or right-click the host in Steam's friends list and choose Join Game
+    while the window is open.
   The host's mode and settings apply to everyone who joins: a joining player's game
-  switches to the host's mode by itself. The mode you pick (4) is remembered.
+  switches to the host's mode by itself. Keep the window open while you play; the
+  game closing ends the session.
 
 In the game
   - The world is the host's: what anyone does (bodies moved, boxes stacked, doors opened,
@@ -77,9 +83,10 @@ Troubleshooting
   - "Your Revision files differ from the version this release was tested with":
     Revision got an update. It will probably still work; if co-op doesn't start, get the
     newest Revision Co-op release.
-  - "Steam is not running": start Steam, log in, then open Revision Co-op again.
+  - "Steam is not running": start Steam and log in; the Revision Co-op window connects
+    by itself.
   - A friend can't find your game: they must be on your Steam friends list, you must have
-    pressed 1 (Host) first, and both of you need the same Revision Co-op version.
+    clicked Host first, and both of you need the same Revision Co-op version.
   - The game window is too small/large: change the resolution in the game's options; it is
     kept when you reinstall.
 

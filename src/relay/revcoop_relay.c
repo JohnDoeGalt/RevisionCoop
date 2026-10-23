@@ -29,10 +29,12 @@
  * steam_api.dll is loaded at runtime through the flat C API (no SDK headers), see
  * spacewar.md. Needs steam_appid.txt = 480 in the working directory.
  *
- *   RevCoop.exe                    menu
- *   RevCoop.exe host [map]         host, default map 01_NYC_UNATCOIsland
- *   RevCoop.exe join [lobby id]    join (no id: a friend who is hosting)
- *   RevCoop.exe continue           host the saved game of the current mode
+ * A window (Win32, no console): mode and host settings, host / continue, the friends who
+ * host, and a log. Steam and the relay run on a worker thread; the window never calls Steam.
+ *   RevCoop.exe                    the window
+ *   RevCoop.exe host [map]         the window, hosting at once (default map 01_NYC_UNATCOIsland)
+ *   RevCoop.exe join <lobby id>    the window, joining at once
+ *   RevCoop.exe continue           the window, hosting the saved game of the current mode
  * Options: --game <co-op folder>  --port <game port, 7790>  --url-extra <?opts for the host URL>
  *          --game-args <extra Revision.exe arguments>  --no-launch (relay only)  --mode <name>
  *          --apply-mode <name> (write the mode and settings into RevNet.ini and exit; IP launchers)
@@ -47,7 +49,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <conio.h>
+#include <stdarg.h>
+#include <setjmp.h>
+#include <commctrl.h>
+#include <shellapi.h>
+#pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 typedef uint64_t u64;
 
@@ -126,10 +132,53 @@ static void *g_user, *g_mm, *g_friends, *g_msgs, *g_utils;
 static int32_t g_pipe;
 static u64 g_me;
 
+/* ---------------------------------------------------------------- window <-> worker */
+
+/* The worker tells the window through posted messages carrying a malloc'd UTF-8 string
+   (the window frees it). */
+enum { WM_APP_LOG = WM_APP + 1, WM_APP_STATUS, WM_APP_ERROR, WM_APP_READY, WM_APP_SESSION, WM_APP_FRIENDS, WM_APP_FATAL };
+static HWND g_wnd;
+static DWORD g_worker_tid;
+static jmp_buf g_jmp;           /* the worker's idle loop: a failed session lands here */
+static bool g_jmp_ready;
+static volatile LONG g_quit;    /* the window is closing: sessions end, the worker stops */
+
+static void post_text(UINT msg, const char *text)
+{
+    if (g_wnd) PostMessageA(g_wnd, msg, 0, (LPARAM)_strdup(text));
+}
+
+/* A line in the window's log. */
+static void say(const char *fmt, ...)
+{
+    char buf[1024];
+    va_list a;
+    va_start(a, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, a);
+    va_end(a);
+    post_text(WM_APP_LOG, buf);
+}
+
+static void status(const char *fmt, ...)
+{
+    char buf[512];
+    va_list a;
+    va_start(a, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, a);
+    va_end(a);
+    post_text(WM_APP_STATUS, buf);
+}
+
+/* In a session: the window shows the message and the worker goes back to waiting.
+   Anywhere else (start-up): a message box, then the end. */
 static void fail(const char *msg)
 {
-    printf("\n%s\n\nPress a key to close.\n", msg);
-    _getch();
+    if (g_jmp_ready && GetCurrentThreadId() == g_worker_tid) {
+        post_text(WM_APP_ERROR, msg);
+        longjmp(g_jmp, 1);
+    }
+    if (g_wnd && GetCurrentThreadId() == g_worker_tid) { post_text(WM_APP_FATAL, msg); ExitThread(1); }
+    MessageBoxA(g_wnd, msg, "Revision Co-op", MB_ICONERROR);
     exit(1);
 }
 
@@ -195,14 +244,24 @@ static void steam_start(void)
     LOAD(SetConfigInt, "SteamAPI_ISteamNetworkingUtils_SetGlobalConfigValueInt32");
     LOAD_OPT(InitRelay, "SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess");
 
-    if (!S.IsSteamRunning()) fail("Steam is not running. Start Steam, log in, and try again.");
+    /* Steam not running yet: wait for it (the player starts it after seeing the window);
+       running but refusing for 10 s: give up with its reason. */
     char err[1024] = "";
-    int r = S.InitFlat(err);
-    if (r != 0) {
-        char buf[1200];
-        snprintf(buf, sizeof(buf), "Could not connect to Steam (code %d): %s", r, err);
-        fail(buf);
+    int r = -1, refused = 0;
+    status("Connecting to Steam...");
+    while (!g_quit) {
+        if (S.IsSteamRunning()) {
+            if ((r = S.InitFlat(err)) == 0) break;
+            if (++refused >= 10) {
+                char buf[1200];
+                snprintf(buf, sizeof(buf), "Could not connect to Steam (code %d): %s", r, err);
+                fail(buf);
+            }
+        } else
+            status("Steam is not running: start Steam and log in. This window connects by itself.");
+        Sleep(1000);
     }
+    if (g_quit) ExitThread(0);
     S.DispatchInit();
     g_pipe = S.GetHSteamPipe();
     g_user = S.User(); g_mm = S.Matchmaking(); g_friends = S.Friends();
@@ -383,37 +442,30 @@ static void save_current_mode(void)
     if (f) { fputs(g_mode, f); fclose(f); }
 }
 
-/* Lets the host cycle through the installed modes. */
-static void choose_mode(void)
+/* The installed modes (names and titles) for the window's list; the current mode stays. */
+static char g_mode_names[16][64], g_mode_titles[16][128];
+static int g_modes;
+
+static void list_modes(void)
 {
-    char names[16][64], p[MAX_PATH], was[64];
-    int n = 0, cur = 0;
+    char p[MAX_PATH], was[64];
     WIN32_FIND_DATAA fd;
     snprintf(was, sizeof(was), "%s", g_mode);
+    g_modes = 0;
     mode_path(p, sizeof(p), "*", ".mode");
     HANDLE h = FindFirstFileA(p, &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do {
         char *dot = strrchr(fd.cFileName, '.');
         if (dot) *dot = 0;
-        if (n < 16 && valid_mode_name(fd.cFileName)) snprintf(names[n++], 64, "%s", fd.cFileName);
+        if (g_modes < 16 && load_mode(fd.cFileName)) {
+            snprintf(g_mode_names[g_modes], 64, "%s", g_mode);
+            snprintf(g_mode_titles[g_modes], 128, "%s", g_mode_title);
+            g_modes++;
+        }
     } while (FindNextFileA(h, &fd));
     FindClose(h);
-    printf("\nModes (the host's choice applies to everyone):\n");
-    for (int i = 0; i < n; i++) {
-        load_mode(names[i]);
-        printf("  %d) %s\n", i + 1, g_mode_title);
-        if (!_stricmp(names[i], was)) cur = i;
-    }
-    printf("Choose a number: ");
-    for (;;) {
-        int c = _getch();
-        if (c >= '1' && c < '1' + n) { cur = c - '1'; break; }
-        if (c == 27) break;
-    }
-    load_mode(names[cur]);
-    save_current_mode();
-    printf("%d\n", cur + 1);
+    load_mode(was);
 }
 
 /* ---------------------------------------------------------------- host settings */
@@ -424,11 +476,11 @@ static int g_difficulty = 1;   /* 0 Easy, 1 Medium, 2 Hard, 3 Deus Ex */
 static int g_friendly_fire = 0; /* index into ff_values */
 static const char *difficulty_names[] = { "Easy", "Medium", "Hard", "Deus Ex" };
 static const char *ff_values[] = { "0.000000", "0.500000", "1.000000" };
-static const char *ff_names[] = { "off", "half damage", "full damage" };
+static const char *ff_names[] = { "Off", "Half damage", "Full damage" };
 /* CoopGameInfo.DeathRule and SaveRule. */
 static int g_death = 0, g_saves = 0;
-static const char *death_names[] = { "a teammate revives you with a medkit, else the team reloads", "the team reloads the last save at once" };
-static const char *save_names[] = { "quick saves and autosaves", "autosaves only (harder)" };
+static const char *death_names[] = { "Downed: a teammate revives you with a medkit", "The team reloads the last save at once" };
+static const char *save_names[] = { "Quick saves and autosaves", "Autosaves only (harder)" };
 
 static void load_settings(void)
 {
@@ -497,24 +549,6 @@ static void apply_settings(void)
     set_ini_key("RevNet.ini", "RevNet.CoopGameInfo", "SaveRule", n);
 }
 
-static void choose_settings(void)
-{
-    for (;;) {
-        printf("\nHost settings (they apply to everyone in your game):\n"
-               "  1) Difficulty: %s\n  2) Friendly fire: %s\n  3) When a player dies: %s\n  4) Saves: %s\n"
-               "Press 1-4 to change, Enter when done: ",
-               difficulty_names[g_difficulty], ff_names[g_friendly_fire], death_names[g_death], save_names[g_saves]);
-        int c = _getch();
-        if (c == '1') g_difficulty = (g_difficulty + 1) & 3;
-        else if (c == '2') g_friendly_fire = (g_friendly_fire + 1) % 3;
-        else if (c == '3') g_death ^= 1;
-        else if (c == '4') g_saves ^= 1;
-        else break;
-    }
-    save_settings();
-    printf("\n");
-}
-
 /* "?Name=<Steam name>" for the game URL. Co-op saves give returning players their gear by
    name, so the Steam name keeps that working without anyone setting a name in the game. URL
    option separators and spaces are left out; at most 20 characters. */
@@ -555,7 +589,7 @@ static void launch_game(const char *url)
     }
     CloseHandle(pi.hThread);
     g_game = pi.hProcess;
-    printf("Started the game: %s\n", url);
+    say("Started the game: %s", url);
 }
 
 static bool game_exited(void)
@@ -644,7 +678,7 @@ static Peer *find_peer(u64 sid)
 static void drop_peer(Peer *p, const char *why)
 {
     if (!p || !p->sid) return;
-    printf("%s left (%s).\n", friend_name(p->sid), why);
+    say("%s left (%s).", friend_name(p->sid), why);
     for (int i = 0; i < MAX_CONNS; i++) if (p->conns[i].s) closesocket(p->conns[i].s);
     close_session(p->sid);
     memset(p, 0, sizeof(*p));
@@ -667,7 +701,7 @@ static Peer *add_peer(u64 sid)
         if (p->sid) continue;
         memset(p, 0, sizeof(*p));
         p->sid = sid; p->last_heard = p->last_ping = GetTickCount();
-        printf("%s connected through Steam.\n", friend_name(sid));
+        say("%s connected through Steam.", friend_name(sid));
         return p;
     }
     return NULL;
@@ -710,7 +744,7 @@ static void host_cb(int id, void *data)
     case CB_SESSION_REQUEST: {
         u64 sid = S.IdentGet(data);
         if (in_lobby(sid)) accept_session(sid);
-        else printf("Ignored a connection from %s (not in your lobby).\n", friend_name(sid));
+        else say("Ignored a connection from %s (not in your lobby).", friend_name(sid));
         break;
     }
     case CB_SESSION_FAILED: {
@@ -750,24 +784,26 @@ static bool read_saved_map(char *out, size_t size)
     return out[0] != 0;
 }
 
-static int run_host(const char *map)
+/* load: continue the mode's co-op save (?CoopLoad=1). */
+static int run_host(const char *map, bool load)
 {
     S.CreateLobby(g_mm, 1 /* friends only */, MAX_PEERS + 1);
-    printf("Creating a friends-only Steam lobby...\n");
+    status("Creating a friends-only Steam lobby...");
     DWORD t0 = GetTickCount();
     while (!g_lobby && !g_lobby_failed && GetTickCount() - t0 < 15000) { pump(host_cb); Sleep(20); }
     if (!g_lobby) fail("Steam did not create a lobby. Check that you are online in Steam.");
 
     char url[1024], name[32];
+    apply_mode();
     apply_settings();
     name_option(name, sizeof(name));
-    snprintf(url, sizeof(url), "%s?Listen?Port=%d?Game=%s?Difficulty=%d%s%s", map, g_port, g_game_class, g_difficulty, name, g_url_extra);
+    snprintf(url, sizeof(url), "%s?Listen?Port=%d?Game=%s?Difficulty=%d%s%s%s", map, g_port, g_game_class, g_difficulty,
+             name, load ? "?CoopLoad=1" : "", g_url_extra);
     launch_game(url);
 
-    printf("\nHosting %s. Friends join by running Revision Co-op and choosing Join\n"
-           "(or Steam friends list: right-click you -> Join Game, with Revision Co-op already open).\n"
-           "Lobby id: %llu\nKeep this window open while you play. Close the game to stop.\n\n",
-           g_mode_title, (unsigned long long)g_lobby);
+    status("Hosting %s. Friends join from their Revision Co-op window, or in Steam: right-click you, Join Game. Close the game to stop.",
+           g_mode_title);
+    say("Lobby id %llu (a friend can type it under Join).", (unsigned long long)g_lobby);
 
     static unsigned char buf[65536];
     for (;;) {
@@ -817,7 +853,7 @@ static int run_host(const char *map)
             if (now - p->last_ping > 1000) { p->last_ping = now; send_to(p->sid, "K", 1, SEND_RELIABLE, 1); }
             if (now - p->last_heard > 20000) drop_peer(p, "timed out");
         }
-        if (game_exited()) break;
+        if (game_exited() || g_quit) break;
         Sleep(1);
     }
     for (int i = 0; i < MAX_PEERS; i++)
@@ -882,49 +918,13 @@ static int list_hosting_friends(u64 *lobbies, u64 *owners, int max)
     return n;
 }
 
-static void pick_lobby(void)
-{
-    u64 lobbies[32], owners[32];
-    int shown = -1;
-    printf("Looking for Steam friends who are hosting...\n"
-           "(You can also accept a Steam invite, or type a lobby id and press Enter.)\n");
-    char typed[64] = ""; int tl = 0;
-    while (!g_join_lobby) {
-        pump(join_cb);
-        int n = list_hosting_friends(lobbies, owners, 32);
-        if (n == 1) {
-            printf("Found %s.\n", friend_name(owners[0]));
-            g_join_lobby = lobbies[0];
-            break;
-        }
-        if (n > 1 && n != shown) {
-            printf("\nFriends hosting:\n");
-            for (int i = 0; i < n; i++) printf("  %d) %s\n", i + 1, friend_name(owners[i]));
-            printf("Type a number and press Enter: ");
-            shown = n;
-        }
-        while (_kbhit()) {
-            int c = _getch();
-            if (c == '\r') {
-                printf("\n");
-                u64 v = strtoull(typed, NULL, 10);
-                if (v >= 1 && v <= (u64)n) g_join_lobby = lobbies[v - 1];
-                else if (v > 1000) g_join_lobby = v;
-                tl = 0; typed[0] = 0;
-            } else if (c >= '0' && c <= '9' && tl < 60) { typed[tl++] = (char)c; typed[tl] = 0; putchar(c); }
-        }
-        Sleep(50);
-    }
-}
-
 static int run_join(u64 lobby)
 {
     g_join_lobby = lobby;
-    if (!g_join_lobby) pick_lobby();
-
+    status("Joining...");
     for (int attempt = 0; attempt < 3 && !g_host; attempt++) {
         g_join_failed = false;
-        printf("Joining lobby %llu...\n", (unsigned long long)g_join_lobby);
+        say("Joining lobby %llu...", (unsigned long long)g_join_lobby);
         S.JoinLobby(g_mm, g_join_lobby);
         DWORD t0 = GetTickCount();
         while (!g_host && !g_join_failed && GetTickCount() - t0 < 15000) { pump(join_cb); Sleep(20); }
@@ -941,7 +941,7 @@ static int run_join(u64 lobby)
         fail(buf);
     }
     apply_mode();
-    printf("Host: %s, mode: %s\n", friend_name(g_host), g_mode_title);
+    say("Host: %s, mode: %s", friend_name(g_host), g_mode_title);
     accept_session(g_host);
 
     SOCKET s = udp_socket(0);
@@ -951,7 +951,8 @@ static int run_join(u64 lobby)
     name_option(name, sizeof(name));
     snprintf(url, sizeof(url), "127.0.0.1:%d%s", port, name);
     launch_game(url);
-    printf("Relaying 127.0.0.1:%d <-> %s over Steam. Keep this window open. Close the game to stop.\n", port, friend_name(g_host));
+    status("Playing in %s's game (%s). Keep this window open; close the game to stop.", friend_name(g_host), g_mode_title);
+    say("Relaying 127.0.0.1:%d <-> %s over Steam.", port, friend_name(g_host));
 
     /* one id per game source address (connection), see the top of the file */
     struct sockaddr_in games[MAX_CONNS]; DWORD games_last[MAX_CONNS]; int games_n = 0;
@@ -992,22 +993,403 @@ static int run_join(u64 lobby)
             for (int i = 0; i < n; i++) {
                 if (msg_sender(msgs[i]) == g_host) {
                     last_heard = GetTickCount();
-                    if (*(int *)((char *)msgs[i] + 4) >= 1 && (*(char **)msgs[i])[0] == 'B') printf("The host closed the game.\n");
+                    if (*(int *)((char *)msgs[i] + 4) >= 1 && (*(char **)msgs[i])[0] == 'B') say("The host closed the game.");
                 }
                 S.MessageRelease(msgs[i]);
             }
         }
         DWORD now = GetTickCount();
         if (now - last_ping > 1000) { last_ping = now; send_to(g_host, "K", 1, SEND_RELIABLE, 1); }
-        if (now - last_heard > 20000 && now - warned > 20000) { warned = now; printf("No answer from the host for 20 s...\n"); }
-        if (game_exited()) break;
-        if (g_no_launch && _kbhit() && _getch() == 27) break;
+        if (now - last_heard > 20000 && now - warned > 20000) { warned = now; say("No answer from the host for 20 s..."); }
+        if (game_exited() || g_quit) break;
         Sleep(1);
     }
     send_to(g_host, "B", 1, SEND_RELIABLE, 1);
     S.LeaveLobby(g_mm, g_join_lobby);
     for (int i = 0; i < 20; i++) { pump(join_cb); Sleep(10); }
     close_session(g_host);
+    closesocket(s);
+    return 0;
+}
+
+/* ---------------------------------------------------------------- worker */
+
+/* What the window asks for; the worker takes it when it isn't in a session. */
+enum { CMD_NONE, CMD_HOST, CMD_CONTINUE, CMD_JOIN };
+static volatile LONG g_cmd;
+static u64 g_cmd_lobby;                          /* CMD_JOIN */
+static char g_own_mode[64];                      /* the player's chosen mode (a join uses the host's) */
+static char g_host_map[64] = "01_NYC_UNATCOIsland";
+
+typedef struct { int n; u64 lobby[32]; char name[32][64]; } FriendList;
+
+/* After a session, ended or failed: out of the lobby, no peers, and the player's own mode
+   again (joining switches to the host's). */
+static void end_session(void)
+{
+    for (int i = 0; i < MAX_PEERS; i++) if (g_peers[i].sid) drop_peer(&g_peers[i], "session ended");
+    if (g_lobby) {
+        S.LeaveLobby(g_mm, g_lobby);
+        S.SetRichPresence(g_friends, "connect", "");
+        S.SetRichPresence(g_friends, "status", "");
+        g_lobby = 0;
+    }
+    if (g_join_lobby) { S.LeaveLobby(g_mm, g_join_lobby); g_join_lobby = 0; }
+    if (g_host) { close_session(g_host); g_host = 0; }
+    g_lobby_failed = g_join_failed = false;
+    if (g_game) { CloseHandle(g_game); g_game = NULL; }
+    load_mode(g_own_mode);  /* (not pick_default_mode: its fail() would land back here) */
+    status("Ready.");
+    PostMessageA(g_wnd, WM_APP_SESSION, 0, 0);
+}
+
+/* The friends who host, sent to the window when the list changes. */
+static void update_friends(bool force)
+{
+    static FriendList last;
+    FriendList now;
+    u64 owners[32];
+    memset(&now, 0, sizeof(now));
+    now.n = list_hosting_friends(now.lobby, owners, 32);
+    for (int i = 0; i < now.n; i++) snprintf(now.name[i], 64, "%s", friend_name(owners[i]));
+    if (!force && !memcmp(&now, &last, sizeof(now))) return;
+    last = now;
+    FriendList *f = malloc(sizeof(*f));
+    *f = now;
+    PostMessageA(g_wnd, WM_APP_FRIENDS, 0, (LPARAM)f);
+}
+
+static DWORD WINAPI worker(void *unused)
+{
+    static DWORD listed;
+    WSADATA w;
+    (void)unused;
+    WSAStartup(MAKEWORD(2, 2), &w);
+    steam_start();
+    relay_config();
+    post_text(WM_APP_READY, S.GetPersonaName(g_friends));
+    status("Ready.");
+    say("To host: choose the mode and settings, then Host a new game. To join: choose a friend who is hosting, then Join.");
+    update_friends(true);
+
+    if (setjmp(g_jmp)) { end_session(); update_friends(true); }  /* a failed session lands here */
+    g_jmp_ready = true;
+    while (!g_quit) {
+        LONG cmd = InterlockedExchange(&g_cmd, CMD_NONE);
+        if (cmd == CMD_NONE && g_join_lobby) { cmd = CMD_JOIN; g_cmd_lobby = g_join_lobby; }  /* a Steam invite or "Join Game" */
+        if (cmd != CMD_NONE) {
+            PostMessageA(g_wnd, WM_APP_SESSION, 1, 0);
+            if (cmd == CMD_JOIN) run_join(g_cmd_lobby);
+            else if (cmd == CMD_CONTINUE) {
+                char saved[128];
+                if (!read_saved_map(saved, sizeof(saved)))
+                    fail("No saved game in this mode yet. Host a game first: it saves a few seconds into every map, and when the host quick-saves.");
+                say("Continuing the saved game on %s.", saved);
+                run_host(saved, true);
+            } else
+                run_host(g_host_map, false);
+            say("The game closed.");
+            end_session();
+            update_friends(true);
+            continue;
+        }
+        pump(join_cb);
+        if (GetTickCount() - listed > 1500) { listed = GetTickCount(); update_friends(false); }
+        Sleep(50);
+    }
+    S.Shutdown();
+    return 0;
+}
+
+/* ---------------------------------------------------------------- window */
+
+enum { ID_ICON = 100, ID_TITLE, ID_WHO, ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES, ID_HOST, ID_CONTINUE,
+       ID_SAVED, ID_FRIENDS, ID_LOBBY, ID_JOIN, ID_STATUS, ID_LOG };
+static HFONT g_font, g_bold, g_big;
+static HICON g_icon, g_icon_small;
+static double g_scale = 1;
+static bool g_steam_ready, g_in_session;
+static u64 g_list_lobby[32];
+static int g_list_n;
+static HANDLE g_worker;
+
+static wchar_t *wide(const char *s)  /* UTF-8 (Steam names) to a malloc'd UTF-16 string */
+{
+    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+    wchar_t *w = malloc((n > 0 ? n : 1) * sizeof(wchar_t));
+    if (n <= 0 || !MultiByteToWideChar(CP_UTF8, 0, s, -1, w, n)) w[0] = 0;
+    return w;
+}
+
+static void set_text(int id, const char *utf8)
+{
+    wchar_t *w = wide(utf8);
+    SetDlgItemTextW(g_wnd, id, w);
+    free(w);
+}
+
+static void message(const char *utf8, UINT icon)
+{
+    wchar_t *w = wide(utf8);
+    MessageBoxW(g_wnd, w, L"Revision Co-op", icon);
+    free(w);
+}
+
+/* A child control at 96-dpi coordinates. */
+static HWND ctl(DWORD ex, const wchar_t *cls, const char *text, DWORD style, int x, int y, int w, int h, int id, HFONT font)
+{
+    wchar_t *t = wide(text);
+    HWND c = CreateWindowExW(ex, cls, t, WS_CHILD | WS_VISIBLE | style, (int)(x * g_scale), (int)(y * g_scale),
+                             (int)(w * g_scale), (int)(h * g_scale), g_wnd, (HMENU)(INT_PTR)id, GetModuleHandleW(NULL), NULL);
+    free(t);
+    SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
+    return c;
+}
+
+static HWND combo(int y, const char *label, int id, const char **items, int n, int cur)
+{
+    ctl(0, WC_STATICW, label, 0, 26, y + 4, 104, 18, 0, g_font);
+    HWND c = ctl(0, WC_COMBOBOXW, "", CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, 134, y, 300, 200, id, g_font);
+    for (int i = 0; i < n; i++) { wchar_t *w = wide(items[i]); SendMessageW(c, CB_ADDSTRING, 0, (LPARAM)w); free(w); }
+    SendMessageW(c, CB_SETCURSEL, cur, 0);
+    return c;
+}
+
+static int cursel(int id) { return (int)SendDlgItemMessageW(g_wnd, id, CB_GETCURSEL, 0, 0); }
+
+/* Buttons and lists follow the state: settings only between sessions, Steam actions only
+   once Steam is up, Continue only with a save of the chosen mode. */
+static void update_enabled(void)
+{
+    char saved[128], line[200];
+    bool idle = !g_in_session, has = read_saved_map(saved, sizeof(saved));
+    const int settings[] = { ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES };
+    for (int i = 0; i < 5; i++) EnableWindow(GetDlgItem(g_wnd, settings[i]), idle);
+    EnableWindow(GetDlgItem(g_wnd, ID_HOST), idle && g_steam_ready);
+    EnableWindow(GetDlgItem(g_wnd, ID_CONTINUE), idle && g_steam_ready && has);
+    EnableWindow(GetDlgItem(g_wnd, ID_FRIENDS), idle && g_steam_ready);
+    EnableWindow(GetDlgItem(g_wnd, ID_LOBBY), idle && g_steam_ready);
+    EnableWindow(GetDlgItem(g_wnd, ID_JOIN), idle && g_steam_ready);
+    if (has) snprintf(line, sizeof(line), "Saved game in this mode: %s", saved);
+    else snprintf(line, sizeof(line), "No saved game in this mode yet.");
+    set_text(ID_SAVED, line);
+}
+
+static void start(LONG cmd)
+{
+    if (!g_steam_ready || g_in_session) return;
+    g_in_session = true;  /* at once: a second click must not start a second session */
+    update_enabled();
+    InterlockedExchange(&g_cmd, cmd);
+}
+
+/* The typed lobby id, else the chosen friend. */
+static void join_chosen(void)
+{
+    wchar_t typed[32];
+    GetDlgItemTextW(g_wnd, ID_LOBBY, typed, 32);
+    u64 lobby = _wcstoui64(typed, NULL, 10);
+    int i = (int)SendDlgItemMessageW(g_wnd, ID_FRIENDS, LB_GETCURSEL, 0, 0);
+    if (!lobby && i >= 0 && i < g_list_n) lobby = g_list_lobby[i];
+    if (!lobby) { message("Choose a friend who is hosting, or type the lobby id they see.", MB_ICONINFORMATION); return; }
+    g_cmd_lobby = lobby;
+    start(CMD_JOIN);
+}
+
+static void show_friends(FriendList *f)
+{
+    HWND lb = GetDlgItem(g_wnd, ID_FRIENDS);
+    int i = (int)SendMessageW(lb, LB_GETCURSEL, 0, 0);
+    u64 was = i >= 0 && i < g_list_n ? g_list_lobby[i] : 0;
+    SendMessageW(lb, LB_RESETCONTENT, 0, 0);
+    g_list_n = f->n;
+    for (i = 0; i < f->n; i++) {
+        wchar_t *w = wide(f->name[i]);
+        g_list_lobby[i] = f->lobby[i];
+        SendMessageW(lb, LB_ADDSTRING, 0, (LPARAM)w);
+        free(w);
+        if (f->lobby[i] == was) SendMessageW(lb, LB_SETCURSEL, i, 0);
+    }
+    if (!f->n) SendMessageW(lb, LB_ADDSTRING, 0, (LPARAM)L"No Steam friend is hosting right now.");
+    else if (f->n == 1) SendMessageW(lb, LB_SETCURSEL, 0, 0);
+}
+
+static void append_log(const char *utf8)
+{
+    HWND log = GetDlgItem(g_wnd, ID_LOG);
+    int len = GetWindowTextLengthW(log);
+    wchar_t *w = wide(utf8);
+    SendMessageW(log, EM_SETSEL, len, len);
+    if (len) SendMessageW(log, EM_REPLACESEL, FALSE, (LPARAM)L"\r\n");
+    SendMessageW(log, EM_REPLACESEL, FALSE, (LPARAM)w);
+    free(w);
+}
+
+static void create_controls(void)
+{
+    int cur = 0;
+    const char *titles[16];
+    for (int i = 0; i < g_modes; i++) { titles[i] = g_mode_titles[i]; if (!_stricmp(g_mode_names[i], g_mode)) cur = i; }
+
+    HWND icon = ctl(0, WC_STATICW, "", SS_ICON, 16, 14, 32, 32, ID_ICON, g_font);
+    if (g_icon) SendMessageW(icon, STM_SETICON, (WPARAM)g_icon, 0);
+    ctl(0, WC_STATICW, "Deus Ex: Revision Co-op", 0, 58, 10, 380, 28, ID_TITLE, g_big);
+    ctl(0, WC_STATICW, "Not signed in to Steam yet.", 0, 58, 40, 380, 18, ID_WHO, g_font);
+
+    ctl(0, WC_BUTTONW, "Your game: everyone who joins plays with these", BS_GROUPBOX, 12, 66, 436, 236, 0, g_font);
+    combo(92, "Mode", ID_MODE, titles, g_modes, cur);
+    combo(122, "Difficulty", ID_DIFF, difficulty_names, 4, g_difficulty);
+    combo(152, "Friendly fire", ID_FF, ff_names, 3, g_friendly_fire);
+    combo(182, "If a player dies", ID_DEATH, death_names, 2, g_death);
+    combo(212, "Saves", ID_SAVES, save_names, 2, g_saves);
+    ctl(0, WC_BUTTONW, "Host a new game", BS_PUSHBUTTON | WS_TABSTOP, 26, 248, 200, 30, ID_HOST, g_font);
+    ctl(0, WC_BUTTONW, "Continue saved game", BS_PUSHBUTTON | WS_TABSTOP, 234, 248, 200, 30, ID_CONTINUE, g_font);
+    ctl(0, WC_STATICW, "", 0, 26, 282, 408, 16, ID_SAVED, g_font);
+
+    ctl(0, WC_BUTTONW, "Join a friend", BS_GROUPBOX, 12, 312, 436, 150, 0, g_font);
+    ctl(WS_EX_CLIENTEDGE, WC_LISTBOXW, "", LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP, 26, 336, 408, 72, ID_FRIENDS, g_font);
+    ctl(0, WC_STATICW, "Lobby id", 0, 26, 421, 60, 18, 0, g_font);
+    ctl(WS_EX_CLIENTEDGE, WC_EDITW, "", ES_AUTOHSCROLL | ES_NUMBER | WS_TABSTOP, 90, 418, 170, 24, ID_LOBBY, g_font);
+    ctl(0, WC_BUTTONW, "Join", BS_PUSHBUTTON | WS_TABSTOP, 334, 416, 100, 30, ID_JOIN, g_font);
+
+    ctl(0, WC_STATICW, "Starting...", 0, 14, 472, 432, 34, ID_STATUS, g_bold);
+    ctl(WS_EX_CLIENTEDGE, WC_EDITW, "", ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL, 12, 510, 436, 96, ID_LOG, g_font);
+    SendDlgItemMessageW(g_wnd, ID_LOG, EM_SETLIMITTEXT, 0, 0);
+    update_enabled();
+}
+
+static LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_CREATE:
+        g_wnd = h;
+        create_controls();
+        return 0;
+    case WM_CTLCOLORSTATIC:  /* the read-only log on a white background, like a normal text box */
+        if ((HWND)lp == GetDlgItem(h, ID_LOG)) {
+            SetBkColor((HDC)wp, GetSysColor(COLOR_WINDOW));
+            return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+        }
+        break;
+    case WM_COMMAND: {
+        int id = LOWORD(wp), code = HIWORD(wp);
+        if (id == ID_MODE && code == CBN_SELCHANGE) {
+            int i = cursel(ID_MODE);
+            if (i >= 0 && i < g_modes && load_mode(g_mode_names[i])) {
+                save_current_mode();
+                snprintf(g_own_mode, sizeof(g_own_mode), "%s", g_mode);
+            }
+            update_enabled();
+        } else if ((id == ID_DIFF || id == ID_FF || id == ID_DEATH || id == ID_SAVES) && code == CBN_SELCHANGE) {
+            g_difficulty = cursel(ID_DIFF) & 3;
+            g_friendly_fire = cursel(ID_FF) % 3;
+            g_death = cursel(ID_DEATH) & 1;
+            g_saves = cursel(ID_SAVES) & 1;
+            save_settings();
+        } else if (id == ID_HOST && code == BN_CLICKED) start(CMD_HOST);
+        else if (id == ID_CONTINUE && code == BN_CLICKED) start(CMD_CONTINUE);
+        else if (id == ID_JOIN && code == BN_CLICKED) join_chosen();
+        else if (id == ID_FRIENDS && code == LBN_DBLCLK) join_chosen();
+        else if (id == ID_FRIENDS && code == LBN_SELCHANGE) SetDlgItemTextW(h, ID_LOBBY, L"");  /* a friend, not a typed id */
+        else if (id == ID_LOBBY && code == EN_CHANGE && GetWindowTextLengthW(GetDlgItem(h, ID_LOBBY)))
+            SendDlgItemMessageW(h, ID_FRIENDS, LB_SETCURSEL, (WPARAM)-1, 0);
+        else if (id == IDOK) {  /* Enter (IsDialogMessage) in the friends list or the lobby id: join */
+            HWND f = GetFocus();
+            if (f == GetDlgItem(h, ID_LOBBY) || f == GetDlgItem(h, ID_FRIENDS)) join_chosen();
+        }
+        return 0;
+    }
+    case WM_APP_LOG: append_log((char *)lp); free((void *)lp); return 0;
+    case WM_APP_STATUS: set_text(ID_STATUS, (char *)lp); free((void *)lp); return 0;
+    case WM_APP_ERROR:
+        append_log((char *)lp);
+        message((char *)lp, MB_ICONWARNING);
+        free((void *)lp);
+        return 0;
+    case WM_APP_FATAL:
+        message((char *)lp, MB_ICONERROR);
+        free((void *)lp);
+        DestroyWindow(h);
+        return 0;
+    case WM_APP_READY: {
+        char line[200];
+        snprintf(line, sizeof(line), "Signed in to Steam as %s", (char *)lp);
+        set_text(ID_WHO, line);
+        free((void *)lp);
+        g_steam_ready = true;
+        update_enabled();
+        return 0;
+    }
+    case WM_APP_SESSION:
+        g_in_session = wp != 0;
+        update_enabled();
+        if (g_in_session) SendDlgItemMessageW(h, ID_FRIENDS, LB_SETCURSEL, (WPARAM)-1, 0);
+        return 0;
+    case WM_APP_FRIENDS: show_friends((FriendList *)lp); free((void *)lp); return 0;
+    case WM_CLOSE:
+        if (g_in_session && MessageBoxW(h, L"The game is still running. Closing this window disconnects it from your friends.\n\nClose anyway?",
+                                        L"Revision Co-op", MB_YESNO | MB_ICONWARNING) != IDYES)
+            return 0;
+        InterlockedExchange(&g_quit, 1);
+        if (g_worker) WaitForSingleObject(g_worker, 3000);  /* lets a session say goodbye and leave its lobby */
+        DestroyWindow(h);
+        return 0;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(h, msg, wp, lp);
+}
+
+static int run_window(void)
+{
+    SetProcessDPIAware();
+    INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES };
+    InitCommonControlsEx(&icc);
+    HDC dc = GetDC(NULL);
+    g_scale = GetDeviceCaps(dc, LOGPIXELSY) / 96.0;
+    ReleaseDC(NULL, dc);
+
+    NONCLIENTMETRICSW ncm = { sizeof(ncm) };
+    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
+    LOGFONTW lf = ncm.lfMessageFont;
+    g_font = CreateFontIndirectW(&lf);
+    lf.lfWeight = FW_BOLD;
+    g_bold = CreateFontIndirectW(&lf);
+    lf.lfHeight = lf.lfHeight * 16 / 10;
+    g_big = CreateFontIndirectW(&lf);
+
+    char exe[MAX_PATH];  /* Revision's own icon, as on the desktop shortcut */
+    snprintf(exe, sizeof(exe), "%s\\Revision.exe", g_game_dir);
+    ExtractIconExA(exe, 0, &g_icon, &g_icon_small, 1);
+
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.lpfnWndProc = wnd_proc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.hCursor = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    wc.lpszClassName = L"RevCoopWindow";
+    wc.hIcon = g_icon;
+    wc.hIconSm = g_icon_small;
+    RegisterClassExW(&wc);
+
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    RECT r = { 0, 0, (LONG)(460 * g_scale), (LONG)(618 * g_scale) };
+    AdjustWindowRect(&r, style, FALSE);
+    int w = r.right - r.left, h = r.bottom - r.top;
+    CreateWindowExW(0, L"RevCoopWindow", L"Deus Ex: Revision Co-op", style,
+                    (GetSystemMetrics(SM_CXSCREEN) - w) / 2, (GetSystemMetrics(SM_CYSCREEN) - h) / 2, w, h,
+                    NULL, NULL, wc.hInstance, NULL);
+    if (!g_wnd) return 1;
+    ShowWindow(g_wnd, SW_SHOW);
+
+    /* Suspended until its id is known: fail() tells the worker from the window by it. */
+    g_worker = CreateThread(NULL, 0, worker, NULL, CREATE_SUSPENDED, &g_worker_tid);
+    ResumeThread(g_worker);
+
+    MSG m;
+    while (GetMessageW(&m, NULL, 0, 0) > 0)
+        if (!IsDialogMessageW(g_wnd, &m)) { TranslateMessage(&m); DispatchMessageW(&m); }
     return 0;
 }
 
@@ -1016,7 +1398,6 @@ static int run_join(u64 lobby)
 int main(int argc, char **argv)
 {
     const char *mode = NULL, *arg = NULL, *want_mode = NULL, *apply_only = NULL, *open_url = NULL;
-    SetConsoleTitleA("Deus Ex: Revision Co-op");
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--game") && i + 1 < argc) snprintf(g_game_dir, sizeof(g_game_dir), "%s", argv[++i]);
         else if (!strcmp(argv[i], "--mode") && i + 1 < argc) want_mode = argv[++i];
@@ -1045,42 +1426,17 @@ int main(int argc, char **argv)
     if (want_mode && !load_mode(want_mode)) fail("Unknown mode.");
     if (!want_mode) pick_default_mode();
     load_settings();
+    list_modes();
+    snprintf(g_own_mode, sizeof(g_own_mode), "%s", g_mode);
 
-    WSADATA w;
-    WSAStartup(MAKEWORD(2, 2), &w);
-    steam_start();
-    relay_config();
-    printf("Deus Ex: Revision Co-op over Steam - signed in as %s\n\n", S.GetPersonaName(g_friends));
-
-    while (!mode) {
-        printf("  1) Host a game\n  2) Join a friend's game\n  3) Continue saved game\n  4) Mode: %s\n"
-               "  5) Settings: %s difficulty, friendly fire %s\n\nChoose 1-5: ",
-               g_mode_title, difficulty_names[g_difficulty], ff_names[g_friendly_fire]);
-        for (;;) {
-            int c = _getch();
-            if (c == '1') { mode = "host"; break; }
-            if (c == '2') { mode = "join"; break; }
-            if (c == '3') { mode = "continue"; break; }
-            if (c == '4') { printf("4\n"); choose_mode(); printf("\n"); break; }
-            if (c == '5') { printf("5\n"); choose_settings(); break; }
-            if (c == 27) return 0;
-        }
-        if (mode) printf("%c\n\n", mode[0] == 'h' ? '1' : mode[0] == 'j' ? '2' : '3');
-    }
-    int r;
-    if (_stricmp(mode, "join"))  /* host and continue run the host's mode */
-        apply_mode();
-    if (!_stricmp(mode, "continue")) {
-        char saved[128];
-        if (!read_saved_map(saved, sizeof(saved)))
-            fail("No saved game for this mode. Host a game first: it saves a few seconds into every map, and when the host quick-saves.");
-        printf("Continuing the saved game on %s\n", saved);
-        strncat(g_url_extra, "?CoopLoad=1", sizeof(g_url_extra) - strlen(g_url_extra) - 1);
-        r = run_host(saved);
-    }
-    else if (!_stricmp(mode, "host")) r = run_host(arg ? arg : "01_NYC_UNATCOIsland");
-    else if (!_stricmp(mode, "join")) r = run_join(arg ? strtoull(arg, NULL, 10) : 0);
-    else fail("Usage: RevCoop.exe [host [map] | join [lobby id] | continue]");
-    S.Shutdown();
-    return r;
+    /* A start from the command line (or Steam's +connect_lobby) runs once Steam is up. */
+    if (mode && !_stricmp(mode, "host")) {
+        if (arg) snprintf(g_host_map, sizeof(g_host_map), "%s", arg);
+        g_cmd = CMD_HOST;
+    } else if (mode && !_stricmp(mode, "continue"))
+        g_cmd = CMD_CONTINUE;
+    else if (mode && !_stricmp(mode, "join") && arg && (g_cmd_lobby = strtoull(arg, NULL, 10)))
+        g_cmd = CMD_JOIN;
+    if (g_cmd) g_in_session = true;
+    return run_window();
 }

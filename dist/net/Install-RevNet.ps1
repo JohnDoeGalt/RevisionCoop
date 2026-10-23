@@ -133,5 +133,5 @@ if (-not $NoShortcut) {
 	$s.Save()
 }
 
-Write-Host "`nDone. Open 'Revision Co-op' on your desktop: 1 = host, 2 = join a friend, 3 = continue." -ForegroundColor Green
+Write-Host "`nDone. Open 'Revision Co-op' on your desktop to host or join." -ForegroundColor Green
 Write-Host "Your friends need the same install (their game takes the host's gameplay mode by itself). Steam must be running."
