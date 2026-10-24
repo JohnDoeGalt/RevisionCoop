@@ -19,6 +19,10 @@ Year Edition and Deus Ex: Revision (free for Deus Ex owners).
   `docs/netmode_audit.json` and `docs/REVNET_DEV.md`).
 - **Saves** are co-op checkpoints (`CoopSave`) with map memory (`CoopMapMemory`): flags,
   goals, notes, inventory per player, and the state of every map visited.
+- **Two classes.** Each player picks one in the launcher: JC's kind (nano-augmented) or
+  the Mech (`CoopMechPlayer`: the MJ12 Commando's body, built-in blades and arm cannon,
+  plating, heavier and louder, and its own three upgrade trees bought with salvage from
+  robots; see `docs/MECH_CLASS.md`).
 - **Steam relay** (`src/relay`): the launcher window (plain Win32, one exe) that creates a friends-only Steam lobby and
   carries the game's UDP traffic over Steam networking. Joiners take the host's mode from the
   lobby automatically.

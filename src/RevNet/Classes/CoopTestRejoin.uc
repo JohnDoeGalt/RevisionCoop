@@ -23,7 +23,7 @@ function Run( int t )
 		Remote.FrobTarget = Kit;
 		Remote.HandleItemPickup( Kit );
 		Log( "RevNetTest: before leaving: credits" @ Remote.Credits @ "medkit=" $ (Remote.FindInventoryType(class'MedKit')!=None), 'RevNet' );
-		for ( Aug=Remote.AugmentationSystem.FirstAug; Aug!=None; Aug=Aug.next )
+		for ( Aug=class'CoopRules'.static.FirstAug( Remote ); Aug!=None; Aug=Aug.next )
 			if ( Aug.IsA('AugLight') && Aug.bHasIt && !Aug.bIsActive )
 				Aug.Activate();
 		Stage = 1;

@@ -62,6 +62,12 @@ function InstallAugmentation( optional int level )
 	local AugmentationCannister Can;
 	local Augmentation Aug;
 
+	if ( CoopMechPlayer(player)!=None )
+	{
+		winInfo.Clear();
+		winInfo.SetText( class'CoopMechPlayer'.default.NoNanoText );
+		return;
+	}
 	if ( Pending() || HUDMedBotAugItemButton(selectedAugButton)==None )
 	{
 		Super.InstallAugmentation( level ); // nothing to install yet, or only the "pick one to replace" text

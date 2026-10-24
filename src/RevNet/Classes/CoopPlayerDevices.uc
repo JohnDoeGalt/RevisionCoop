@@ -339,7 +339,8 @@ function ServerInstallAug( MedicalBot Bot, AugmentationCannister Can, class<Augm
 			Old.CurrentLevel = 0;
 			Old.bHasIt = False;
 			Old.HotKeyNum = -1;
-			AugmentationSystem.AugLocs[Old.AugmentationLocation].augCount--;
+			if ( Old.AugmentationLocation<ArrayCount(AugmentationSystem.AugLocs) ) // (HR's own locations: past them)
+				AugmentationSystem.AugLocs[Old.AugmentationLocation].augCount--;
 			RemoveAugmentationDisplay( Old );
 		}
 	}
@@ -355,7 +356,7 @@ function ServerInstallAug( MedicalBot Bot, AugmentationCannister Can, class<Augm
 		Aug.HotKeyNum = Key;
 	DeleteInventory( Can );
 	Can.Destroy();
-	Log( "RevNet:" @ PlayerReplicationInfo.PlayerName @ "installed" @ Aug.Class.Name @ "level" @ Aug.CurrentLevel @ "hotkey" @ Aug.HotKeyNum @ "location" @ Aug.AugmentationLocation @ "slots" @ AugmentationSystem.AugLocs[Aug.AugmentationLocation].augCount $ "/" $ AugmentationSystem.AugLocs[Aug.AugmentationLocation].NumSlots, 'RevNet' );
+	Log( "RevNet:" @ PlayerReplicationInfo.PlayerName @ "installed" @ Aug.Class.Name @ "level" @ Aug.CurrentLevel @ "hotkey" @ Aug.HotKeyNum @ "location" @ Aug.AugmentationLocation, 'RevNet' );
 }
 
 // ----------------------------------------------------------------------
@@ -688,7 +689,7 @@ simulated function ClientDeviceTest( string Command, optional Actor A, optional 
 	}
 	else if ( Command=="augs" )
 	{
-		for ( Aug=AugmentationSystem.FirstAug; Aug!=None; Aug=Aug.next )
+		for ( Aug=class'CoopRules'.static.FirstAug( Self ); Aug!=None; Aug=Aug.next )
 			if ( Aug.bHasIt )
 				Log( "RevNetTest: client aug" @ Aug.Class.Name @ "level" @ Aug.CurrentLevel @ "hotkey" @ Aug.HotKeyNum @ "active=" $ Aug.bIsActive @ "location" @ Aug.AugmentationLocation, 'RevNet' );
 		if ( Arg!="" )

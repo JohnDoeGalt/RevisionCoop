@@ -140,7 +140,7 @@ function string AugList( bool bActiveOnly )
 	local Augmentation A;
 	local string S;
 
-	for ( A=Remote.AugmentationSystem.FirstAug; A!=None; A=A.next )
+	for ( A=class'CoopRules'.static.FirstAug( Remote ); A!=None; A=A.next )
 		if ( A.bHasIt && (!bActiveOnly || A.bIsActive) )
 			S = S @ A.Class.Name $ "/" $ A.CurrentLevel;
 	return S;

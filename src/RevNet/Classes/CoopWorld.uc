@@ -58,6 +58,8 @@ var byte WokenTickVis[256];     // its own bTickVisibleOnly
 var int NumWoken;
 var Pawn Killers[32];           // players' kills: who, where (a body's killer)
 var vector KilledAt[32];
+var Pawn SalvagedRobots[8];  // robots whose salvage was given (Killed)
+var int NextSalvaged;
 var int NextKill;
 
 var CoopWitness Witness;
@@ -690,6 +692,9 @@ function Killed( Pawn Killer, Pawn Other, name DamageType )
 	Host = DeusExPlayer(GetPlayerPawn());
 	if ( ScriptedPawn(Other)==None || Host==None )
 		return;
+	// A robot's wreck: salvage for the Mechs near it (once: a robot's death is told twice).
+	if ( Other.IsA('Robot') && !Salvaged( Other ) )
+		class'CoopMechPlayer'.static.RobotSalvage( Level, Other );
 	// Who killed whom where: the culprit for a body found (Characters).
 	if ( CoopPlayerCore(Killer)!=None )
 	{
@@ -719,6 +724,18 @@ function Killed( Pawn Killer, Pawn Other, name DamageType )
 		&& Host.ConsoleCommand( "get RevChallengeManager challengeString" )=="" )
 		Host.flagBase.SetBool( 'PlayerKilledSomething', true,, 100 );
 	Log( "RevNet:" @ Killer.PlayerReplicationInfo.PlayerName @ "killed" @ Other @ "(kill flags: Renton=" $ Host.flagBase.GetBool('PlayerKilledRenton') @ "something=" $ Host.flagBase.GetBool('PlayerKilledSomething') $ ")", 'RevNet' );
+}
+
+function bool Salvaged( Pawn Robot )
+{
+	local int i;
+
+	for ( i=0; i<ArrayCount(SalvagedRobots); i++ )
+		if ( SalvagedRobots[i]==Robot )
+			return true;
+	SalvagedRobots[NextSalvaged] = Robot;
+	NextSalvaged = (NextSalvaged + 1) % ArrayCount(SalvagedRobots);
+	return false;
 }
 
 // ----------------------------------------------------------------------

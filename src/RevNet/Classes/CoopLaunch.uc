@@ -10,6 +10,8 @@
 // it is in a co-op game again (CoopClient calls Joined). So does a client whose
 // host was still loading the next map when it followed (the host's port is closed
 // meanwhile: "?failed"), at the address it played on (LastHost).
+// Every URL opened this way carries the player's class (Agent: "Mech", else JC's
+// kind), so a rejoin keeps it (CoopGameInfo.PlayerClass).
 //=============================================================================
 class CoopLaunch extends Object
 	config(User);
@@ -17,6 +19,7 @@ class CoopLaunch extends Object
 var config string AutoOpen; // e.g. "01_NYC_UNATCOIsland?Listen?Game=RevNet.CoopGameInfo" or "127.0.0.1:7790"
 var config int Rejoins;     // tries left for AutoOpen
 var config string LastHost; // the host this client last played with
+var config string Agent;    // the launcher's class choice: "Mech" or "" (?RevClass=)
 
 static function Remember( string Host )
 {
@@ -38,6 +41,8 @@ static function string Take()
 		else
 			default.AutoOpen = "";
 		StaticSaveConfig();
+		if ( default.Agent!="" && InStr( URL, "RevClass=" )<0 )
+			URL = URL $ "?RevClass=" $ default.Agent;
 	}
 	return URL;
 }

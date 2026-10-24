@@ -139,7 +139,7 @@ simulated function ArmsTest( string Command )
 	}
 	else if ( Left( Command, 4 )=="aug " && AugmentationSystem!=None )
 	{
-		for ( A=AugmentationSystem.FirstAug; A!=None; A=A.next )
+		for ( A=class'CoopRules'.static.FirstAug( Self ); A!=None; A=A.next )
 			if ( string(A.Class.Name)~=Mid( Command, 4 ) )
 				ServerTestReply( "client's" @ A.Class.Name $ ": has" @ A.bHasIt @ "active" @ A.bIsActive @ "always active" @ A.bAlwaysActive @ "rate" @ A.EnergyRate );
 	}
@@ -215,7 +215,7 @@ simulated function string ActiveAugs()
 	local string S;
 
 	if ( AugmentationSystem!=None )
-		for ( A=AugmentationSystem.FirstAug; A!=None; A=A.next )
+		for ( A=class'CoopRules'.static.FirstAug( Self ); A!=None; A=A.next )
 			if ( A.bIsActive )
 				S = S @ A.Class.Name;
 	return S;

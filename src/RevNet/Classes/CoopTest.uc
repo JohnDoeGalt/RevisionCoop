@@ -275,6 +275,13 @@ function Travel( int t )
 			Kit = Spawn( class'MedKit',,, Remote.Location );
 			Remote.FrobTarget = Kit; // as the client's frob sets it
 			Log( "RevNetTest: gave the client a medkit:" @ Remote.HandleItemPickup( Kit ) @ "things" @ Things( Remote ), 'RevNet' );
+			// A Mech (-ClientAgent Mech): salvage and a raised module to take along.
+			if ( CoopMechPlayer(Remote)!=None )
+			{
+				CoopMechPlayer(Remote).Salvage = 50;
+				CoopMechPlayer(Remote).ServerUpgradeModule( CoopMechPlayer(Remote).ModIndex( class'CoopMechAugPlating' ) );
+				Things( Remote );
+			}
 			Report();
 		}
 		else if ( t==8 )
@@ -337,6 +344,10 @@ function int Things( Pawn P )
 		S = S @ Item.Class.Name;
 	}
 	Log( "RevNetTest: inventory of" @ P.PlayerReplicationInfo.PlayerName $ ":" $ S, 'RevNet' );
+	if ( CoopMechPlayer(P)!=None )
+		Log( "RevNetTest: Mech" @ P.PlayerReplicationInfo.PlayerName $ ": salvage" @ CoopMechPlayer(P).Salvage
+			@ "plating level" @ class'CoopMechAug'.static.LevelOf( P, class'CoopMechAugPlating' ) + 1
+			@ "blades level" @ class'CoopMechAug'.static.LevelOf( P, class'CoopMechAugBlades' ) + 1, 'RevNet' );
 	return n;
 }
 

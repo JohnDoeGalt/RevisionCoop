@@ -21,6 +21,9 @@ Install
 
 Play
   Open "Revision Co-op" on the desktop. Its window signs in to Steam by itself.
+  You play as
+    Each player picks their own: a nano-augmented agent (JC's kind) or a Mech (see
+    "The Mech" below). Your choice is remembered.
   Host
     Choose the mode (which gameplay mode everyone plays), difficulty, friendly fire,
     what happens when a player dies, and saves; then click "Host a new game", or
@@ -46,6 +49,28 @@ In the game
   - Carry bodies (search a body, then use it again to pick it up) and boxes as usual;
     everyone sees them carried and where they're put down.
   - Computers, keypads, ATMs, medical bots and the rest work for every player.
+
+The Mech
+  A mechanically augmented agent: the older, cruder kind of augmentation that JC's
+  nano-augmentation is replacing. A tank, where JC is the ghost.
+  - Built into the body: Arm Blades (belt 1) and an Arm Cannon (belt 2), an automatic gun
+    fed with 7.62 mm rounds (the assault rifle's ammo; Heavy Weapons skill). They can't be
+    dropped or lost.
+  - Armour plating: bullets, blasts, fire and blades do 30% less; prods and batons half;
+    no damage from falls; hard to knock back.
+  - Heavier: a little slower, jumps lower, and loud: its footsteps carry further.
+  - EMP hurts it. Nano augmentation canisters don't fit it: give them to a nano teammate,
+    or scrap them for salvage.
+  - Its own upgrades, on its augmentations screen, bought with salvage: every robot
+    destroyed near a Mech gives salvage. Three trees:
+      Arsenal: Arm Blades (up to killing an unaware target in one cut), Arm Cannon,
+               Shrapnel Burst (F5: a blast all around the Mech).
+      Chassis: Dermal Plating, Hydraulic Legs (landings that knock enemies back, higher
+               jumps, full speed), Bulwark (F6: a shell that takes most of the damage),
+               Servo Arms (lifts heavy things, breaks doors).
+      Systems: Targeting Optics (F4: threat display, a steadier cannon), Internal
+               Generator (energy refills by itself), Failsafe Reboot (gets up by itself
+               when downed), EMP Hardening.
 
 Death (host setting)
   - Default: a player who would die goes down instead. A teammate revives them by using

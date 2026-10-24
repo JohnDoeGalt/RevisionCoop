@@ -82,6 +82,25 @@ static function CopyDefault( Actor Ctx, string ClassName, string MPField, string
 
 // Skills and augs: the per-level values, costs, energy use and body slot the
 // deathmatch code set when they were spawned.
+// A player's first augmentation (where its aug list starts). HR's manager
+// (HRAugmentationManager) is no AugmentationManager and keeps FirstAug elsewhere:
+// a compiled AugmentationSystem.FirstAug reads None there (measured), and a write
+// would land in its AugLocs. There it is read by name (CoopPlayerCore.FoundAug).
+static function Augmentation FirstAug( Pawn P )
+{
+	local DeusExPlayer D;
+
+	D = DeusExPlayer(P);
+	if ( D==None || D.AugmentationSystem==None )
+		return None;
+	if ( D.AugmentationSystem.IsA('AugmentationManager') )
+		return D.AugmentationSystem.FirstAug;
+	if ( CoopPlayerCore(D)==None )
+		return None;
+	CoopPlayerCore(D).SetPropertyText( "FoundAug", D.AugmentationSystem.GetPropertyText( "FirstAug" ) );
+	return CoopPlayerCore(D).FoundAug;
+}
+
 static function SinglePlayerValues( Actor A )
 {
 	local Skill S;

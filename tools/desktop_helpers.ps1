@@ -1,6 +1,6 @@
 # Helpers so live tests don't disturb whoever uses the PC (dot-source it):
 #   Test-FullscreenForeground  - is another program fullscreen in the foreground (a game)?
-#   Start-NoActivate <exe> <args> <dir>  - start a process minimized without taking focus
+#   Start-NoActivate <exe> <args> <dir> [-Visible]  - start a process minimized (or shown) without taking focus
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -32,9 +32,9 @@ public static class Desk {
 		int pid; GetWindowThreadProcessId(h, out pid); return pid;
 	}
 
-	// STARTF_USESHOWWINDOW + SW_SHOWMINNOACTIVE.
-	public static int StartNoActivate(string exe, string args, string dir) {
-		var si = new STARTUPINFO(); si.cb = Marshal.SizeOf(si); si.dwFlags = 1; si.wShowWindow = 7;
+	// STARTF_USESHOWWINDOW + SW_SHOWMINNOACTIVE (7) or SW_SHOWNOACTIVATE (4).
+	public static int StartNoActivate(string exe, string args, string dir, short show) {
+		var si = new STARTUPINFO(); si.cb = Marshal.SizeOf(si); si.dwFlags = 1; si.wShowWindow = show;
 		PROCESS_INFORMATION pi;
 		if (!CreateProcess(exe, "\"" + exe + "\" " + args, IntPtr.Zero, IntPtr.Zero, false, 0, IntPtr.Zero, dir, ref si, out pi)) return 0;
 		CloseHandle(pi.hThread); CloseHandle(pi.hProcess); return pi.dwProcessId;
@@ -50,8 +50,8 @@ function Test-FullscreenForeground {
 	return ($p -and $p.ProcessName -notin @("explorer", "HX", "ShellExperienceHost", "SearchHost", "LockApp"))
 }
 
-function Start-NoActivate($Exe, $Arguments, $Dir) {
-	$id = [Desk]::StartNoActivate($Exe, $Arguments, $Dir)
+function Start-NoActivate($Exe, $Arguments, $Dir, [switch]$Visible) {
+	$id = [Desk]::StartNoActivate($Exe, $Arguments, $Dir, $(if ($Visible) { 4 } else { 7 }))
 	if ($id -eq 0) { throw "could not start $Exe" }
 	return Get-Process -Id $id
 }

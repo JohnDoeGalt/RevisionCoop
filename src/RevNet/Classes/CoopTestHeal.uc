@@ -33,7 +33,7 @@ function Run( int t )
 		Log( "RevNetTest: host after a medkit in hand:" @ Parts( Host ) @ "medkits left" @ Count( Host ), 'RevNet' );
 		// Regeneration (HealPlayer every second, deathmatch's branch: CoopPlayerCore.HealPart).
 		Hurt( Remote );
-		for ( Aug=Remote.AugmentationSystem.FirstAug; Aug!=None; Aug=Aug.next )
+		for ( Aug=class'CoopRules'.static.FirstAug( Remote ); Aug!=None; Aug=Aug.next )
 			if ( Aug.IsA('AugHealing') )
 			{
 				Aug.bHasIt = true;

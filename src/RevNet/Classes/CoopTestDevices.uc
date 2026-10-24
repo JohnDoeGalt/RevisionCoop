@@ -108,7 +108,7 @@ function Run( int t )
 		// A medical bot installs an aug canister: an aug whose single-player hotkey (by body
 		// slot) isn't its deathmatch one, in a slot with room.
 		case 34:
-			for ( NewAug=Remote.AugmentationSystem.FirstAug; NewAug!=None; NewAug=NewAug.next )
+			for ( NewAug=class'CoopRules'.static.FirstAug( Remote ); NewAug!=None; NewAug=NewAug.next )
 				if ( !NewAug.bHasIt && NewAug.AugmentationName!="" && SinglePlayerKey( NewAug )!=NewAug.MPConflictSlot + 2
 					&& Remote.AugmentationSystem.AugLocs[NewAug.AugmentationLocation].augCount<Remote.AugmentationSystem.AugLocs[NewAug.AugmentationLocation].NumSlots )
 					break;

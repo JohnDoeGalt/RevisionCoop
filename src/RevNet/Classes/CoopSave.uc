@@ -22,7 +22,8 @@
 //   Note: <tag>|<user note 0/1>|<text>
 //   Key:  <id>|<description>
 // Player lines are "<player>,<kind>,<fields>": C core stats, S skill, A aug,
-// M ammo, P pickup, W weapon (with its mods). Text escapes \, CR and LF.
+// M ammo, P pickup, W weapon (with its mods), K class (a Mech's salvage). Text
+// escapes \, CR and LF.
 //=============================================================================
 class CoopSave extends Object
 	config(RevNetSave)
@@ -445,12 +446,14 @@ function SavePlayer( DeusExPlayer P )
 		}
 	n = 0;
 	if ( P.AugmentationSystem!=None )
-		for ( Aug=P.AugmentationSystem.FirstAug; Aug!=None && n<64; Aug=Aug.next )
+		for ( Aug=class'CoopRules'.static.FirstAug( P ); Aug!=None && n<256; Aug=Aug.next ) // (HR's list: ~150)
 		{
 			n++;
 			if ( Aug.bHasIt )
 				AddLine( Idx, "A," $ ClassStr( Aug.Class ) $ "," $ Aug.CurrentLevel $ "," $ Aug.HotKeyNum );
 		}
+	if ( CoopMechPlayer(P)!=None )
+		AddLine( Idx, "K,Mech," $ CoopMechPlayer(P).Salvage ); // (its modules are A lines)
 	n = 0;
 	for ( Inv=P.Inventory; Inv!=None && n<512; Inv=Inv.Inventory )
 	{
@@ -505,7 +508,7 @@ function bool LoadPlayer( DeusExPlayer P )
 		}
 	}
 	if ( P.AugmentationSystem!=None )
-		for ( Aug=P.AugmentationSystem.FirstAug; Aug!=None && n<64; Aug=Aug.next )
+		for ( Aug=class'CoopRules'.static.FirstAug( P ); Aug!=None && n<256; Aug=Aug.next )
 		{
 			n++;
 			if ( Aug.bHasIt )
@@ -516,11 +519,18 @@ function bool LoadPlayer( DeusExPlayer P )
 				Aug.bHasIt = false;
 				Aug.bBoosted = false;
 				Aug.HotKeyNum = 0;
-				if ( P.AugmentationSystem.AugLocs[Aug.AugmentationLocation].AugCount>0 )
+				// (HR's own locations 7-10 lie past the AugLocs RevNet is built with: left. A
+				// Mech's modules take no slot.)
+				if ( CoopMechAug(Aug)==None && Aug.AugmentationLocation<ArrayCount(P.AugmentationSystem.AugLocs)
+					&& P.AugmentationSystem.AugLocs[Aug.AugmentationLocation].AugCount>0 )
 					P.AugmentationSystem.AugLocs[Aug.AugmentationLocation].AugCount--;
 			}
 			Aug.CurrentLevel = 0;
 		}
+
+	// A Mech's modules are there to be given their levels (HR makes them later).
+	if ( CoopMechPlayer(P)!=None )
+		CoopMechPlayer(P).EnsureModules();
 
 	// Ammo before the weapons that load it.
 	for ( i=0; i<NumLines; i++ )
@@ -544,7 +554,21 @@ function bool LoadPlayer( DeusExPlayer P )
 		{
 			C = LoadClassStr( Part( S, 2, "," ) );
 			Aug = None;
-			if ( class<Augmentation>(C)!=None && P.AugmentationSystem!=None )
+			// A Mech's module: its own (the manager's install rules are the nano augs'; HR's
+			// refuses it); a nano player's record has none to give.
+			if ( class<CoopMechAug>(C)!=None )
+			{
+				Aug = class'CoopMechAug'.static.Find( P, class<CoopMechAug>(C) );
+				if ( Aug!=None )
+					Aug.bHasIt = true;
+				else if ( CoopMechPlayer(P)!=None && CoopMechPlayer(P).ModIndex( class<CoopMechAug>(C) )>=0 )
+				{
+					// Not made yet (HR): when it is (EnsureModules).
+					CoopMechPlayer(P).PendingLevels[CoopMechPlayer(P).ModIndex( class<CoopMechAug>(C) )] = int( Part( S, 3, "," ) ) + 1;
+					CoopMechPlayer(P).PendingKeys[CoopMechPlayer(P).ModIndex( class<CoopMechAug>(C) )] = Max( 0, int( Part( S, 4, "," ) ) );
+				}
+			}
+			else if ( class<Augmentation>(C)!=None && P.AugmentationSystem!=None )
 				Aug = P.AugmentationSystem.GivePlayerAugmentation( class<Augmentation>(C) );
 			if ( Aug!=None )
 			{
@@ -552,6 +576,8 @@ function bool LoadPlayer( DeusExPlayer P )
 				Aug.HotKeyNum = int( Part( S, 4, "," ) );
 			}
 		}
+		else if ( Kind=="K" && CoopMechPlayer(P)!=None )
+			CoopMechPlayer(P).Salvage = int( Part( S, 3, "," ) );
 		else if ( Kind=="M" && NumItems<64 )
 		{
 			Items[NumItems] = GiveAmmo( P, S );
@@ -587,6 +613,19 @@ function bool LoadPlayer( DeusExPlayer P )
 				P.AddObjectToBelt( Items[i], Belts[i], true );
 			}
 		}
+	// The first weapon put on the belt comes out of this with its belt slot holding it
+	// but its own flags cleared (seen in CoopTestMech): the item says it isn't on the belt
+	// (the client's belt shows nothing there, the next save drops it). The slot's word wins.
+	for ( i=0; i<NumItems; i++ )
+		if ( Items[i]!=None && !Items[i].bDeleteMe && Belts[i]>=0 && !Items[i].bInObjectBelt
+			&& DeusExRootWindow(P.rootWindow)!=None && DeusExRootWindow(P.rootWindow).hud.belt.GetObjectFromBelt( Belts[i] )==Items[i] )
+		{
+			Items[i].bInObjectBelt = true;
+			Items[i].beltPos = Belts[i];
+			Log( "RevNet: restore put" @ Items[i].Class.Name @ "back on belt slot" @ Belts[i], 'RevNet' );
+		}
+	if ( CoopMechPlayer(P)!=None )
+		CoopMechPlayer(P).GiveArsenal(); // (a record from a nano game has none)
 	if ( P.AugmentationSystem!=None )
 		P.AugmentationSystem.RefreshAugDisplay();
 	Log( "RevNet: restored" @ P.PlayerReplicationInfo.PlayerName @ "from the saved game," @ NumItems @ "items", 'RevNet' );
@@ -655,6 +694,8 @@ function Inventory GiveWeapon( DeusExPlayer P, string S )
 	C = LoadClassStr( Part( S, 2, "," ) );
 	if ( class<DeusExWeapon>(C)==None )
 		return None;
+	if ( (C==class'CoopMechBlade' || C==class'CoopMechCannon') && CoopMechPlayer(P)==None )
+		return None; // the Mech's body (a player who was one last time)
 	W = P.Spawn( class<DeusExWeapon>(C), P );
 	if ( W==None )
 		return None;

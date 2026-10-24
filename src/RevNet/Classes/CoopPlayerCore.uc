@@ -34,6 +34,7 @@ var Texture OwnSkins[8], OwnTexture, OwnSkin;
 var bool bTakingDamage;        // (host) in TakeDamage: its hit region (GetMPHitLocation) ...
 var int HitRegion;             // ... and the body parts before it, for CoopWorld.SinglePlayerHit
 var int HitBefore[6];          // head, torso, left arm, right arm, left leg, right leg
+var Augmentation FoundAug;     // (CoopRules.FirstAug: HR's manager's FirstAug, read by name)
 
 replication
 {
@@ -407,7 +408,7 @@ function MaintainEnergy( float deltaTime )
 	local string HighDrain;
 
 	if ( AugmentationSystem!=None && Level.NetMode!=NM_Standalone )
-		for ( A=AugmentationSystem.FirstAug; A!=None; A=A.next )
+		for ( A=class'CoopRules'.static.FirstAug( Self ); A!=None; A=A.next )
 		{
 			if ( A.bHasIt && A.IsA('AugPower') )
 				Power = A;

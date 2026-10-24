@@ -11,7 +11,11 @@ param(
 	[string]$Extra = "",
 	[string]$NetName = "CoopNet",  # dev folder (tools/setup_net.sh NETNAME)
 	[int]$ClientGap = 3,           # seconds between the clients' starts
-	[switch]$SameName              # every client is Tester1 (one coming back while its old self is still in)
+	[switch]$SameName,             # every client is Tester1 (one coming back while its old self is still in)
+	[switch]$Visible,              # the host's window shown (not minimized, still no focus): for screenshots ("shot")
+	[string]$Renderer = "",        # e.g. OpenGLDrv.OpenGLRenderDevice: its "shot" is the game's own frame, also on a locked screen
+	[string]$HostAgent = "",       # the host's class (CoopLaunch.Agent): Mech, else JC's kind
+	[string]$ClientAgent = ""      # every client's class
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "desktop_helpers.ps1")
@@ -30,21 +34,22 @@ function Write-TestIni($name) {
 		-replace '^StartupFullscreen=.*$','StartupFullscreen=False' -replace '^Port=\d+$',"Port=$Port" `
 		-replace '^CaptureMouse=.*$','CaptureMouse=False' `
 		-replace '^WindowedViewportX=.*$','WindowedViewportX=640' -replace '^WindowedViewportY=.*$','WindowedViewportY=480' |
+		ForEach-Object { if ($Renderer) { $_ -replace '^GameRenderDevice=.*$',"GameRenderDevice=$Renderer" } else { $_ } } |
 		Set-Content (Join-Path $net $name)
 }
 # The URL to open goes into the user ini (CoopLaunch.AutoOpen): Revision's launcher ignores it
 # on the command line.
-function Write-UserIni($name, $playerName, $open, [switch]$IsHost) {
+function Write-UserIni($name, $playerName, $open, $agent, [switch]$IsHost) {
 	# The host's [DefaultPlayer] Listen= puts ?Listen on every URL it opens, also the
 	# one a saved game is loaded with (DeusEx builds that one from these defaults).
 	$nameLine = if ($IsHost) { "Name=$playerName`r`nListen=" } else { "Name=$playerName" }
 	$lines = (Get-Content (Join-Path $net "RevNetUser.ini")) -replace '^Name=.*$',$nameLine |
-		Where-Object { $_ -notmatch '^\[RevNet\.CoopLaunch\]' -and $_ -notmatch '^AutoOpen=' -and $_ -notmatch "^Listen=" }
-	$lines + @("", "[RevNet.CoopLaunch]", "AutoOpen=$open") | Set-Content (Join-Path $net $name)
+		Where-Object { $_ -notmatch '^\[RevNet\.CoopLaunch\]' -and $_ -notmatch '^AutoOpen=' -and $_ -notmatch "^Listen=" -and $_ -notmatch '^Agent=' }
+	$lines + @("", "[RevNet.CoopLaunch]", "AutoOpen=$open", "Agent=$agent") | Set-Content (Join-Path $net $name)
 }
 Write-TestIni "NetHost.ini"
 $url = "${Map}?Listen?Port=${Port}?Game=${GameClass}${Extra}"
-Write-UserIni "NetHostUser.ini" "Host" $url -IsHost
+Write-UserIni "NetHostUser.ini" "Host" $url $HostAgent -IsHost
 $procs = @()
 $hostLog = "NetHost.log"
 Remove-Item (Join-Path $net $hostLog) -ErrorAction SilentlyContinue
@@ -54,7 +59,7 @@ Remove-Item (Join-Path $net "Running.ini") -ErrorAction SilentlyContinue
 # Working directory CoopNet: its steam_appid.txt stops Revision.exe from relaunching itself
 # through Steam (which drops the arguments); it is a sibling of System, so ..\ paths still work.
 # Ini and log files are in CoopNet (the exe folder).
-$procs += Start-NoActivate $exe "INI=NetHost.ini USERINI=NetHostUser.ini -log=$hostLog" $net
+$procs += Start-NoActivate $exe "INI=NetHost.ini USERINI=NetHostUser.ini -log=$hostLog" $net -Visible:$Visible
 # Clients join once the host listens on the map (its log is locked while running: poll it shared).
 function Read-Shared($path) {
 	try { $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite'); $sr = New-Object IO.StreamReader($fs); $t = $sr.ReadToEnd(); $sr.Close(); return $t } catch { return "" }
@@ -65,7 +70,7 @@ Start-Sleep -Seconds 15
 for ($i = 1; $i -le $Clients; $i++) {
 	Write-TestIni "NetClient$i.ini"
 	$clientName = if ($SameName) { "Tester1" } else { "Tester$i" }
-	Write-UserIni "NetClient${i}User.ini" $clientName "127.0.0.1:${Port}"
+	Write-UserIni "NetClient${i}User.ini" $clientName "127.0.0.1:${Port}" $ClientAgent
 	Remove-Item (Join-Path $net "NetClient$i.log") -ErrorAction SilentlyContinue
 	$procs += Start-NoActivate $exe "INI=NetClient$i.ini USERINI=NetClient${i}User.ini -log=NetClient$i.log" $net
 	Start-Sleep -Seconds $ClientGap

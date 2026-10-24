@@ -248,7 +248,15 @@ event Timer()
 
 function bool ApproveClass( class<PlayerPawn> SpawnClass )
 {
-	return SpawnClass==class'CoopPlayer';
+	return SpawnClass==class'CoopPlayer' || SpawnClass==class'CoopMechPlayer';
+}
+
+// The class the player picked in the launcher (CoopLaunch.Agent): the Mech, else JC's kind.
+function class<PlayerPawn> PlayerClass( string Options )
+{
+	if ( ParseOption( Options, "RevClass" )~="Mech" )
+		return class'CoopMechPlayer';
+	return class'CoopPlayer';
 }
 
 event PlayerPawn Login( string Portal, string Options, out string Error, class<PlayerPawn> SpawnClass )
@@ -288,7 +296,7 @@ event PlayerPawn Login( string Portal, string Options, out string Error, class<P
 	// The new player (skills, augs, starting state) under single-player rules.
 	if ( bCoop )
 		Level.NetMode = NM_Standalone;
-	NewPlayer = Super.Login( Portal, Options, Error, class'CoopPlayer' );
+	NewPlayer = Super.Login( Portal, Options, Error, PlayerClass( Options ) );
 	if ( bCoop && !bStartup )
 		Level.NetMode = NM_ListenServer;
 	for ( i=0; i<n; i++ )
@@ -345,6 +353,10 @@ event PostLogin( PlayerPawn NewPlayer )
 		if ( DeusExPlayer(NewPlayer)!=None )
 			DeusExPlayer(NewPlayer).flagBase.SetBool( 'PlayerTraveling', false, true, 0 );
 	}
+	// A Mech's built-in arms, if it has none (new, or its record has none): after
+	// whatever gave it its things.
+	if ( CoopMechPlayer(NewPlayer)!=None )
+		CoopMechPlayer(NewPlayer).GiveArsenal();
 }
 
 // Back before the host noticed it had gone (a crashed game started again, a
@@ -757,6 +769,8 @@ function CheckDowned()
 		C = CoopPlayerCore(P);
 		if ( C==None )
 			continue;
+		if ( CoopMechPlayer(C)!=None )
+			CoopMechPlayer(C).HostSecond(); // (a player's Tick doesn't run)
 		Players++;
 		if ( !C.bDowned && C.Health>0 && !C.IsInState('Dying') )
 			Standing++;
@@ -938,7 +952,7 @@ function PlayerLeaving( DeusExPlayer Leaver )
 	if ( Leaver.AugmentationSystem!=None )
 	{
 		Leaver.AugmentationSystem.DeactivateAll();
-		for ( Aug=Leaver.AugmentationSystem.FirstAug; Aug!=None; Aug=NextAug )
+		for ( Aug=class'CoopRules'.static.FirstAug( Leaver ); Aug!=None; Aug=NextAug )
 		{
 			NextAug = Aug.next;
 			Aug.Destroy();

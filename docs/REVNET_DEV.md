@@ -218,6 +218,13 @@ basic, Talk, Save under all five):
   no `SetDroppedAmmoCount`, its conversation windows no credits; Shifter's and Biomod's
   `StartConversationByName` pass a sixth argument (`startSection`) to `StartConversation`;
   their augs have 5 `LevelValues` (Revision 4).
+- HR's `DeusExPlayer.AugmentationSystem` is an `HRAugmentationManager`, which is no
+  `AugmentationManager` (longer `AugLocs`): a compiled `AugmentationSystem.FirstAug` read `None`
+  there (measured), so RevNet never saw an HR player's augs. Read it through
+  `CoopRules.FirstAug` (by name in HR); never write manager properties by their compiled
+  name. HR's list holds about 150 augs, four of its body locations (7-10) lie past RevNet's
+  `AugLocs`, it makes a player's augs after the co-op restore, and its aug list doesn't reach
+  clients (the Mech sends its module levels itself: `CoopMechPlayer.ModuleLevels`).
 
 ## Tools (Git Bash for .sh, PowerShell for .ps1)
 
