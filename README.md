@@ -2,7 +2,8 @@
 
 Online co-op for the whole Deus Ex: Revision campaign, with co-op saves. The host owns the
 settings: gameplay mode (Revision, Vanilla, Shifter, Biomod, Human Revolution), difficulty,
-friendly fire, death rules. Friends join over Steam; no port forwarding.
+friendly fire, death rules, and an optional 7.62 battle rifle with select fire (on by default:
+`CoopGameInfo.RifleRework`). Friends join over Steam; no port forwarding.
 
 **Players:** download the release zip, unzip it, run `Install.bat`. See
 [dist/net/README.txt](dist/net/README.txt). You need Windows, Steam, Deus Ex: Game of the
@@ -20,9 +21,11 @@ Year Edition and Deus Ex: Revision (free for Deus Ex owners).
 - **Saves** are co-op checkpoints (`CoopSave`) with map memory (`CoopMapMemory`): flags,
   goals, notes, inventory per player, and the state of every map visited.
 - **Two classes.** Each player picks one in the launcher: JC's kind (nano-augmented) or
-  the Mech (`CoopMechPlayer`: the MJ12 Commando's body, built-in blades and arm cannon,
-  plating, heavier and louder, and its own three upgrade trees bought with salvage from
-  robots; see `docs/MECH_CLASS.md`).
+  the Mech (`CoopMechPlayer`: a big augmented body with its own armour, a built-in arm cannon
+  and blades that come out when drawn, plating, heavier and louder, and its own three upgrade
+  trees bought with salvage from robots; see `docs/MECH_CLASS.md`). Its armour
+  (`RevNetMech.u`) is built at install from the player's own game files (`MechParts.cs`), so
+  the release carries none of the game's data.
 - **Steam relay** (`src/relay`): the launcher window (plain Win32, one exe) that creates a friends-only Steam lobby and
   carries the game's UDP traffic over Steam networking. Joiners take the host's mode from the
   lobby automatically.

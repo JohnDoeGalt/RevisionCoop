@@ -2,6 +2,8 @@
 
 Usage: python -I make_net_release.py <version>
 Needs: build/net/RevNet.u (tools/build_net.sh), src/relay/RevCoop.exe (src/relay/build.bat),
+build/mech/RevNetMech.template and build/mech/art/bindings.json (tools/mech_parts.py build,
+tools/build_mech.sh, tools/mech_art.py template),
 ~/RevisionCoop/downloads/coop/HXCoop/steam_api.dll (Valve's Steamworks redistributable).
 The zip holds no Revision or Deus Ex files: the installer copies Revision's own engine files
 on the player's PC (dist/net/Install-RevNet.ps1).
@@ -47,6 +49,19 @@ def main(version):
         open(os.path.join(pay, f), 'w', encoding='utf-8-sig', newline='\r\n').write(text)
 
     shutil.copy(os.path.join(here, 'build', 'net', 'RevNet.u'), net)
+    # The Mech's own parts: the template (frames empty) and bindings; the installer fills the
+    # frames in from the player's own game (MechParts.cs). Never a template with frames in it.
+    import ue1mesh
+    tpl = os.path.join(here, 'build', 'mech', 'RevNetMech.template')
+    pkg = ue1mesh.Package(tpl)
+    for e in pkg.exports:
+        if pkg.class_name(e['cls']) == 'Mesh':
+            m = pkg.read_mesh(e['name'])
+            if any(pkg.d[m['verts_off']:m['verts_off'] + m['verts_count'] * 8]):
+                raise SystemExit(f'{tpl}: {e["name"]} still has frames (tools/mech_art.py template)')
+    shutil.copy(tpl, net)
+    shutil.copy(os.path.join(here, 'build', 'mech', 'art', 'bindings.json'), os.path.join(net, 'RevNetMech.bindings.json'))
+    shutil.copy(os.path.join(dist, 'MechParts.cs'), pay)
     rev_ini = os.path.join(REV, 'System', 'RevisionDefault.ini')
     ini = make_net_ini.build(rev_ini, 'Revision')
     write(os.path.join(net, 'RevNet.ini'), ini)

@@ -40,19 +40,48 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
 
 ## The body
 
-- **Mesh:** the MJ12 Commando's body (`DeusExCharacters.GM_ScaryTroop`): the game's own heavy
-  mechanical soldier with arm-mounted guns. Measured in `CoopTestLook`: it has every player
-  animation except the two-handed variants (`BreatheLight2H`, `Walk2H`, `Shoot2H`,
-  `RunShoot2H`, `Strafe2H`) and `CrouchWalk`; the Mech plays the one-handed ones (and
-  `Crouch` for `CrouchWalk`). It has all the conversation mouth shapes.
-- **Skins:** the Commando's own textures are black and red with MJ12's "XII", too easy to
-  mistake for an enemy. Phase 1 puts the military bot's silver plating on the body and the
-  repair bot's rust-orange plating on the shoulder shields, arms and helmet (chosen from
-  `CoopTestLook` screenshots against the stock Commando): a mech bolted together from
-  salvage. Phase 3 recolours it properly. That recolour is generated at install time from
-  the player's own files into a template package that holds only our own pixels, so nothing
-  of Eidos's ships.
-- **Collision:** JC's (the Commando's mesh is drawn wider; it doesn't block wider).
+- **Look (phase 3: the user's own character sheet, `art/mech/concept_nanosuit.png`,
+  "Replicant / Nanosuit: Blade Runner x Crysis"):** a big augmented soldier with a grey-blond
+  flat-top, an ocular implant and circuit lines at the temple, in a black segmented nanosuit:
+  plates running along the body with finer segments in them, layered armour on the shoulders,
+  an armoured collar up to the jaw, blue light strips down the arms, thighs and shins, and a
+  glowing spine interface (a light line under a ring between the shoulder blades). Over it a
+  tactical vest (chest panels, a row of mag pouches across the belly, MOLLE rows, a channel
+  for the spine), a belt with pouches, knee pads, combat boots, plated gloves. His hands show;
+  the arm cannon comes out over the right hand only while he holds it; blades come out past
+  both fists only while he holds them.
+- **Body:** Gunther Hermann's mesh (`DeusExCharacters.GM_DressShirt_B`, the game's big man) in
+  the Mech's own skins (`MechSkin`: slot 0 suit and arms, 1 legs, 3 face and hands; 512x512),
+  drawn 6% bigger (`DrawScale` 1.06, raised by `MechRaise`); without `RevNetMech.u`, Gunther's
+  skins. Its feet sit where JC's do (both -49.41 in the standing frame). The always-drawn parts
+  put the skins on the body on every machine (`CoopMechParts.Skins`): `RevNetMech`, each PC's
+  own, isn't in the package map, so the host's `MultiSkins` can't reach clients.
+- **Textures (original art):** baked in code from where each texel lies on the body (its 3D
+  point and smooth normal in the standing frame, folded into the right half: the skins share
+  texels between the sides): the suit's plating is procedural (3D Voronoi plates stretched
+  along the body, each pillowed so it catches the key light across its face, finer segments
+  in them, a gloss highlight); the vest is generated cordura (`art/mech/materials`) with
+  MOLLE rows and binding; ambient occlusion from the body and the parts; blue lights unshaded
+  (`tools/mech_bake.py`). The face and head are the user's sheet (its head front and right
+  profile) projected onto the head by each texel's 3D point, eyes, mouth, nose, ear and chin on
+  the head's; the collar and the gloves as the suit (`tools/mech_face.py`). The parts have a
+  cell per face in a 1024x1024 atlas, their plates in the same procedural plating
+  (`tools/mech_parts.py`). `tools/mech_uv.py` draws the body's texture layout.
+- **Parts:** `RevNetMech.u`, three meshes (`BarrettParts` always, `BarrettCannon` with the
+  arm cannon in hand, `BarrettBlade` with the arm blades in hand). Each part is rigid and rides a frame made from three of
+  the body's vertices, chosen where they keep their distances in all 358 frames
+  (`tools/mech_parts.py`); a parts mesh therefore has the body's animations frame for frame,
+  and `CoopMechParts` draws it over the body by copying the body's animation (and blend
+  channels) every tick, as UT's shield belt effect does. Each machine makes its own for each
+  Mech; the pawn's `Weapon` (replicated to everyone) says which to show.
+- **Install-time build (nothing of the game's ships):** the release carries
+  `RevNetMech.template` (the parts with their animation frames emptied and constant bounds:
+  `tools/mech_art.py template`) and `RevNetMech.bindings.json` (each part's anchor vertices
+  and shape around them). `Install-RevNet.ps1` fills the frames in from the player's own
+  `DeusExCharacters.u` (`MechParts.cs`, 86 ms; byte-identical to `tools/mech_art.py fill`). If
+  it can't (a different body), the Mech plays with the body alone. The release builder
+  refuses a template that still has frames.
+- **Collision:** JC's.
 - **First person:** the arm cannon uses the wrist-mounted mini-crossbow's view model, and the
   blades the combat knife's; both drawn with the military bot's plating as the hand texture
   (their `GetWeaponHandTex`). Other weapons the Mech picks up show JC's hands. Phase 3: real
@@ -190,7 +219,8 @@ rows MECH-10 to MECH-19 in `TEST_MATRIX.md`):
 
 1. **The brute (playable):** class choice, body, base rules, arsenal, save and travel, tests. Done.
 2. **The trees:** salvage, modules, the Mech screen, active abilities. Done.
-3. **Art:** the install-time recolour, metal first-person arms, then kitbashed armour on the
-   Commando body (`docs/3D_TOOLING.md`).
+3. **Art:** the Barrett-line body: Gunther's body with RevNet's own parts, built at install.
+   Done (third person). Not yet: first-person arm meshes (the cannon still uses the
+   mini-crossbow's view model).
 
 Later ideas: the heat model and the killphrase glitch (`COOP_IDEAS.md` C2, C4).

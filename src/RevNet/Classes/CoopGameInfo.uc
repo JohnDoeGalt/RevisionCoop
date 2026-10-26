@@ -25,6 +25,9 @@ var config string Mode;         // the launcher's gameplay mode, names the co-op
 var config int DeathRule;       // 0: a dying player goes down, a teammate revives them with a medkit, else the team loads the last save; 1: the team loads it at once (launcher setting)
 var config int SaveRule;        // 0: any save; 1: autosaves only, no quick save (launcher setting)
 var config float DownedSeconds; // how long a downed player lasts
+var config int RifleRework;     // 1: the assault rifle as a 7.62 battle rifle with select fire, for everyone (CoopRules.RifleValues); 0: the mode's own (launcher setting)
+var int RifleDamage;            // the rifle's values this game (RifleRework), sent to every client
+var float RifleShotTime, RifleRecoil;
 var localized string SavedMessage, NoSaveMessage;
 var localized string DownedText, BleedingText, BledOutText, DiedText, NobodyText, FailedText, RevivedText, NeedMedkitText, NoQuickSaveText;
 var float FailAt;               // the team failed: loading the last save then
@@ -119,6 +122,14 @@ event InitGame( string Options, out string Error )
 		Level.NetMode = NM_Standalone;
 	}
 	Log( "RevNet: co-op game" @ bCoop $ ", difficulty" @ StartDifficulty, 'RevNet' );
+	// Before the map's rifles start (IsRelevant gives each these values).
+	if ( bCoop && RifleRework!=0 )
+	{
+		class'CoopRules'.static.RifleValues( Self, RifleDamage, RifleShotTime, RifleRecoil );
+		Log( "RevNet: assault rifle" @ ConsoleCommand( "get WeaponAssaultGun HitDamage" ) @ "damage," @ ConsoleCommand( "get WeaponAssaultGun ShotTime" ) @ "s a shot, recoil"
+			@ ConsoleCommand( "get WeaponAssaultGun recoilStrength" ) @ "(pistol" @ ConsoleCommand( "get WeaponPistol HitDamage" ) $ ") ->" @ RifleDamage @ RifleShotTime @ RifleRecoil, 'RevNet' );
+		class'CoopRules'.static.SetRifle( Self, RifleDamage, RifleShotTime, RifleRecoil );
+	}
 	S = ParseOption( Options, "CoopTest" );
 	if ( S!="" )
 	{
@@ -353,6 +364,12 @@ event PostLogin( PlayerPawn NewPlayer )
 		if ( DeusExPlayer(NewPlayer)!=None )
 			DeusExPlayer(NewPlayer).flagBase.SetBool( 'PlayerTraveling', false, true, 0 );
 	}
+	// The rifle's values (RifleRework), on the player's own machine too.
+	if ( RifleDamage>0 && CoopPlayerCore(NewPlayer)!=None )
+	{
+		CoopPlayerCore(NewPlayer).bRifleRework = true;
+		CoopPlayerCore(NewPlayer).ClientRifleRework( RifleDamage, RifleShotTime, RifleRecoil );
+	}
 	// A Mech's built-in arms, if it has none (new, or its record has none): after
 	// whatever gave it its things.
 	if ( CoopMechPlayer(NewPlayer)!=None )
@@ -510,6 +527,13 @@ function bool IsRelevant( Actor Other )
 			{
 				PatchedClasses = PatchedClasses $ " " $ W.Class.Name $ " ";
 				class'CoopRules'.static.PatchWeapon( Self, W.Class );
+			}
+			// A rifle placed in the map has the values it was loaded with (RifleRework).
+			if ( RifleDamage>0 && W.IsA('WeaponAssaultGun') )
+			{
+				W.HitDamage = RifleDamage;
+				W.ShotTime = RifleShotTime;
+				W.recoilStrength = RifleRecoil;
 			}
 			// This one copies its deathmatch values next: make them its own.
 			W.mpHitDamage = W.HitDamage;
@@ -979,6 +1003,7 @@ defaultproperties
 	SavedMessage="Co-op game saved."
 	NoSaveMessage="There is no co-op save for this gameplay mode yet."
 	DownedSeconds=45
+	RifleRework=1
 	DownedText="is down! Revive them with a medkit (use them)."
 	BleedingText="is down, seconds left:"
 	BledOutText="bled out"

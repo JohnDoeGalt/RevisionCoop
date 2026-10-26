@@ -26,9 +26,14 @@ Play
     "The Mech" below). Your choice is remembered.
   Host
     Choose the mode (which gameplay mode everyone plays), difficulty, friendly fire,
-    what happens when a player dies, and saves; then click "Host a new game", or
-    "Continue saved game" to pick up where your team left off. Your choices are
-    remembered.
+    what happens when a player dies, saves, and the assault rifle; then click "Host a
+    new game", or "Continue saved game" to pick up where your team left off. Your
+    choices are remembered.
+    Assault rifle: "7.62 battle rifle, select fire" (the default) makes every assault
+    rifle, yours and the enemies', hit harder than the 10mm pistol, fire a little
+    slower on full auto, and kick harder; its ammo key (') switches full auto,
+    semi-automatic (one round a pull) and its 20mm grenades. "The mode's own" keeps
+    the gameplay mode's rifle as it is.
   Join
     Friends who are hosting appear under "Join a friend": choose one and click Join
     (or double-click them). You can also type the lobby id the host sees, accept a
@@ -53,6 +58,10 @@ In the game
 The Mech
   A mechanically augmented agent: the older, cruder kind of augmentation that JC's
   nano-augmentation is replacing. A tank, where JC is the ghost.
+  - Its look: a big augmented man in a black combat suit and chrome limbs, with shoulder
+    plates, a vest, a steel jaw and armoured forearms. The arm cannon comes out over his
+    hand when he draws it, the blades past his fists when he draws them. The installer
+    builds this armour from your own copy of the game.
   - Built into the body: Arm Blades (belt 1) and an Arm Cannon (belt 2), an automatic gun
     fed with 7.62 mm rounds (the assault rifle's ammo; Heavy Weapons skill). They can't be
     dropped or lost.

@@ -96,6 +96,8 @@ function First( int t )
 		VictimHealth = Victim.Health;
 		EnergyBefore = Remote.Energy;
 		Mod( class'CoopMechAugBurst' ).Activate();
+		// What the client sees of it (MECH-14).
+		Remote.ClientTest( "fx" );
 	}
 	else if ( t==8 )
 	{
@@ -153,7 +155,9 @@ function First( int t )
 	else if ( t==33 )
 	{
 		Log( "RevNetTest: tree reboot: downed" @ Mech.bDowned @ "rebooted" @ Mech.bRebooted @ "health" @ Remote.Health, 'RevNet' );
+		// (HR turns a canister into an upgrade canister as it is made: AugmentationCannister.PreBeginPlay.)
 		Give( class'AugmentationCannister' );
+		Give( class'AugmentationUpgradeCannister' );
 		SalvageBefore = Mech.Salvage;
 		Mech.ServerScrapCanisters();
 		Log( "RevNetTest: tree scrap: salvage" @ SalvageBefore @ "->" @ Mech.Salvage @ "canister left" @ (Remote.FindInventoryType( class'AugmentationCannister' )!=None), 'RevNet' );

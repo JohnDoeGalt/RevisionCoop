@@ -35,15 +35,17 @@ var bool bTakingDamage;        // (host) in TakeDamage: its hit region (GetMPHit
 var int HitRegion;             // ... and the body parts before it, for CoopWorld.SinglePlayerHit
 var int HitBefore[6];          // head, torso, left arm, right arm, left leg, right leg
 var Augmentation FoundAug;     // (CoopRules.FirstAug: HR's manager's FirstAug, read by name)
+var bool bRifleRework;         // the host's RifleRework is on: the ammo key gives the rifle select fire
+var localized string SemiAutoText, FullAutoText;
 
 replication
 {
 	reliable if ( Role==ROLE_Authority )
 		bDowned;
 	reliable if ( Role==ROLE_Authority )
-		ClientSettle, ClientAskTravel, ClientWeaponValues;
+		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast;
 	reliable if ( Role<ROLE_Authority )
-		ServerAnswerTravel, ServerWeaponValues, ServerLook;
+		ServerAnswerTravel, ServerWeaponValues, ServerLook, ServerSelectFire;
 }
 
 // ----------------------------------------------------------------------
@@ -159,6 +161,8 @@ function ServerWeaponValues( DeusExWeapon W )
 		return;
 	class'CoopRules'.static.SinglePlayerItem( W ); // (if asked before the host's next tick)
 	ClientWeaponValues( W, W.ReloadCount, W.ReloadTime, W.HitDamage, W.BaseAccuracy, W.AccurateRange, W.MaxRange, W.recoilStrength );
+	// Its fire mode and shot time as the host has them (a rifle's select fire, RifleRework).
+	W.SetClientAmmoParams( W.bInstantHit, W.bAutomatic, W.ShotTime, W.FireSound, W.ProjectileClass, W.ProjectileSpeed );
 }
 
 simulated function ClientWeaponValues( DeusExWeapon W, int Count, float Reload, int Damage, float Accuracy, int Range, int MaxRange, float Recoil )
@@ -172,6 +176,60 @@ simulated function ClientWeaponValues( DeusExWeapon W, int Count, float Reload, 
 	W.AccurateRange = Range;
 	W.MaxRange = MaxRange;
 	W.recoilStrength = Recoil;
+}
+
+// ----------------------------------------------------------------------
+// The assault rifle as a 7.62 battle rifle (CoopGameInfo.RifleRework): the host's
+// values on this machine, and select fire on the ammo key: full auto, semi-automatic,
+// then its 20mm rounds (if it has any), then full auto again.
+// ----------------------------------------------------------------------
+
+// A blast drawn on this machine: the effects the host spawns don't reach clients (measured:
+// CoopTestMechTree, a Mech's Shrapnel Burst).
+simulated function ClientBlast( vector At, float Size )
+{
+	if ( Level.NetMode!=NM_Client )
+		return;
+	Spawn( class'ExplosionMedium',,, At );
+	Spawn( class'SphereEffect',,, At ).Size = Size;
+}
+
+simulated function ClientRifleRework( int Damage, float ShotTime, float Recoil )
+{
+	if ( Level.NetMode!=NM_Client )
+		return;
+	bRifleRework = true;
+	class'CoopRules'.static.SetRifle( Self, Damage, ShotTime, Recoil );
+}
+
+exec function SwitchAmmo()
+{
+	if ( bRifleRework && inHand!=None && inHand.IsA('WeaponAssaultGun') )
+		ServerSelectFire();
+	else
+		Super.SwitchAmmo();
+}
+
+function ServerSelectFire()
+{
+	local DeusExWeapon W;
+
+	W = DeusExWeapon(inHand);
+	if ( W==None || !W.IsA('WeaponAssaultGun') )
+		return;
+	// On 20mm rounds, or semi-automatic with 20mm rounds to go to: the next ammo (back
+	// to 7.62 is full auto: LoadAmmo).
+	if ( !W.bInstantHit || (!W.bAutomatic && W.NumAmmoTypesAvailable()>1) )
+	{
+		W.CycleAmmo();
+		return;
+	}
+	W.bAutomatic = !W.bAutomatic;
+	W.SetClientAmmoParams( W.bInstantHit, W.bAutomatic, W.ShotTime, W.FireSound, W.ProjectileClass, W.ProjectileSpeed );
+	if ( W.bAutomatic )
+		ClientMessage( W.ItemName $ ":" @ FullAutoText );
+	else
+		ClientMessage( W.ItemName $ ":" @ SemiAutoText );
 }
 
 // ----------------------------------------------------------------------
@@ -659,8 +717,17 @@ function PunishDetection( int DamageAmount )
 
 exec function Fire( optional float F )
 {
-	if ( !bDowned )
-		Super.Fire( F );
+	local DeusExWeapon W;
+
+	if ( bDowned )
+		return;
+	Super.Fire( F );
+	// A semi-automatic rifle (ServerSelectFire): one round a pull. The weapon fires again
+	// while the fire key's button is down; the key sets it as it goes down ("Button bFire
+	// | Fire") and clears it as it comes up.
+	W = DeusExWeapon(inHand);
+	if ( bRifleRework && W!=None && W.IsA('WeaponAssaultGun') && W.bInstantHit && !W.bAutomatic )
+		bFire = 0;
 }
 
 exec function AltFire( optional float F )
@@ -764,6 +831,8 @@ event PlayerInput( float DeltaTime )
 defaultproperties
 {
 	HealLeft=-1
+	SemiAutoText="semi-automatic"
+	FullAutoText="full automatic"
 	bBeltIsMPInventory=False
 	MaxRegenPoint=0
 }

@@ -3,7 +3,7 @@
 //
 // ?CoopTest=Save: the host saves (CoopSave) with a client in the game, things
 // change, the host quick-loads: the team is back on the saved map (fresh) with
-// the saved flag, credits and items.
+// the saved flag, credits, items and both players' augmentations.
 //=============================================================================
 class CoopTestSave extends CoopTest;
 
@@ -23,6 +23,9 @@ function Run( int t )
 		Kit = Spawn( class'MedKit',,, Remote.Location );
 		Remote.FrobTarget = Kit;
 		Remote.HandleItemPickup( Kit );
+		GiveAug( Remote, "DeusEx.AugSpeed", 2 );
+		GiveAug( Host, "DeusEx.AugCombat", 1 );
+		Log( "RevNetTest: augs saved: client" @ Augs( Remote ) @ "| host" @ Augs( Host ), 'RevNet' );
 		SetStage( 1 );
 		CoopGameInfo(Level.Game).SaveCoopGame( true );
 		Log( "RevNetTest: saved: flag=true client credits=777 client medkit=" $ (Remote.FindInventoryType(class'MedKit')!=None), 'RevNet' );
@@ -35,6 +38,7 @@ function Run( int t )
 		Kit = Remote.FindInventoryType( class'MedKit' );
 		if ( Kit!=None )
 			Kit.Destroy();
+		GiveAug( Remote, "DeusEx.AugSpeed", 0 );
 		if ( FindNPC('UNATCOTroop1')!=None )
 			FindNPC('UNATCOTroop1').Destroy();
 		SetStage( 2 );
@@ -46,6 +50,7 @@ function Run( int t )
 		SetStage( 3 );
 		Log( "RevNetTest: after load on" @ Level.Outer.Name $ ": flag=" $ Host.flagBase.GetBool('RevNetSaveTest') @ "client credits=" $ Remote.Credits @ "client medkit=" $ (Remote.FindInventoryType(class'MedKit')!=None) @ "client items" @ Things( Remote ), 'RevNet' );
 		Log( "RevNetTest: after load: removed before the save still gone=" $ (FindNPC('Terrorist5')==None) @ "removed after the save back=" $ (FindNPC('UNATCOTroop1')!=None), 'RevNet' );
+		Log( "RevNetTest: after load: augs: client" @ Augs( Remote ) @ "| host" @ Augs( Host ), 'RevNet' );
 		Done();
 	}
 }
@@ -58,6 +63,32 @@ function ScriptedPawn FindNPC( name N )
 		if ( P.Name==N )
 			return P;
 	return None;
+}
+
+// An aug (by name) at a level.
+function GiveAug( Pawn P, string ClassName, int Level )
+{
+	local Augmentation Aug;
+
+	Aug = DeusExPlayer(P).AugmentationSystem.GivePlayerAugmentation( class<Augmentation>( DynamicLoadObject( ClassName, class'Class' ) ) );
+	if ( Aug!=None )
+		Aug.CurrentLevel = Level;
+}
+
+// The augs a player has, with their levels.
+function string Augs( Pawn P )
+{
+	local Augmentation Aug;
+	local string S;
+	local int n;
+
+	for ( Aug=class'CoopRules'.static.FirstAug( P ); Aug!=None && n<256; Aug=Aug.next )
+	{
+		n++;
+		if ( Aug.bHasIt )
+			S = S @ Aug.Class.Name $ ":" $ Aug.CurrentLevel;
+	}
+	return S @ "(" $ n $ ")";
 }
 
 function SetStage( int S )

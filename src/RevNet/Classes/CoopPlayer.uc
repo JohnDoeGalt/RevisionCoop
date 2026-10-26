@@ -97,11 +97,20 @@ simulated function ArmsTest( string Command )
 	local DeusExProjectile P;
 	local Augmentation A;
 	local Inventory Item;
+	local CoopMechParts MP;
+	local Effects FX;
 	local string S;
 
 	// The keys' execs, called as the input binding calls them.
 	if ( Command=="fire" )
 		Fire( 0 );
+	else if ( Command=="hold" ) // the fire key held down (CoopTestRifle) ...
+	{
+		bFire = 1;
+		Fire( 0 );
+	}
+	else if ( Command=="release" ) // ... and let go
+		bFire = 0;
 	else if ( Command=="reload" )
 		ReloadWeapon();
 	else if ( Command=="switchammo" )
@@ -118,9 +127,25 @@ simulated function ArmsTest( string Command )
 		if ( W!=None )
 			S = W.Class.Name @ "clip" @ W.ClipCount $ "/" $ W.ReloadCount @ "reload" @ W.ReloadTime @ "damage" @ W.HitDamage
 				@ "accuracy" @ W.BaseAccuracy @ "range" @ W.AccurateRange $ "/" $ W.MaxRange @ "recoil" @ W.recoilStrength
-				@ "ammo" @ W.AmmoType @ W.AmmoType.AmmoAmount @ "state" @ W.GetStateName()
+				@ "ammo" @ W.AmmoType @ W.AmmoType.AmmoAmount @ "state" @ W.GetStateName() @ "auto" @ W.bAutomatic @ "shot" @ W.ShotTime
 				@ "ready" @ W.bClientReadyToFire @ "busy" @ W.bInProcess @ "anim" @ W.AnimSequence @ "immune" @ NintendoImmunityTimeLeft;
 		ServerTestReply( "client's weapon:" @ S @ "| energy" @ int(Energy) @ "| water speed" @ WaterSpeed );
+	}
+	else if ( Command=="fx" ) // the effects on this machine (a Mech's burst)
+	{
+		foreach AllActors( class'Effects', FX )
+			S = S @ FX.Class.Name;
+		ServerTestReply( "client's effects:" $ S );
+	}
+	else if ( Command=="parts" ) // the Mechs' parts this machine draws (CoopMechParts)
+	{
+		foreach AllActors( class'CoopMechParts', MP )
+		{
+			S = S @ "|" @ MP.Body.Name @ MP.Mesh.Name @ "hidden" @ MP.bHidden;
+			if ( MP.When==None && MP.Body.MultiSkins[0]!=None && MP.Body.MultiSkins[3]!=None )
+				S = S @ "skins" @ MP.Body.MultiSkins[0].Name @ MP.Body.MultiSkins[3].Name;
+		}
+		ServerTestReply( "client's Mech parts:" $ S );
 	}
 	else if ( Command=="shots" )
 	{

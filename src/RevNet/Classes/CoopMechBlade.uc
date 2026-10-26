@@ -39,6 +39,16 @@ simulated function ProcessTraceHit( Actor Other, Vector HitLocation, Vector HitN
 	HitDamage = Damage;
 }
 
+// Others see the blades out of its forearms (CoopMechParts), not a knife in its hand.
+function bool Facelift( bool bOn )
+{
+	local bool ret;
+
+	ret = Super.Facelift( bOn );
+	ThirdPersonMesh = default.ThirdPersonMesh;
+	return ret;
+}
+
 function DropFrom( vector StartLocation )
 {
 	if ( CoopMechPlayer(Owner)!=None && Owner.bDeleteMe==false && Pawn(Owner).Health>0 )
@@ -50,6 +60,7 @@ defaultproperties
 {
 	MechHandTex=Texture'DeusExCharacters.Skins.MilitaryBotTex1'
 	HitDamage=16
+	ThirdPersonMesh=LodMesh'DeusExItems.InvisibleWeapon'
 	ItemName="Arm Blades"
 	ItemArticle="the"
 	beltDescription="BLADES"

@@ -15,7 +15,9 @@ param(
 	[switch]$Visible,              # the host's window shown (not minimized, still no focus): for screenshots ("shot")
 	[string]$Renderer = "",        # e.g. OpenGLDrv.OpenGLRenderDevice: its "shot" is the game's own frame, also on a locked screen
 	[string]$HostAgent = "",       # the host's class (CoopLaunch.Agent): Mech, else JC's kind
-	[string]$ClientAgent = ""      # every client's class
+	[string]$ClientAgent = "",     # every client's class
+	[int]$Width = 640,             # the windows' size
+	[int]$Height = 480
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "desktop_helpers.ps1")
@@ -33,7 +35,7 @@ function Write-TestIni($name) {
 		-replace '^(MusicVolume|SoundVolume|SpeechVolume)=.*$','$1=0' `
 		-replace '^StartupFullscreen=.*$','StartupFullscreen=False' -replace '^Port=\d+$',"Port=$Port" `
 		-replace '^CaptureMouse=.*$','CaptureMouse=False' `
-		-replace '^WindowedViewportX=.*$','WindowedViewportX=640' -replace '^WindowedViewportY=.*$','WindowedViewportY=480' |
+		-replace '^WindowedViewportX=.*$',"WindowedViewportX=$Width" -replace '^WindowedViewportY=.*$',"WindowedViewportY=$Height" |
 		ForEach-Object { if ($Renderer) { $_ -replace '^GameRenderDevice=.*$',"GameRenderDevice=$Renderer" } else { $_ } } |
 		Set-Content (Join-Path $net $name)
 }
@@ -60,12 +62,15 @@ Remove-Item (Join-Path $net "Running.ini") -ErrorAction SilentlyContinue
 # through Steam (which drops the arguments); it is a sibling of System, so ..\ paths still work.
 # Ini and log files are in CoopNet (the exe folder).
 $procs += Start-NoActivate $exe "INI=NetHost.ini USERINI=NetHostUser.ini -log=$hostLog" $net -Visible:$Visible
+# The games are muted from a process of their own (its audio COM calls, repeated on this thread,
+# once hung the run): it re-mutes every 5 s and ends when no Revision is left.
+Start-Process powershell -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$mute`" -Name Revision -WatchSeconds $($Seconds + 900)"
 # Clients join once the host listens on the map (its log is locked while running: poll it shared).
 function Read-Shared($path) {
 	try { $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite'); $sr = New-Object IO.StreamReader($fs); $t = $sr.ReadToEnd(); $sr.Close(); return $t } catch { return "" }
 }
 $ready = (Get-Date).AddSeconds(180)
-while ((Get-Date) -lt $ready -and (Read-Shared (Join-Path $net $hostLog)) -notmatch "Browse: ${Map}") { & $mute -Name Revision | Out-Null; Start-Sleep -Seconds 3 }
+while ((Get-Date) -lt $ready -and (Read-Shared (Join-Path $net $hostLog)) -notmatch "Browse: ${Map}") { Start-Sleep -Seconds 3 }
 Start-Sleep -Seconds 15
 for ($i = 1; $i -le $Clients; $i++) {
 	Write-TestIni "NetClient$i.ini"
@@ -76,10 +81,7 @@ for ($i = 1; $i -le $Clients; $i++) {
 	Start-Sleep -Seconds $ClientGap
 }
 $end = (Get-Date).AddSeconds($Seconds)
-while ((Get-Date) -lt $end -and @($procs | Where-Object { -not $_.HasExited }).Count -gt 0) {
-	& $mute -Name Revision | Out-Null
-	Start-Sleep -Seconds 10
-}
+while ((Get-Date) -lt $end -and @($procs | Where-Object { -not $_.HasExited }).Count -gt 0) { Start-Sleep -Seconds 10 }
 # Close politely so the logs flush, then force.
 foreach ($p in $procs) { if (-not $p.HasExited) { $p.CloseMainWindow() | Out-Null } }
 Start-Sleep -Seconds 10

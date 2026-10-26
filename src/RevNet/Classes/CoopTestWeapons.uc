@@ -206,6 +206,11 @@ function bool SwitchAmmo( int s )
 			Log( "RevNetTest: ammo switch: before" @ W.AmmoType @ "projectile" @ W.ProjectileClass @ "instant" @ W.bInstantHit, 'RevNet' );
 			Remote.ClientTest( "switchammo" );
 			break;
+		case 3:
+			// With the host's RifleRework the key goes full auto, semi-automatic, then 20mm.
+			if ( Remote.bRifleRework )
+				Remote.ClientTest( "switchammo" );
+			break;
 		case 5:
 			Log( "RevNetTest: ammo switch: after" @ W.AmmoType @ W.AmmoType.AmmoAmount @ "projectile" @ W.ProjectileClass @ "instant" @ W.bInstantHit, 'RevNet' );
 			Remote.ClientTest( "arms" );

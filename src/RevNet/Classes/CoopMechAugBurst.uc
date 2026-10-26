@@ -14,6 +14,7 @@ var localized string RechargingText, NoEnergyText;
 function Activate()
 {
 	local Pawn P;
+	local CoopPlayerCore C;
 	local Actor A;
 	local float Dist, Dmg;
 	local vector Dir;
@@ -47,6 +48,9 @@ function Activate()
 	}
 	Spawn( class'ExplosionMedium',,, P.Location );
 	Spawn( class'SphereEffect',,, P.Location ).Size = Radius[CurrentLevel] / 32.0;
+	foreach AllActors( class'CoopPlayerCore', C )
+		if ( NetConnection(C.Player)!=None )
+			C.ClientBlast( P.Location, Radius[CurrentLevel] / 32.0 );
 	P.PlaySound( Sound'DeusExSounds.Generic.MediumExplosion1', SLOT_None, 2.0,, Radius[CurrentLevel] * 4 );
 	P.AISendEvent( 'LoudNoise', EAITYPE_Audio, 2.0, Radius[CurrentLevel] * 4 );
 	Log( "RevNet:" @ P.PlayerReplicationInfo.PlayerName @ "shrapnel burst level" @ CurrentLevel + 1 @ "hit" @ Hit, 'RevNet' );

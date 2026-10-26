@@ -91,6 +91,17 @@ Copy-Item (Join-Path $revSys "Revision.exe") $net -Force
 Set-Content (Join-Path $net "steam_appid.txt") "397550" -NoNewline -Encoding Ascii
 Copy-Item (Join-Path $pay "RevNet.u") $net -Force
 
+# The Mech's own parts (arm cannon, blades, armour), made from this game's own body: the
+# release carries the parts without their animation frames (none of the game's data).
+Remove-Item (Join-Path $net "RevNetMech.u") -ErrorAction SilentlyContinue
+try {
+	Add-Type -Path (Join-Path $here "MechParts.cs") -ReferencedAssemblies System.Web.Extensions
+	$why = [MechParts]::Build((Join-Path $revSys "DeusExCharacters.u"), (Join-Path $pay "RevNetMech.template"),
+		(Join-Path $pay "RevNetMech.bindings.json"), (Join-Path $net "RevNetMech.u"))
+} catch { $why = $_.Exception.Message }
+if ($why) { Write-Host "The Mech will play without its own armour and arm cannon ($why)." -ForegroundColor Yellow }
+else { Write-Host "Built the Mech's armour and arm cannon from your game files." }
+
 # The ini: the release's, with the player's display and sound settings (from the co-op ini being
 # replaced, else from Revision's).
 $display = @("WinDrv.WindowsClient", "D3D9Drv.D3D9RenderDevice", "D3DDrv.D3DRenderDevice", "OpenGLDrv.OpenGLRenderDevice", "RGalaxy.GalaxyAudioSubsystem", "ALAudio.ALAudioSubsystem")

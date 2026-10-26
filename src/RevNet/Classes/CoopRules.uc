@@ -67,6 +67,31 @@ static function PatchWeapon( Actor Ctx, class<DeusExWeapon> W )
 		PatchClass( Ctx, W.default.ProjectileNames[i] );
 }
 
+// The assault rifle as a 7.62 battle rifle (host setting CoopGameInfo.RifleRework), for
+// everyone who carries one: a round hits a quarter harder than the mode's own 10mm pistol
+// round (never less than the rifle did), full auto fires at most 6.7 rounds a second, and
+// recoil is half again as strong. Worked out from the mode's own values (Shifter, Biomod
+// and HR set their own).
+static function RifleValues( Actor Ctx, out int Damage, out float ShotTime, out float Recoil )
+{
+	local int Pistol;
+
+	Pistol = int( Ctx.ConsoleCommand( "get WeaponPistol HitDamage" ) );
+	Damage = Max( int( Ctx.ConsoleCommand( "get WeaponAssaultGun HitDamage" ) ), Pistol + (Pistol + 3) / 4 );
+	ShotTime = FMax( float( Ctx.ConsoleCommand( "get WeaponAssaultGun ShotTime" ) ), 0.15 );
+	Recoil = float( Ctx.ConsoleCommand( "get WeaponAssaultGun recoilStrength" ) ) * 1.5;
+}
+
+// The rifle's class values, on the host and on each client (its copies predict with them,
+// its inventory screen shows them). The mp ones: what a weapon spawned online copies.
+static function SetRifle( Actor Ctx, int Damage, float ShotTime, float Recoil )
+{
+	Ctx.ConsoleCommand( "set WeaponAssaultGun HitDamage" @ Damage );
+	Ctx.ConsoleCommand( "set WeaponAssaultGun mpHitDamage" @ Damage );
+	Ctx.ConsoleCommand( "set WeaponAssaultGun ShotTime" @ ShotTime );
+	Ctx.ConsoleCommand( "set WeaponAssaultGun recoilStrength" @ Recoil );
+}
+
 static function CopyDefault( Actor Ctx, string ClassName, string MPField, string SPField )
 {
 	local string V;

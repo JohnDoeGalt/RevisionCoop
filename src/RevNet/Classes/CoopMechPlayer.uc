@@ -13,12 +13,13 @@
 //=============================================================================
 class CoopMechPlayer extends CoopPlayer;
 
-var Texture MechSkins[8];  // robot plating on the Commando's body: not MJ12's black and red (CoopTestLook)
+var Texture MechSkins[8];  // the body's skins (MechLook: Gunther Hermann's)
+var CoopMechParts Parts[3]; // its own parts, drawn on this machine (MountParts)
 var float StunMult;      // damage taken from prods and batons
 var float PushMult;      // ... knockback
 var float SpeedMult;     // (the jump, mass and buoyancy: defaults, 0.9 and 1.8 times JC's; Revision
                          // derives the jump from the default: SkillManager, the Swimming skill)
-var float MechRaise;     // the Commando's body stands this much taller than JC's (PrePivot)
+var float MechRaise;     // its body (bigger: DrawScale) stands this much taller than JC's (PrePivot)
 var class<CoopMechAug> Modules[12]; // in the screen's order: Arsenal, Chassis, Systems
 var travel int Salvage;
 var byte ModuleLevels[12];          // (to its machine) each module's level + 1 (0: not installed) ...
@@ -59,11 +60,16 @@ function SetSkin()
 	MechLook();
 }
 
+// Gunther Hermann's body (the game's big man) in the Mech's own skins (MechSkin), under its own
+// parts (CoopMechParts), a little bigger.
 function MechLook()
 {
 	local int i;
 
+	for ( i=0; i<8; i++ )
+		MechSkins[i] = MechSkin( i );
 	Mesh = default.Mesh;
+	DrawScale = default.DrawScale;
 	for ( i=0; i<8; i++ )
 	{
 		MultiSkins[i] = MechSkins[i];
@@ -73,10 +79,52 @@ function MechLook()
 	CarcassType = default.CarcassType;
 }
 
+// The body's skin in slot i: the Mech's own (RevNetMech: its suit and arms, legs, face and
+// hands: tools/mech_bake.py, tools/mech_face.py); without RevNetMech.u, Gunther's (read from
+// his class). Slots 4-7 (overlays, lenses) stay hidden as on him.
+static function Texture MechSkin( int i )
+{
+	local class<Actor> Gunther;
+	local Texture T;
+
+	if ( i==0 )
+		T = Texture( DynamicLoadObject( "RevNetMech.BarrettSuit", class'Texture', true ) );
+	else if ( i==1 )
+		T = Texture( DynamicLoadObject( "RevNetMech.BarrettLegs", class'Texture', true ) );
+	else if ( i==2 || i==3 )
+		T = Texture( DynamicLoadObject( "RevNetMech.BarrettFace", class'Texture', true ) );
+	if ( T!=None )
+		return T;
+	Gunther = class<Actor>( DynamicLoadObject( "DeusEx.GuntherHermann", class'Class', true ) );
+	if ( Gunther!=None && Gunther.default.Mesh==default.Mesh )
+		return Gunther.default.MultiSkins[i];
+	return default.MechSkins[i];
+}
+
 function PostBeginPlay()
 {
 	Super.PostBeginPlay();
 	MechLook();
+	MountParts();
+}
+
+// (A client: another player's Mech, or its own, as it arrives.)
+simulated function PostNetBeginPlay()
+{
+	Super.PostNetBeginPlay();
+	MountParts();
+}
+
+// Its parts on this machine: always, the arm cannon out with the cannon in hand, the blades
+// out with the blades in hand (CoopMechParts).
+simulated function MountParts()
+{
+	if ( Parts[0]!=None )
+		return;
+	Parts[0] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettParts" );
+	Parts[1] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettCannon", class'CoopMechCannon' );
+	Parts[2] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettBlade", class'CoopMechBlade' );
+	Log( "RevNet: a Mech's parts on this machine (its role" @ int(Role) $ "):" @ (Parts[0]!=None) @ (Parts[1]!=None) @ (Parts[2]!=None), 'RevNet' );
 }
 
 function TravelPostAccept()
@@ -188,6 +236,7 @@ function RefreshModules()
 {
 	local CoopMechAugCannon CannonMod;
 	local CoopMechAugGenerator Gen;
+	local CoopGameInfo G;
 	local DeusExWeapon W;
 	local CoopMechAug M;
 	local int i;
@@ -223,6 +272,11 @@ function RefreshModules()
 			W.HitDamage = CannonMod.LevelValues[CannonMod.ModuleLevel()];
 			W.ReloadCount = CannonMod.Magazine[CannonMod.ModuleLevel()];
 		}
+		// The rifle as a battle rifle (CoopGameInfo.RifleRework): level 1 hits as hard as a
+		// rifle round (the table's 5), the rest in step; it keeps its faster fire.
+		G = CoopGameInfo(Level.Game);
+		if ( G!=None && G.RifleDamage>0 )
+			W.HitDamage = (W.HitDamage * G.RifleDamage + 2) / 5;
 		W.BaseAccuracy = W.default.BaseAccuracy;
 		if ( ModActive( class'CoopMechAugOptics' ) )
 			W.BaseAccuracy = FMax( 0, W.BaseAccuracy - class'CoopMechAug'.static.ValueOf( Self, class'CoopMechAugOptics', 0 ) );
@@ -655,20 +709,25 @@ function GiveBuiltIn( class<DeusExWeapon> C, int BeltSlot )
 
 defaultproperties
 {
-	Mesh=LodMesh'DeusExCharacters.GM_ScaryTroop'
+	Mesh=LodMesh'DeusExCharacters.GM_DressShirt_B'
+	DrawScale=1.06
 	Texture=Texture'DeusExItems.Skins.PinkMaskTex'
-	MechSkins(0)=Texture'DeusExCharacters.Skins.RepairBotTex1'
-	MechSkins(1)=Texture'DeusExCharacters.Skins.RepairBotTex1'
-	MechSkins(2)=Texture'DeusExCharacters.Skins.MilitaryBotTex1'
-	MechSkins(3)=Texture'DeusExCharacters.Skins.RepairBotTex1'
-	MultiSkins(0)=Texture'DeusExCharacters.Skins.RepairBotTex1'
-	MultiSkins(1)=Texture'DeusExCharacters.Skins.RepairBotTex1'
-	MultiSkins(2)=Texture'DeusExCharacters.Skins.MilitaryBotTex1'
-	MultiSkins(3)=Texture'DeusExCharacters.Skins.RepairBotTex1'
-	MultiSkins(4)=None
-	MultiSkins(5)=None
-	MultiSkins(6)=None
-	MultiSkins(7)=None
+	MechSkins(0)=Texture'DeusExCharacters.Skins.GuntherHermannTex1'
+	MechSkins(1)=Texture'DeusExCharacters.Skins.PantsTex9'
+	MechSkins(2)=Texture'DeusExCharacters.Skins.GuntherHermannTex0'
+	MechSkins(3)=Texture'DeusExCharacters.Skins.GuntherHermannTex0'
+	MechSkins(4)=Texture'DeusExItems.Skins.PinkMaskTex'
+	MechSkins(5)=Texture'DeusExItems.Skins.PinkMaskTex'
+	MechSkins(6)=Texture'DeusExItems.Skins.BlackMaskTex'
+	MechSkins(7)=Texture'DeusExItems.Skins.BlackMaskTex'
+	MultiSkins(0)=Texture'DeusExCharacters.Skins.GuntherHermannTex1'
+	MultiSkins(1)=Texture'DeusExCharacters.Skins.PantsTex9'
+	MultiSkins(2)=Texture'DeusExCharacters.Skins.GuntherHermannTex0'
+	MultiSkins(3)=Texture'DeusExCharacters.Skins.GuntherHermannTex0'
+	MultiSkins(4)=Texture'DeusExItems.Skins.PinkMaskTex'
+	MultiSkins(5)=Texture'DeusExItems.Skins.PinkMaskTex'
+	MultiSkins(6)=Texture'DeusExItems.Skins.BlackMaskTex'
+	MultiSkins(7)=Texture'DeusExItems.Skins.BlackMaskTex'
 	CarcassType=Class'DeusEx.MJ12CommandoCarcass'
 	StunMult=0.5
 	PushMult=0.4
@@ -676,7 +735,7 @@ defaultproperties
 	JumpZ=270
 	Mass=270
 	Buoyancy=279
-	MechRaise=2.4
+	MechRaise=2.96
 	Modules(0)=Class'CoopMechAugBlades'
 	Modules(1)=Class'CoopMechAugCannon'
 	Modules(2)=Class'CoopMechAugBurst'

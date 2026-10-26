@@ -58,7 +58,7 @@
 typedef uint64_t u64;
 
 /* Lobbies only match this exact value: bump it when packages or the relay protocol change. */
-#define REVCOOP_PROTOCOL "4"
+#define REVCOOP_PROTOCOL "5"
 
 /* ---------------------------------------------------------------- steam flat api */
 
@@ -483,6 +483,9 @@ static int g_agent = 0;  /* the player's own class: 0 JC's kind (nano), 1 the Me
 static const char *agent_names[] = { "Nano-augmented agent (JC's kind)", "Mech: mechanical augmentation (heavy)" };
 static const char *death_names[] = { "Downed: a teammate revives you with a medkit", "The team reloads the last save at once" };
 static const char *save_names[] = { "Quick saves and autosaves", "Autosaves only (harder)" };
+/* CoopGameInfo.RifleRework: 0 here = on (the rifle as a 7.62 battle rifle with select fire, for everyone). */
+static int g_rifle = 0;
+static const char *rifle_names[] = { "7.62 battle rifle, select fire", "The mode's own" };
 
 static void load_settings(void)
 {
@@ -496,6 +499,7 @@ static void load_settings(void)
         else if (!strncmp(line, "Death=", 6)) g_death = atoi(line + 6) & 1;
         else if (!strncmp(line, "Saves=", 6)) g_saves = atoi(line + 6) & 1;
         else if (!strncmp(line, "Agent=", 6)) g_agent = atoi(line + 6) & 1;
+        else if (!strncmp(line, "Rifle=", 6)) g_rifle = atoi(line + 6) & 1;
     }
     fclose(f);
 }
@@ -505,7 +509,7 @@ static void save_settings(void)
     char p[MAX_PATH];
     snprintf(p, sizeof(p), "%s\\Modes\\settings.txt", g_game_dir);
     FILE *f = fopen(p, "w");
-    if (f) { fprintf(f, "Difficulty=%d\nFriendlyFire=%d\nDeath=%d\nSaves=%d\nAgent=%d\n", g_difficulty, g_friendly_fire, g_death, g_saves, g_agent); fclose(f); }
+    if (f) { fprintf(f, "Difficulty=%d\nFriendlyFire=%d\nDeath=%d\nSaves=%d\nAgent=%d\nRifle=%d\n", g_difficulty, g_friendly_fire, g_death, g_saves, g_agent, g_rifle); fclose(f); }
 }
 
 /* Sets Key=Value in [Section] of an ini in the co-op folder (the line is replaced, or added
@@ -550,6 +554,7 @@ static void apply_settings(void)
     set_ini_key("RevNet.ini", "RevNet.CoopGameInfo", "DeathRule", n);
     snprintf(n, sizeof(n), "%d", g_saves);
     set_ini_key("RevNet.ini", "RevNet.CoopGameInfo", "SaveRule", n);
+    set_ini_key("RevNet.ini", "RevNet.CoopGameInfo", "RifleRework", g_rifle ? "0" : "1");
 }
 
 /* "?Name=<Steam name>" for the game URL. Co-op saves give returning players their gear by
@@ -1109,7 +1114,7 @@ static DWORD WINAPI worker(void *unused)
 /* ---------------------------------------------------------------- window */
 
 enum { ID_ICON = 100, ID_TITLE, ID_WHO, ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES, ID_HOST, ID_CONTINUE,
-       ID_SAVED, ID_FRIENDS, ID_LOBBY, ID_JOIN, ID_STATUS, ID_LOG, ID_AGENT };
+       ID_SAVED, ID_FRIENDS, ID_LOBBY, ID_JOIN, ID_STATUS, ID_LOG, ID_AGENT, ID_RIFLE };
 static HFONT g_font, g_bold, g_big;
 static HICON g_icon, g_icon_small;
 static double g_scale = 1;
@@ -1168,7 +1173,7 @@ static void update_enabled(void)
 {
     char saved[128], line[200];
     bool idle = !g_in_session, has = read_saved_map(saved, sizeof(saved));
-    const int settings[] = { ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES, ID_AGENT };
+    const int settings[] = { ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES, ID_AGENT, ID_RIFLE };
     for (int i = 0; i < 6; i++) EnableWindow(GetDlgItem(g_wnd, settings[i]), idle);
     EnableWindow(GetDlgItem(g_wnd, ID_HOST), idle && g_steam_ready);
     EnableWindow(GetDlgItem(g_wnd, ID_CONTINUE), idle && g_steam_ready && has);
@@ -1243,24 +1248,25 @@ static void create_controls(void)
 
     combo(68, "You play as", ID_AGENT, agent_names, 2, g_agent);
 
-    ctl(0, WC_BUTTONW, "Your game: everyone who joins plays with these", BS_GROUPBOX, 12, 102, 436, 236, 0, g_font);
+    ctl(0, WC_BUTTONW, "Your game: everyone who joins plays with these", BS_GROUPBOX, 12, 102, 436, 266, 0, g_font);
     combo(128, "Mode", ID_MODE, titles, g_modes, cur);
     combo(158, "Difficulty", ID_DIFF, difficulty_names, 4, g_difficulty);
     combo(188, "Friendly fire", ID_FF, ff_names, 3, g_friendly_fire);
     combo(218, "If a player dies", ID_DEATH, death_names, 2, g_death);
     combo(248, "Saves", ID_SAVES, save_names, 2, g_saves);
-    ctl(0, WC_BUTTONW, "Host a new game", BS_PUSHBUTTON | WS_TABSTOP, 26, 284, 200, 30, ID_HOST, g_font);
-    ctl(0, WC_BUTTONW, "Continue saved game", BS_PUSHBUTTON | WS_TABSTOP, 234, 284, 200, 30, ID_CONTINUE, g_font);
-    ctl(0, WC_STATICW, "", 0, 26, 318, 408, 16, ID_SAVED, g_font);
+    combo(278, "Assault rifle", ID_RIFLE, rifle_names, 2, g_rifle);
+    ctl(0, WC_BUTTONW, "Host a new game", BS_PUSHBUTTON | WS_TABSTOP, 26, 314, 200, 30, ID_HOST, g_font);
+    ctl(0, WC_BUTTONW, "Continue saved game", BS_PUSHBUTTON | WS_TABSTOP, 234, 314, 200, 30, ID_CONTINUE, g_font);
+    ctl(0, WC_STATICW, "", 0, 26, 348, 408, 16, ID_SAVED, g_font);
 
-    ctl(0, WC_BUTTONW, "Join a friend", BS_GROUPBOX, 12, 348, 436, 150, 0, g_font);
-    ctl(WS_EX_CLIENTEDGE, WC_LISTBOXW, "", LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP, 26, 372, 408, 72, ID_FRIENDS, g_font);
-    ctl(0, WC_STATICW, "Lobby id", 0, 26, 457, 60, 18, 0, g_font);
-    ctl(WS_EX_CLIENTEDGE, WC_EDITW, "", ES_AUTOHSCROLL | ES_NUMBER | WS_TABSTOP, 90, 454, 170, 24, ID_LOBBY, g_font);
-    ctl(0, WC_BUTTONW, "Join", BS_PUSHBUTTON | WS_TABSTOP, 334, 452, 100, 30, ID_JOIN, g_font);
+    ctl(0, WC_BUTTONW, "Join a friend", BS_GROUPBOX, 12, 378, 436, 150, 0, g_font);
+    ctl(WS_EX_CLIENTEDGE, WC_LISTBOXW, "", LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_TABSTOP, 26, 402, 408, 72, ID_FRIENDS, g_font);
+    ctl(0, WC_STATICW, "Lobby id", 0, 26, 487, 60, 18, 0, g_font);
+    ctl(WS_EX_CLIENTEDGE, WC_EDITW, "", ES_AUTOHSCROLL | ES_NUMBER | WS_TABSTOP, 90, 484, 170, 24, ID_LOBBY, g_font);
+    ctl(0, WC_BUTTONW, "Join", BS_PUSHBUTTON | WS_TABSTOP, 334, 482, 100, 30, ID_JOIN, g_font);
 
-    ctl(0, WC_STATICW, "Starting...", 0, 14, 508, 432, 34, ID_STATUS, g_bold);
-    ctl(WS_EX_CLIENTEDGE, WC_EDITW, "", ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL, 12, 546, 436, 96, ID_LOG, g_font);
+    ctl(0, WC_STATICW, "Starting...", 0, 14, 538, 432, 34, ID_STATUS, g_bold);
+    ctl(WS_EX_CLIENTEDGE, WC_EDITW, "", ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL, 12, 576, 436, 96, ID_LOG, g_font);
     SendDlgItemMessageW(g_wnd, ID_LOG, EM_SETLIMITTEXT, 0, 0);
     update_enabled();
 }
@@ -1290,11 +1296,12 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         } else if (id == ID_AGENT && code == CBN_SELCHANGE) {
             g_agent = cursel(ID_AGENT) & 1;
             save_settings();
-        } else if ((id == ID_DIFF || id == ID_FF || id == ID_DEATH || id == ID_SAVES) && code == CBN_SELCHANGE) {
+        } else if ((id == ID_DIFF || id == ID_FF || id == ID_DEATH || id == ID_SAVES || id == ID_RIFLE) && code == CBN_SELCHANGE) {
             g_difficulty = cursel(ID_DIFF) & 3;
             g_friendly_fire = cursel(ID_FF) % 3;
             g_death = cursel(ID_DEATH) & 1;
             g_saves = cursel(ID_SAVES) & 1;
+            g_rifle = cursel(ID_RIFLE) & 1;
             save_settings();
         } else if (id == ID_HOST && code == BN_CLICKED) start(CMD_HOST);
         else if (id == ID_CONTINUE && code == BN_CLICKED) start(CMD_CONTINUE);
@@ -1384,7 +1391,7 @@ static int run_window(void)
     RegisterClassExW(&wc);
 
     DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-    RECT r = { 0, 0, (LONG)(460 * g_scale), (LONG)(654 * g_scale) };
+    RECT r = { 0, 0, (LONG)(460 * g_scale), (LONG)(684 * g_scale) };
     AdjustWindowRect(&r, style, FALSE);
     int w = r.right - r.left, h = r.bottom - r.top;
     CreateWindowExW(0, L"RevCoopWindow", L"Deus Ex: Revision Co-op", style,
