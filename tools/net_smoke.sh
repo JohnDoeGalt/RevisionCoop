@@ -12,6 +12,8 @@ rm -f "$log"
 sed -i -e "s/^DefaultServerGame=.*/DefaultServerGame=$game\r/" -e "s/^Port=.*/Port=${PORT:-7830}\r/" RevNet.ini
 grep -q '^\[RevNet.CoopGameInfo\]' RevNet.ini || printf '\r\n[RevNet.CoopGameInfo]\r\nStartMap=\r\n' >> RevNet.ini
 sed -i "s/^StartMap=.*/StartMap=$map\r/" RevNet.ini
-timeout "$secs" ./HCC.exe server -log="$log" >/dev/null 2>&1
+# MULTIHOME: the server listens on loopback only (a test needs nothing else, and Windows Firewall
+# asks about any program listening on the network: that prompt once blocked another game).
+timeout "$secs" ./HCC.exe server -log="$log" MULTIHOME=127.0.0.1 >/dev/null 2>&1
 echo "exit=$? lines=$(wc -l < "$log") $(grep -m1 'Browse:' "$log")"
 grep -E "^(Critical|Error|Warning|ScriptWarning|ScriptLog)|Accessed None|Failed" "$log" | sed -E 's/\(Function [^)]*\)//' | sort | uniq -c | sort -rn | head -${LINES_MAX:-30}
