@@ -1,6 +1,7 @@
 # Helpers so live tests don't disturb whoever uses the PC (dot-source it):
 #   Test-FullscreenForeground  - is another program fullscreen in the foreground (a game)?
 #   Start-NoActivate <exe> <args> <dir> [-Visible]  - start a process minimized (or shown) without taking focus
+#   [Desk]::WindowTitles(<pid>)  - its top-level windows' titles
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -30,6 +31,20 @@ public static class Desk {
 		if (h == IntPtr.Zero || !GetWindowRect(h, out r)) return 0;
 		if (r.L > 0 || r.T > 0 || r.R < GetSystemMetrics(0) || r.B < GetSystemMetrics(1)) return 0;
 		int pid; GetWindowThreadProcessId(h, out pid); return pid;
+	}
+
+	// The titles of a process's top-level windows (a listen server's status window names its map).
+	public delegate bool EnumProc(IntPtr h, IntPtr l);
+	[DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
+	[DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h, System.Text.StringBuilder s, int n);
+	public static string[] WindowTitles(int pid) {
+		var titles = new System.Collections.Generic.List<string>();
+		EnumWindows((h, l) => {
+			int p; GetWindowThreadProcessId(h, out p);
+			if (p == pid) { var s = new System.Text.StringBuilder(256); GetWindowText(h, s, 256); if (s.Length > 0) titles.Add(s.ToString()); }
+			return true;
+		}, IntPtr.Zero);
+		return titles.ToArray();
 	}
 
 	// STARTF_USESHOWWINDOW + SW_SHOWMINNOACTIVE (7) or SW_SHOWNOACTIVATE (4).

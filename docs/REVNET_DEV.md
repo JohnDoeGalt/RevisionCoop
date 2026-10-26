@@ -233,6 +233,8 @@ basic, Talk, Save under all five):
 | `NETNAME=CoopNetA sh tools/setup_net.sh [mode]` | dev folder `<Revision>\CoopNetA` (default `CoopNet`) |
 | `NETNAME=CoopNetA sh tools/build_net.sh` | build `RevNet.u` into it (one build at a time, lock) |
 | `tools/run_net_live.ps1 -NetName CoopNetA -Port 7791 -Seconds 120 -Extra "?CoopTest=Talk"` | host + client on this PC, minimized and muted; prints the logs' `RevNet` lines and the most frequent warnings |
+| `tools/run_net_suite.ps1 [-Only Save,Rifle]` | every scenario with its own options (not `Crawl` or the screenshot ones): one PASS/FAIL line each (ran to `done`, no Critical, clients joined); logs in `build/suite` (30 pass on 0.5.0) |
+| `tools/run_launcher_test.ps1 [-Rifle 0\|1]` | the installed launcher through its window: pick the rifle setting, Host, check settings.txt, RevNet.ini and the game's log; puts the player's files back |
 
 Each parallel worker uses its own dev folder **and** port (10 apart). A scenario `?CoopTest=Talk`
 loads class `CoopTestTalk` (extends `CoopTest`, override `Run(int t)`: seconds since the

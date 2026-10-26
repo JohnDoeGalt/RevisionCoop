@@ -65,12 +65,11 @@ $procs += Start-NoActivate $exe "INI=NetHost.ini USERINI=NetHostUser.ini -log=$h
 # The games are muted from a process of their own (its audio COM calls, repeated on this thread,
 # once hung the run): it re-mutes every 5 s and ends when no Revision is left.
 Start-Process powershell -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$mute`" -Name Revision -WatchSeconds $($Seconds + 900)"
-# Clients join once the host listens on the map (its log is locked while running: poll it shared).
-function Read-Shared($path) {
-	try { $fs = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite'); $sr = New-Object IO.StreamReader($fs); $t = $sr.ReadToEnd(); $sr.Close(); return $t } catch { return "" }
-}
+# Clients join once the host listens on the map: its status window is titled "<level>: <map>
+# (n players)" by then. (Its log can't be read while it runs: the game shares it with no one.)
+$hostId = $procs[-1].Id
 $ready = (Get-Date).AddSeconds(180)
-while ((Get-Date) -lt $ready -and (Read-Shared (Join-Path $net $hostLog)) -notmatch "Browse: ${Map}") { Start-Sleep -Seconds 3 }
+while ((Get-Date) -lt $ready -and -not ([Desk]::WindowTitles($hostId) -match ": ${Map} \(")) { Start-Sleep -Seconds 2 }
 Start-Sleep -Seconds 15
 for ($i = 1; $i -le $Clients; $i++) {
 	Write-TestIni "NetClient$i.ini"

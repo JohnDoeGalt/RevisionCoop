@@ -12,6 +12,7 @@
 class CoopRules extends Object;
 
 var name TempName;
+var float StockRecoil;  // the mode's own rifle recoil, kept from the first map (RifleValues)
 
 // A string as a name (script has no conversion; a name property imports one).
 static function name NameOf( string S )
@@ -79,7 +80,11 @@ static function RifleValues( Actor Ctx, out int Damage, out float ShotTime, out 
 	Pistol = int( Ctx.ConsoleCommand( "get WeaponPistol HitDamage" ) );
 	Damage = Max( int( Ctx.ConsoleCommand( "get WeaponAssaultGun HitDamage" ) ), Pistol + (Pistol + 3) / 4 );
 	ShotTime = FMax( float( Ctx.ConsoleCommand( "get WeaponAssaultGun ShotTime" ) ), 0.15 );
-	Recoil = float( Ctx.ConsoleCommand( "get WeaponAssaultGun recoilStrength" ) ) * 1.5;
+	// Class defaults outlive a map, and this runs on every map: from the rifle's own recoil,
+	// not from last map's (which grew half again on each map: 0.75, 1.125, ... measured).
+	if ( default.StockRecoil==0 )
+		default.StockRecoil = float( Ctx.ConsoleCommand( "get WeaponAssaultGun recoilStrength" ) );
+	Recoil = default.StockRecoil * 1.5;
 }
 
 // The rifle's class values, on the host and on each client (its copies predict with them,
