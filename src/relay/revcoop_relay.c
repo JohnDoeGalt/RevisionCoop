@@ -39,6 +39,8 @@
  *          --game-args <extra Revision.exe arguments>  --no-launch (relay only)  --mode <name>
  *          --apply-mode <name> (write the mode and settings into RevNet.ini and exit; IP launchers)
  *          --open <url> (with --apply-mode: also set the URL the game opens)
+ * Test build: build.bat fake -> RevCoopFake.exe, Steam faked between two relays on one PC
+ * (REVCOOP_FAKE_STEAM, see steam_start; tools/run_relay_test.ps1).
  */
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
@@ -196,6 +198,9 @@ static FARPROC need(HMODULE m, const char *name)
 #define LOAD(field, name) *(FARPROC *)&S.field = need(m, name)
 #define LOAD_OPT(field, name) *(FARPROC *)&S.field = GetProcAddress(m, name)
 
+static SOCKET udp_socket(int port);
+
+#ifndef REVCOOP_FAKE_STEAM
 static void steam_start(void)
 {
     FILE *f = fopen("steam_appid.txt", "r");
@@ -269,6 +274,136 @@ static void steam_start(void)
     g_me = S.GetSteamID(g_user);
     if (S.InitRelay) S.InitRelay(g_utils);
 }
+#else
+/* A test build (build.bat fake -> RevCoopFake.exe, never shipped): Steam played by two relays
+   on one PC, so host and join run end to end with one Steam account (tools/run_relay_test.ps1).
+   REVCOOP_FAKE_ME=1001 is the host, 1002 the joiner; a message to a user is a UDP datagram to
+   127.0.0.1:(46100 + its id % 1000), the lobby (id 5001, owner 1001) and its data a file in
+   %TEMP%. Everything above S (lobby checks, mode follow, the relay itself) is the real code. */
+static SOCKET f_sock;
+static u64 f_me;
+static struct { CallbackMsg m; unsigned char param[512]; } f_cbs[16];
+static int f_ncb;
+static unsigned char *f_queue[2][256];
+static int f_nq[2];
+
+static void f_callback(int id, const void *param, int size)
+{
+    if (f_ncb == 16) return;
+    memset(&f_cbs[f_ncb], 0, sizeof(f_cbs[0]));
+    f_cbs[f_ncb].m.callback = id; f_cbs[f_ncb].m.param_size = size;
+    memcpy(f_cbs[f_ncb].param, param, size);
+    f_ncb++;
+}
+static void f_lobby_file(char *out) { char t[MAX_PATH]; GetTempPathA(MAX_PATH, t); snprintf(out, MAX_PATH, "%srevcoop_fake_lobby.txt", t); }
+static bool __cdecl f_true0(void) { return true; }
+static int __cdecl f_init(char *err) { (void)err; return 0; }
+static void __cdecl f_void0(void) {}
+static int32_t __cdecl f_pipe(void) { return 1; }
+static void __cdecl f_run(int32_t p) { (void)p; }
+static bool __cdecl f_next(int32_t p, CallbackMsg *m) { (void)p; if (!f_ncb) return false; *m = f_cbs[0].m; m->param = f_cbs[0].param; return true; }
+static void __cdecl f_free(int32_t p) { (void)p; if (f_ncb) { memmove(f_cbs, f_cbs + 1, sizeof(f_cbs[0]) * (f_ncb - 1)); f_ncb--; } }
+static bool __cdecl f_result(int32_t p, u64 c, void *b, int s, int cb, bool *failed) { (void)p; (void)c; (void)b; (void)s; (void)cb; *failed = true; return false; }
+static void *__cdecl f_iface(void) { return (void *)1; }
+static u64 __cdecl f_steamid(void *u) { (void)u; return f_me; }
+static u64 __cdecl f_create_lobby(void *mm, int type, int max)
+{
+    char p[MAX_PATH]; FILE *f; LobbyCreated c = { 1, 5001 };
+    (void)mm; (void)type; (void)max;
+    f_lobby_file(p); if ((f = fopen(p, "w"))) fclose(f);
+    f_callback(CB_LOBBY_CREATED, &c, sizeof(c));
+    return 1;
+}
+static u64 __cdecl f_join_lobby(void *mm, u64 lobby) { LobbyEnter e; (void)mm; memset(&e, 0, sizeof(e)); e.lobby = lobby; e.response = 1; f_callback(CB_LOBBY_ENTER, &e, sizeof(e)); return 1; }
+static void __cdecl f_leave_lobby(void *mm, u64 lobby) { (void)mm; (void)lobby; }
+static bool __cdecl f_set_data(void *mm, u64 lobby, const char *k, const char *v)
+{
+    char p[MAX_PATH]; FILE *f; (void)mm; (void)lobby;
+    f_lobby_file(p); if ((f = fopen(p, "a"))) { fprintf(f, "%s=%s\n", k, v); fclose(f); }
+    return true;
+}
+static const char *__cdecl f_get_data(void *mm, u64 lobby, const char *k)
+{
+    static char v[256]; char p[MAX_PATH], line[512]; FILE *f; size_t n = strlen(k); (void)mm; (void)lobby;
+    v[0] = 0; f_lobby_file(p);
+    if ((f = fopen(p, "r"))) {
+        while (fgets(line, sizeof(line), f))
+            if (!strncmp(line, k, n) && line[n] == '=') { snprintf(v, sizeof(v), "%s", line + n + 1); v[strcspn(v, "\r\n")] = 0; }
+        fclose(f);
+    }
+    return v;
+}
+static u64 __cdecl f_owner(void *mm, u64 lobby) { (void)mm; (void)lobby; return 1001; }
+static int __cdecl f_members(void *mm, u64 lobby) { (void)mm; (void)lobby; return 2; }
+static u64 __cdecl f_member(void *mm, u64 lobby, int i) { (void)mm; (void)lobby; return 1001 + i; }
+static bool __cdecl f_presence(void *fr, const char *k, const char *v) { (void)fr; (void)k; (void)v; return true; }
+static void __cdecl f_invite(void *fr, u64 l) { (void)fr; (void)l; }
+static int __cdecl f_friend_count(void *fr, int flags) { (void)fr; (void)flags; return 0; }
+static u64 __cdecl f_friend(void *fr, int i, int flags) { (void)fr; (void)i; (void)flags; return 0; }
+static bool __cdecl f_played(void *fr, u64 f, FriendGameInfo *gi) { (void)fr; (void)f; (void)gi; return false; }
+static const char *__cdecl f_name_of(void *fr, u64 sid) { (void)fr; return sid == 1001 ? "FakeHost" : "FakeJoiner"; }
+static const char *__cdecl f_my_name(void *fr) { return f_name_of(fr, f_me); }
+static void __cdecl f_ident_set(void *buf, u64 sid) { memcpy(buf, &sid, sizeof(sid)); }
+static u64 __cdecl f_ident_get(const void *buf) { u64 sid; memcpy(&sid, buf, sizeof(sid)); return sid; }
+static int __cdecl f_send(void *m, const void *id, const void *data, uint32_t size, int flags, int channel)
+{
+    static unsigned char pkt[65536 + 16];
+    struct sockaddr_in a; u64 to = f_ident_get(id); (void)m; (void)flags;
+    if (size > 65536) return 0;
+    pkt[0] = (unsigned char)channel; memcpy(pkt + 1, &f_me, 8); memcpy(pkt + 9, data, size);
+    memset(&a, 0, sizeof(a)); a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    a.sin_port = htons((u_short)(46100 + to % 1000));
+    sendto(f_sock, (char *)pkt, (int)size + 9, 0, (struct sockaddr *)&a, sizeof(a));
+    return 1;
+}
+/* A received message as the relay reads one: data pointer at 0, size at 4, sender at 16. */
+static int __cdecl f_receive(void *m, int channel, void **out, int max)
+{
+    static unsigned char pkt[65536 + 16];
+    int got, n = 0; (void)m;
+    while ((got = recv(f_sock, (char *)pkt, sizeof(pkt), 0)) >= 9) {
+        int ch = pkt[0] & 1, size = got - 9;
+        unsigned char *msg;
+        if (f_nq[ch] == 256) continue;
+        msg = calloc(1, 32 + size);
+        *(unsigned char **)msg = msg + 32; *(int *)(msg + 4) = size;
+        memcpy(msg + 16, pkt + 1, 8); memcpy(msg + 32, pkt + 9, size);
+        f_queue[ch][f_nq[ch]++] = msg;
+    }
+    while (n < max && n < f_nq[channel]) { out[n] = f_queue[channel][n]; n++; }
+    memmove(f_queue[channel], f_queue[channel] + n, sizeof(f_queue[0][0]) * (f_nq[channel] - n));
+    f_nq[channel] -= n;
+    return n;
+}
+static bool __cdecl f_session(void *m, const void *id) { (void)m; (void)id; return true; }
+static void __cdecl f_release(void *msg) { free(msg); }
+static bool __cdecl f_config(void *u, int k, int32_t v) { (void)u; (void)k; (void)v; return true; }
+
+static void steam_start(void)
+{
+    const char *me = getenv("REVCOOP_FAKE_ME");
+    f_me = me ? strtoull(me, NULL, 10) : 1001;
+    f_sock = udp_socket((int)(46100 + f_me % 1000));
+    if (f_sock == INVALID_SOCKET) fail("Fake Steam: could not open its UDP port.");
+    *(void **)&S.IsSteamRunning = f_true0; *(void **)&S.InitFlat = f_init; *(void **)&S.Shutdown = f_void0;
+    *(void **)&S.GetHSteamPipe = f_pipe; *(void **)&S.DispatchInit = f_void0; *(void **)&S.RunFrame = f_run;
+    *(void **)&S.GetNextCallback = f_next; *(void **)&S.FreeLastCallback = f_free; *(void **)&S.GetAPICallResult = f_result;
+    *(void **)&S.User = f_iface; *(void **)&S.Matchmaking = f_iface; *(void **)&S.Friends = f_iface;
+    *(void **)&S.Messages = f_iface; *(void **)&S.Utils = f_iface; *(void **)&S.GetSteamID = f_steamid;
+    *(void **)&S.CreateLobby = f_create_lobby; *(void **)&S.JoinLobby = f_join_lobby; *(void **)&S.LeaveLobby = f_leave_lobby;
+    *(void **)&S.SetLobbyData = f_set_data; *(void **)&S.GetLobbyData = f_get_data; *(void **)&S.GetLobbyOwner = f_owner;
+    *(void **)&S.GetNumLobbyMembers = f_members; *(void **)&S.GetLobbyMemberByIndex = f_member;
+    *(void **)&S.SetRichPresence = f_presence; *(void **)&S.InviteDialog = f_invite;
+    *(void **)&S.GetFriendCount = f_friend_count; *(void **)&S.GetFriendByIndex = f_friend; *(void **)&S.GetFriendGamePlayed = f_played;
+    *(void **)&S.GetFriendPersonaName = f_name_of; *(void **)&S.GetPersonaName = f_my_name;
+    *(void **)&S.IdentSet = f_ident_set; *(void **)&S.IdentGet = f_ident_get;
+    *(void **)&S.SendMessageToUser = f_send; *(void **)&S.ReceiveMessages = f_receive;
+    *(void **)&S.AcceptSession = f_session; *(void **)&S.CloseSession = f_session;
+    *(void **)&S.MessageRelease = f_release; *(void **)&S.SetConfigInt = f_config;
+    g_pipe = 1; g_user = g_mm = g_friends = g_msgs = g_utils = (void *)1;
+    g_me = f_me;
+}
+#endif
 
 static void ident(void *buf, u64 sid) { memset(buf, 0, IDENT_SIZE); S.IdentSet(buf, sid); }
 

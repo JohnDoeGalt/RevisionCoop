@@ -4,4 +4,5 @@ build/
 *.log
 .claude/
 src/relay/RevCoop.exe
+src/relay/RevCoopFake.exe
 __pycache__/
