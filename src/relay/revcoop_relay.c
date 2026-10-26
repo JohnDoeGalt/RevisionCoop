@@ -581,6 +581,23 @@ static void set_auto_open(const char *url)
     set_ini_key("RevNetUser.ini", "RevNet.CoopLaunch", "Agent", g_agent ? "Mech" : "");
 }
 
+/* The game's environment: ours without SteamAppId/SteamGameId. Steam's API set them to this
+   relay's AppID (480), and the game, inheriting them, stopped at "Steam Error: Application load
+   error" (measured); it takes its own (397550) from its folder's steam_appid.txt. */
+static wchar_t *game_environment(void)
+{
+    wchar_t *env = GetEnvironmentStringsW(), *out, *o, *e;
+    size_t n = 2;
+    for (e = env; *e; e += wcslen(e) + 1) n += wcslen(e) + 1;
+    o = out = malloc(n * sizeof(wchar_t));
+    for (e = env; *e; e += wcslen(e) + 1)
+        if (_wcsnicmp(e, L"SteamAppId=", 11) && _wcsnicmp(e, L"SteamGameId=", 12)) { wcscpy(o, e); o += wcslen(e) + 1; }
+    *o = 0;
+    if (o == out) o[1] = 0;  /* an empty block still ends in two zeros */
+    FreeEnvironmentStringsW(env);
+    return out;
+}
+
 static void launch_game(const char *url)
 {
     if (g_no_launch) return;
@@ -590,9 +607,12 @@ static void launch_game(const char *url)
     /* The game's working folder is the co-op folder: its steam_appid.txt (397550) keeps
        Revision.exe from restarting itself through Steam without these arguments. */
     snprintf(cmd, sizeof(cmd), "\"%s\" INI=RevNet.ini USERINI=RevNetUser.ini %s", exe, g_game_args);
+    wchar_t *env = game_environment();
     STARTUPINFOA si; PROCESS_INFORMATION pi;
     memset(&si, 0, sizeof(si)); si.cb = sizeof(si);
-    if (!CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, g_game_dir, &si, &pi)) {
+    BOOL ok = CreateProcessA(exe, cmd, NULL, NULL, FALSE, CREATE_UNICODE_ENVIRONMENT, env, g_game_dir, &si, &pi);
+    free(env);
+    if (!ok) {
         char buf[MAX_PATH + 100];
         snprintf(buf, sizeof(buf), "Could not start %s (error %lu).", exe, GetLastError());
         fail(buf);

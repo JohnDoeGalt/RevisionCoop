@@ -609,7 +609,7 @@ Common harness additions that many rows need: (1) an RPC that makes Remote perfo
 | UI-25 | Subtitles and closed captions settings (MenuChoice_Subtitles, Human.bSubtitles, ConPlay subtitle windows, CoopConClient.Speech subtitle path) | CoopPlayerTalk.Subtitle (CoopPlayerTalk.uc:402), CoopConClient.Speech (CoopConClient.uc:83) | Subtitles use the client's setting; barks end on the host timer. | P2 | Talk | Toggle subtitles on Remote only: shown on Remote, not on Host. |
 | UI-26 | Keypad / code input UI (HUDKeypadWindow, RevHUDKeypadWindow) and the phone dialer | HUDKeypadWindow.uc:173/272 (GetPlayerPawn), CoopDevicePhone.uc | Keypad window reads the host for audio feedback. | P2 | Devices (keypad, phone) | see DEV-04. |
 | UI-27 | Credits/ending screens and RevCreditsWindow, CinematicWindow, letterboxing | CinematicWindow.uc, RevCreditsWindow.uc, MissionEndgame | Local windows started by script on the host; remote windows need ClientTest-type RPC. | P2 | none | see STY-21. |
-| UI-28 | Load-game / new-game / mode selection UI of the co-op launcher (Host, Join, Continue, Mode, Settings) | tools launcher scripts (CoopLaunch), dist/Install-RevCoop.ps1 | Not in the RevNet classes: manual test list with the launcher. | P2 | none | Manual: each launcher entry. |
+| UI-28 | Load-game / new-game / mode selection UI of the co-op launcher (Host, Join, Continue, Mode, Settings) | tools launcher scripts (CoopLaunch), dist/Install-RevCoop.ps1 | Not in the RevNet classes: manual test list with the launcher. | P2 | tools/run_launcher_test.ps1 (Host) | Host through the real window passes (PASS, co-op game starts). It found the game stopping at "Steam Error: Application load error V:0000065432": it inherited the relay's SteamAppId/SteamGameId 480; the relay now starts it without them. Join and Continue go through the same launch_game; joining needs a second Steam account. |
 
 ## 11. Multiplayer lifecycle, networking and administration
 
@@ -730,7 +730,7 @@ Common harness additions that many rows need: (1) an RPC that makes Remote perfo
 | RIFLE-03 | The client's copy: class values and its own rifle's | CoopPlayerCore.ClientRifleRework, ServerWeaponValues (SetClientAmmoParams) | The client's copy predicts shots with its own values. | P1 | Rifle | Client: damage 18, shot 0.15, full auto, then semi after the key. |
 | RIFLE-04 | Select fire on the ammo key: full auto, semi-automatic (one round a pull), 20mm, full auto | CoopPlayerCore.SwitchAmmo / ServerSelectFire / Fire | A weapon fires again while the fire button is down (Button bFire). | P1 | Rifle | Fire held 2 s: full auto 16 rounds, semi 1; 20mm then 7.62 full auto. |
 | RIFLE-05 | The Mech's arm cannon keeps step (level 1 = a rifle round) | CoopMechPlayer.RefreshModules | | P3 | none | Not measured live (cannon 18 / 22 / 25 / 32 by the formula). |
-| RIFLE-06 | The launcher's "Assault rifle" setting | revcoop_relay.c apply_settings (RifleRework) | Host only: clients get the values from the host. | P2 | none | Not run yet. |
+| RIFLE-06 | The launcher's "Assault rifle" setting | revcoop_relay.c apply_settings (RifleRework) | Host only: clients get the values from the host. | P2 | tools/run_launcher_test.ps1 -Rifle 0/1 | Through the launcher's window: "The mode's own" -> settings.txt Rifle=1, RevNet.ini RifleRework=0, the host's co-op game without the rework; "7.62 battle rifle" -> RifleRework=1, rifle 4 -> 18, 0.1 -> 0.15 s, recoil 0.5 -> 0.75. PASS both. |
 
 ## Appendix A. Class inventory: every class of the families named in the task and the row that tests it
 
