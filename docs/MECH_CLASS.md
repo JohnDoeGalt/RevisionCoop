@@ -42,12 +42,14 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
 
 - **Look (phase 3: the user's own character sheet, `art/mech/concept_nanosuit.png`,
   "Replicant / Nanosuit: Blade Runner x Crysis"):** a big augmented soldier with a grey-blond
-  flat-top, an ocular implant and circuit lines at the temple, in a black segmented nanosuit:
-  plates running along the body with finer segments in them, layered armour on the shoulders,
-  an armoured collar up to the jaw, blue light strips down the arms, thighs and shins, and a
-  glowing spine interface (a light line under a ring between the shoulder blades). Over it a
-  tactical vest (chest panels, a row of mag pouches across the belly, MOLLE rows, a channel
-  for the spine), a belt with pouches, knee pads, combat boots, plated gloves. His hands show;
+  flat-top, an ocular implant and circuit lines at the temple, in a blue-black segmented hex
+  nanosuit (some plates gunmetal, panel seams round the limbs), gunmetal armour bands over the
+  shoulders, an armoured collar up to the jaw, blue light strips down the arms, thighs and
+  shins, and a glowing spine interface (a light line under a ring between the shoulder blades).
+  Over it an olive-black tactical vest (chest panels with a pocket flap and a velcro patch, a
+  row of mag pouches with steel snaps across the belly, MOLLE rows, a channel for the spine), a
+  black belt with a steel buckle and pouches, gunmetal knee pads on the knees, combat boots,
+  plated gloves. His hands show;
   the arm cannon comes out over the right hand only while he holds it; blades come out past
   both fists only while he holds them.
 - **Body:** Gunther Hermann's mesh (`DeusExCharacters.GM_DressShirt_B`, the game's big man) in
@@ -58,11 +60,13 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   own, isn't in the package map, so the host's `MultiSkins` can't reach clients.
 - **Textures (original art):** baked in code from where each texel lies on the body (its 3D
   point and smooth normal in the standing frame, folded into the right half: the skins share
-  texels between the sides): the suit's plating is procedural (3D Voronoi plates stretched
-  along the body, each pillowed so it catches the key light across its face, finer segments
-  in them, a gloss highlight); the vest is generated cordura (`art/mech/materials`) with
-  MOLLE rows and binding; ambient occlusion from the body and the parts; blue lights unshaded
-  (`tools/mech_bake.py`). The face and head are the user's sheet (its head front and right
+  texels between the sides): the suit's plating is procedural: hexagonal plates laid round each
+  limb and the torso by the distance along its centre line and the angle round it (measured
+  centre lines: `ARMS`, `LEGS`, `TORSO`), each pillowed from its middle, panel seams round the
+  limb, gunmetal accents, a gloss highlight; the shoulder armour painted on as gunmetal bands
+  (3D shells stuck out); the vest generated cordura (`art/mech/materials`) in olive-black with
+  MOLLE rows and binding; ambient occlusion from the body and the parts; a soft half-Lambert
+  key light (the game lights the model again); blue lights unshaded (`tools/mech_bake.py`). The face and head are the user's sheet (its head front and right
   profile) projected onto the head by each texel's 3D point, eyes, mouth, nose, ear and chin on
   the head's; the collar and the gloves as the suit (`tools/mech_face.py`). The parts have a
   cell per face in a 1024x1024 atlas, their plates in the same procedural plating

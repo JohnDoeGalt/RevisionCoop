@@ -140,7 +140,7 @@ def line(d, width):
 
 
 LIGHT = np.array([150.0, 205.0, 255.0])   # the suit's blue lights
-KEY = np.array([0.35, -0.55, 0.75]) / np.linalg.norm([0.35, -0.55, 0.75])
+KEY = np.array([0.25, -0.35, 0.9]) / np.linalg.norm([0.25, -0.35, 0.9])
 HALF = np.array([0.35, -1.55, 0.9]) / np.linalg.norm([0.35, -1.55, 0.9])   # key and a front view
 
 
@@ -199,46 +199,91 @@ def tilt(n, d, e, width, amount):
 
 
 def lit(col, n, ao, gloss=110.0, power=30):
-    """Colour under the key light, with baked occlusion and a gloss highlight."""
-    lam = np.clip(n @ KEY, 0, 1)
-    occ = 0.4 + 0.6 * np.clip(ao, 0, 1) ** 1.3
+    """Colour under a soft key light (half-Lambert: what faces away stays readable; the game lights
+    the model again), with baked occlusion and a gloss highlight."""
+    lam = (np.clip(n @ KEY, -1, 1) * 0.5 + 0.5) ** 2
+    occ = 0.5 + 0.5 * np.clip(ao, 0, 1) ** 1.3
     spec = np.clip(n @ HALF, 0, 1) ** power * gloss
-    return (col * (0.5 + 0.7 * lam)[:, None] + spec[:, None] * np.array([0.85, 0.92, 1.0])) * occ[:, None]
+    return (col * (0.55 + 0.6 * lam)[:, None] + spec[:, None] * np.array([0.85, 0.92, 1.0])) * occ[:, None]
 
 
-def nanosuit(pos, nrm, ao, base=44.0, big=3.2, fine=0.8):
+COOL = np.array([0.88, 0.95, 1.08])        # the suit's blue-black
+GUNMETAL = np.array([0.86, 0.95, 1.12])    # its accent plates and the armour pieces
+OLIVE = np.array([1.0, 1.0, 0.84])         # the vest's warm olive-black
+
+
+def nanosuit(pos, nrm, ao, base=44.0, big=3.2, fine=0.8, tint=COOL):
     """Per point (n, 3), body space: the suit's black plating, lit: large plates running along the
-    body, each pillowed (it catches the key light across its face), finer segments in them, gloss."""
+    body, each pillowed (it catches the key light across its face), a few gunmetal, finer segments
+    in them, gloss."""
     q, n = mirrored(pos, nrm)
     s1, s2 = np.array([1.0, 1.0, 2.2]), np.array([1.0, 1.0, 1.25])
     e1, d1, v1 = plates(q / s1, big, 5)
     e2, d2, v2 = plates(q / s2, fine, 9)
     n = tilt(n, d1 / s1, e1, 0.9, 0.8)
     n = tilt(n, d2 / s2, e2, 0.1, 0.35)
-    col = (base + 16 * (v1 - 0.5) + 6 * (v2 - 0.5))[:, None] * np.array([0.9, 0.95, 1.06])
+    accent = v1 > 0.84
+    tone = (base + 16 * (v1 - 0.5) + 6 * (v2 - 0.5)) * np.where(accent, 1.35, 1.0)
+    col = tone[:, None] * np.where(accent[:, None], GUNMETAL, tint)
     col = col * (1 - 0.8 * line(e1, 0.07) - 0.3 * line(e2, 0.04))[:, None]
     return lit(col, n, ao)
 
 
+def hex_edge(u, v, size):
+    """Distance (in cells, 0 to 0.5) to the nearest edge of a hexagon grid in the plane (u, v)."""
+    p = np.stack([u, v], -1) / size
+    r = np.array([1.0, 1.7320508])
+    a = np.mod(p, r) - r / 2
+    b = np.mod(p - r / 2, r) - r / 2
+    g = np.abs(np.where(((a * a).sum(-1) < (b * b).sum(-1))[:, None], a, b))
+    return 0.5 - np.maximum(g @ np.array([0.5, 0.8660254]), g[:, 0])
+
+
+def limb_plating(pos, nrm, ao, frame, base=42.0, size=0.95, panel=4.6, tint=COOL):
+    """The suit on an arm or a leg (the sheet's segmented hex suit): hexagonal plates round it, each
+    pillowed from its middle, a few gunmetal, in panels split by seams round the limb, gloss; in
+    the folded (right) half. Where the hexes meet round the inside of the limb they may not line
+    up (out of sight)."""
+    along, ang, radius, a_hat, r_hat = frame
+    _, n = mirrored(pos, nrm)
+    t_hat = unit(np.cross(r_hat, a_hat))                     # round the limb, toward the back
+    around = ang * np.maximum(radius, 1.0)
+    p = np.stack([around, along], -1) / size
+    r = np.array([1.0, 1.7320508])
+    a = np.mod(p, r) - r / 2
+    b = np.mod(p - r / 2, r) - r / 2
+    g = np.where(((a * a).sum(-1) < (b * b).sum(-1))[:, None], a, b)      # from its hex's middle (cells)
+    e = (0.5 - np.maximum(np.abs(g) @ np.array([0.5, 0.8660254]), np.abs(g[:, 0]))) * size
+    n = unit(n + unit(g[:, 0:1] * t_hat + g[:, 1:2] * a_hat) * (np.clip(1 - e / (0.42 * size), 0, 1) ** 1.5 * 0.9)[:, None])
+    pd = np.mod(along - panel / 2, panel)                    # the panel seams (off the line's ends), bevelled
+    n = unit(n + a_hat * (np.where(pd > panel / 2, 1.0, -1.0) * np.clip(1 - np.minimum(pd, panel - pd) / 0.5, 0, 1) * 0.8)[:, None])
+    v = _rand(np.floor((p - g) * 2 + 0.5).astype(np.int64)[:, [0, 1, 1]] * np.array([1, 1, 0]), 21)
+    accent = v[:, 1] < 0.14
+    tone = base * (0.84 + 0.32 * v[:, 0]) * np.where(accent, 1.45, 1.0)
+    col = tone[:, None] * np.where(accent[:, None], GUNMETAL, tint)
+    col = col * np.maximum(1 - 0.7 * line(e, 0.06) - 0.75 * line(np.minimum(pd, panel - pd), 0.09), 0.1)[:, None]
+    return lit(col, n, ao)
+
+
 def collar(pos, nrm, ao):
-    """The armoured turtleneck: black ribs around the neck, each bevelled on top."""
+    """The armoured turtleneck: black ribs round the neck, each bevelled on top."""
     q, n = mirrored(pos, nrm)
     r = np.mod(q[:, 2] * 1.5, 1)                                   # 0 at a rib's bottom
     n = unit(n + np.array([0, 0, 1.0]) * np.clip((r - 0.7) / 0.3, 0, 1)[:, None] * 0.9
              - np.array([0, 0, 1.0]) * np.clip((0.25 - r) / 0.25, 0, 1)[:, None] * 0.6)
-    col = np.full((len(q), 3), 40.0) * np.array([0.9, 0.95, 1.06])
+    col = np.full((len(q), 3), 40.0) * COOL
     col = col * (1 - 0.7 * (line(r, 0.08) + line(r - 1, 0.08)))[:, None]
     return lit(col, n, ao, gloss=90)
 
 
-def cordura(mats, pos, nrm, ao, value=64.0):
-    """The vest's matte grey-black nylon."""
+def cordura(mats, pos, nrm, ao, value=50.0, tint=OLIVE):
+    """Matte nylon: the vest's olive-black (the belt's black)."""
     q, n = mirrored(pos, nrm)
     t = triplanar(mats["webbing"], q, n, 16).mean(-1)
-    col = (t / 43.0 * value)[:, None] * np.array([0.95, 0.98, 1.04])
-    lam = np.clip(n @ KEY, 0, 1)
-    occ = 0.4 + 0.6 * np.clip(ao, 0, 1) ** 1.3
-    return col * ((0.55 + 0.6 * lam) * occ)[:, None]
+    col = (t / 43.0 * value)[:, None] * tint
+    lam = (np.clip(n @ KEY, -1, 1) * 0.5 + 0.5) ** 2
+    occ = 0.5 + 0.5 * np.clip(ao, 0, 1) ** 1.3
+    return col * ((0.6 + 0.55 * lam) * occ)[:, None]
 
 
 def glow(img, d, core=0.2, halo=0.8):
@@ -249,32 +294,52 @@ def glow(img, d, core=0.2, halo=0.8):
     return img * (1 - c[:, None]) + LIGHT[None, :] * c[:, None]
 
 
-# The arms in the standing frame (game units: the centres of the body's arm vertices): shoulder,
-# elbow, wrist; +X the right arm. The elbows sit behind the line from shoulder to wrist.
-ARMS = {1: np.array([[14.0, 0.0, 24.0], [12.6, 0.3, 9.0], [10.8, -4.4, -3.4]]),
-        -1: np.array([[-13.9, 1.5, 24.0], [-12.3, 2.6, 9.0], [-10.7, -3.1, -3.2]])}
-ELBOW = float(np.linalg.norm(ARMS[1][1] - ARMS[1][0]))          # along the arm, from the shoulder
+# The arms in the standing frame (game units: the centres of the body's arm vertices): over the
+# shoulder (the upper arm's line carried on 4 units, so the shoulder cap has coordinates too),
+# shoulder, elbow, wrist; +X the right arm. The elbows sit behind the line from shoulder to wrist.
+def _over(s0, e, k=4.0):
+    return s0 + (s0 - e) / np.linalg.norm(s0 - e) * k
+_ARMS = {1: np.array([[14.0, 0.0, 24.0], [12.6, 0.3, 9.0], [10.8, -4.4, -3.4]]),
+         -1: np.array([[-13.9, 1.5, 24.0], [-12.3, 2.6, 9.0], [-10.7, -3.1, -3.2]])}
+ARMS = {s: np.vstack([_over(a[0], a[1]), a]) for s, a in _ARMS.items()}
+SHOULDER = 4.0                                                   # along the arm: the shoulder joint
+ELBOW = SHOULDER + float(np.linalg.norm(_ARMS[1][1] - _ARMS[1][0]))
+# The legs (centres by height, from rays through the body): hip, knee, ankle. They splay out
+# going down, the left a little more.
+LEGS = {1: np.array([[5.4, -2.9, -6.0], [6.1, -2.9, -23.0], [6.8, 0.2, -42.0]]),
+        -1: np.array([[-5.3, -3.0, -6.0], [-6.7, -3.2, -23.0], [-8.2, -0.2, -42.0]])}
+KNEE = float(np.linalg.norm(LEGS[1][1] - LEGS[1][0]))
+# The torso as one more limb: an upright centre line through it (the suit's hexes run round it).
+TORSO = {1: np.array([[0.0, -1.0, 40.0], [0.0, -1.0, -8.0]]), -1: np.array([[0.0, -1.0, 40.0], [0.0, -1.0, -8.0]])}
 
 
-def arm_coords(pos):
-    """Per point on an arm: the distance along it from the shoulder (through the elbow) and the
-    angle around it (0: the outside, +: toward the back)."""
-    along, ang = np.zeros(len(pos)), np.zeros(len(pos))
-    for sign, (S0, E, W) in ARMS.items():
+def limb_frame(pos, limbs):
+    """Per point on a limb (limbs: its centre line per side): the distance along it, the angle
+    round it (0: the outside, +: toward the back, -pi/2: the front), the distance from the centre
+    line, and the line's direction and the outward direction, folded into the right half."""
+    n = len(pos)
+    along, ang, radius = np.zeros(n), np.zeros(n), np.zeros(n)
+    a_hat, r_hat = np.zeros((n, 3)), np.zeros((n, 3))
+    for sign, pts in limbs.items():
         sel = np.sign(pos[:, 0]) == sign
         q = pos[sel]
         best = np.full(len(q), np.inf)
-        al, rad = np.zeros(len(q)), np.zeros((len(q), 3))
-        for a0, a1, start in ((S0, E, 0.0), (E, W, ELBOW)):
+        al, rad, axis = np.zeros(len(q)), np.zeros((len(q), 3)), np.zeros((len(q), 3))
+        start = 0.0
+        for a0, a1 in zip(pts[:-1], pts[1:]):
             ax = a1 - a0
             L = np.linalg.norm(ax)
             t = np.clip(((q - a0) @ ax) / L ** 2, 0, 1)
             r = q - (a0 + t[:, None] * ax)
             d = np.linalg.norm(r, axis=1)
             near = d < best
-            best[near], al[near], rad[near] = d[near], start + t[near] * L, r[near]
-        along[sel], ang[sel] = al, np.arctan2(rad[:, 1], rad[:, 0] * sign)
-    return along, ang
+            best[near], al[near], rad[near], axis[near] = d[near], start + t[near] * L, r[near], ax / L
+            start += L
+        f = np.array([sign, 1.0, 1.0])
+        along[sel], radius[sel] = al, np.linalg.norm(rad, axis=1)
+        ang[sel] = np.arctan2(rad[:, 1], rad[:, 0] * sign)
+        a_hat[sel], r_hat[sel] = axis * f, unit(rad * f)
+    return along, ang, radius, a_hat, r_hat
 
 
 VEST_BOTTOM, VEST_SIDE, SPINE = 3.4, 9.8, 1.7
@@ -315,20 +380,26 @@ def bake_suit(m, R, va, mats):
     P, N, A = pos[mask], nrm[mask], ao[mask]
     x, y, z = P[:, 0], P[:, 1], P[:, 2]
     ax = np.abs(x)
-    col = nanosuit(P, N, A)
+    col = limb_plating(P, N, A, limb_frame(P, TORSO), size=1.05)
     arm = ax > 10.5
-    # Arms: a plated shoulder, elbow and wrist bands, lights down the outside.
-    along, ang = arm_coords(P)
-    pad = arm & (along < 6.2) & (np.abs(ang) < 1.7)
-    pd = np.minimum(6.2 - along, (1.7 - np.abs(ang)) * 3.2)
-    col = np.where(pad[:, None], col * 1.12, col)
-    col = col * (1 - 0.75 * (arm * line(pd, 0.09) * (along < 6.4)))[:, None]
-    for c, w in ((ELBOW, 0.7), (23.2, 0.5)):
-        band = arm & (np.abs(along - c) < w)
-        col = np.where(band[:, None], col * 0.7, col)
-        col = col * (1 - 0.6 * arm * (line(along - c - w, 0.08) + line(along - c + w, 0.08)))[:, None]
-    strip = arm & (((along > 6.6) & (along < 13.6)) | ((along > 16.8) & (along < 22.2)))
-    col[strip] = glow(col[strip], ang[strip] * 3.4, core=0.2, halo=0.75)
+    # Arms: plates in rows round them, elbow and wrist bands, lights down the outside.
+    frame = limb_frame(P[arm], ARMS)
+    along, ang = frame[0], frame[1]
+    ac = limb_plating(P[arm], N[arm], A[arm], frame)
+    # The shoulder armour (the sheet's layered plates): gunmetal bands over the outside of the
+    # deltoid, the upper over the lower, a bevelled border.
+    sh = (along < SHOULDER + 6.0) & (np.abs(ang) < 2.0)
+    fs = tuple(f[sh] for f in frame)
+    ac[sh] = limb_plating(P[arm][sh], N[arm][sh], A[arm][sh], fs, base=58.0, size=0.7, panel=3.3, tint=GUNMETAL)
+    rim = np.minimum((2.0 - np.abs(ang[sh])) * frame[2][sh], SHOULDER + 6.0 - along[sh])
+    ac[sh] = ac[sh] * (1 - 0.75 * line(rim, 0.12))[:, None]
+    for c, w in ((ELBOW, 0.7), (SHOULDER + 23.2, 0.5)):
+        band = np.abs(along - c) < w
+        ac = np.where(band[:, None], ac * 0.7, ac)
+        ac = ac * (1 - 0.6 * (line(along - c - w, 0.08) + line(along - c + w, 0.08)))[:, None]
+    strip = ((along > SHOULDER + 6.6) & (along < SHOULDER + 13.6)) | ((along > SHOULDER + 16.8) & (along < SHOULDER + 22.2))
+    ac[strip] = glow(ac[strip], ang[strip] * frame[2][strip], core=0.2, halo=0.75)
+    col[arm] = ac
     # Torso: the vest over the suit, the spine channel at the back.
     d = vest_edge(x, y, z)
     vest = ~arm & (d > 0) & (z < 28.6)
@@ -337,44 +408,44 @@ def bake_suit(m, R, va, mats):
     spine = back & (ax < SPINE) & (z > VEST_BOTTOM) & (z < 28.6)
     seg = np.mod(z[spine] / 1.5, 1)
     sn = unit(N[spine] + np.array([0, 0, 1.0]) * np.clip((seg - 0.75) / 0.25, 0, 1)[:, None])
-    sc = np.full((spine.sum(), 3), 58.0) * np.array([0.9, 0.95, 1.05]) * (1 - 0.7 * line(seg, 0.08))[:, None]
+    sc = np.full((spine.sum(), 3), 58.0) * GUNMETAL * (1 - 0.7 * line(seg, 0.08))[:, None]
     col[spine] = lit(sc, sn, A[spine], gloss=140)
     run = back & (z > 6) & (z < 23.0) & (ax < 0.9)
     col[run] = glow(col[run], ax[run], core=0.22, halo=0.9)
     ring = back & (np.abs(np.hypot(x, z - 24.4) - 1.25) < 0.7) & (ax < 2.2)
     col[ring] = glow(col[ring], np.abs(np.hypot(x[ring], z[ring] - 24.4) - 1.25), core=0.18, halo=0.6)
-    # The collar and the belt.
-    neck = ~arm & (z > 28.6)
+    # The collar round the neck's base only (the shoulders stay plated), the belt.
+    neck = ~arm & (z > 28.0) & ((x / 4.6) ** 2 + ((y + 1.2) / 5.6) ** 2 < 1)
     col[neck] = collar(P[neck], N[neck], A[neck])
     belt = ~arm & (z < 3.2) & (z > 0.4) & (ax < 10.6)
-    col[belt] = cordura(mats, P[belt], N[belt], A[belt], value=34)
+    col[belt] = cordura(mats, P[belt], N[belt], A[belt], value=32, tint=COOL)
     col = col * (1 - 0.6 * ((ax < 10.6) * (line(z - 3.2, 0.08) + line(z - 0.4, 0.08))))[:, None]
     buckle = belt & (ax < 1.2) & (y < 0)
-    col[buckle] = lit(np.full((buckle.sum(), 3), 70.0), N[buckle], A[buckle], gloss=160)
+    col[buckle] = lit(np.full((buckle.sum(), 3), 96.0) * GUNMETAL, N[buckle], A[buckle], gloss=180)
     img[mask] = col
     return np.clip(bleed(img, mask), 0, 255)
 
 
 def bake_legs(m, R, va, mats):
-    """Slot 1: hips and legs in the nanosuit, a knee plate, blue lights down the outer thighs and
-    the shins, combat boots."""
+    """Slot 1: the hips, the legs plated in rows round them (a flex band behind each knee), blue
+    lights down the outer thighs and the shins, combat boots."""
     pos, nrm, ao, mask = raster(m, R, 1, va)
     img = np.zeros((S, S, 3))
     P, N, A = pos[mask], nrm[mask], ao[mask]
-    x, y, z = P[:, 0], P[:, 1], P[:, 2]
-    col = nanosuit(P, N, A)
-    leg_cx = np.where(x > 0, 4.6, -4.6)
-    side = np.arctan2(y, (x - leg_cx) * np.sign(x))                   # 0: the leg's outside
-    front = N[:, 1] < 0.15
-    kd = np.minimum(2.7 - np.abs(z + 23.4), 2.3 - np.abs(x - leg_cx))
-    knee = front & (kd > 0)
-    col = np.where(knee[:, None], col * 0.8, col)
-    col = col * (1 - 0.7 * front * line(kd, 0.09))[:, None]
-    thigh = (z < -6) & (z > -18.5)
-    col[thigh] = glow(col[thigh], side[thigh] * 3.2, core=0.18, halo=0.7)
-    shin = (z < -28) & (z > -38.5) & front
-    col[shin] = glow(col[shin], np.abs(x - leg_cx)[shin], core=0.17, halo=0.6)
-    # Boots: black leather, a padded top, a grey rubber sole, laces.
+    z = P[:, 2]
+    col = limb_plating(P, N, A, limb_frame(P, TORSO), size=1.05)           # the hips
+    frame = limb_frame(P, LEGS)
+    along, ang, radius = frame[0], frame[1], frame[2]
+    leg = z < -6
+    col[leg] = limb_plating(P[leg], N[leg], A[leg], tuple(f[leg] for f in frame))
+    flex = leg & (np.abs(along - KNEE) < 1.4) & (ang > 0.8)               # behind the knee
+    rib = np.mod(along[flex] * 2.6, 1)
+    col[flex] = cordura(mats, P[flex], N[flex], A[flex], value=30, tint=COOL) * (1 - 0.5 * line(rib, 0.2))[:, None]
+    thigh = leg & (along > 2.5) & (along < 14.0)
+    col[thigh] = glow(col[thigh], ang[thigh] * radius[thigh], core=0.18, halo=0.7)
+    shin = (along > KNEE + 4.5) & (along < KNEE + 15.5)
+    col[shin] = glow(col[shin], (ang[shin] + np.pi / 2) * radius[shin], core=0.17, halo=0.6)
+    # Boots: black leather, a padded top, a grey rubber sole, laces down the front.
     boot = z < -41.5
     q, n = mirrored(P[boot], N[boot])
     lea = triplanar(mats["leather"], q, n, 14) * 1.25 + 4
@@ -382,7 +453,7 @@ def bake_legs(m, R, va, mats):
     lea = np.where((z[boot] < -47.0)[:, None], np.full_like(lea, 48.0), lea)
     col[boot] = lit(lea, n, A[boot], gloss=60, power=18)
     col = col * (1 - 0.6 * (line(z + 41.5, 0.12) + line(z + 42.6, 0.08) + line(z + 47.0, 0.12)))[:, None]
-    lace = boot & front & (z > -46.5) & (z < -43) & (np.mod(z * 2.2, 1) < 0.45) & (np.abs(x - leg_cx) < 0.9)
+    lace = boot & (z > -46.5) & (z < -43) & (np.mod(z * 2.2, 1) < 0.45) & (np.abs(ang + np.pi / 2) * radius < 0.9)
     col[lace] = col[lace] * 0.45 + 16
     img[mask] = col
     return np.clip(bleed(img, mask), 0, 255)

@@ -46,27 +46,6 @@ class Part:
             else:
                 self.tris.append((i, i + 1, i + 2, (u0, v1), (u1, v1), (u0, v0)))
 
-    def facing(self, a, b, c, d, toward, region):
-        """A quad turned so its normal points along toward."""
-        if np.dot(np.cross(b - a, d - a), toward) < 0:
-            a, b, c, d = a, d, c, b
-        self.add_quad(a, b, c, d, region)
-
-    def shell(self, O, I, region, inside):
-        """A curved plate between two grids of points (rings x points round): O its outer face, I its
-        inner one, edges closed."""
-        J, K = len(O) - 1, len(O[0]) - 1
-        for j in range(J):
-            for k in range(K):
-                self.facing(O[j][k], O[j][k + 1], O[j + 1][k + 1], O[j + 1][k], O[j][k] - I[j][k], region)
-                self.facing(I[j][k], I[j][k + 1], I[j + 1][k + 1], I[j + 1][k], I[j][k] - O[j][k], inside)
-        for j, j2 in ((0, 1), (J, J - 1)):
-            for k in range(K):
-                self.facing(O[j][k], O[j][k + 1], I[j][k + 1], I[j][k], O[j][k] - O[j2][k], region)
-        for k, k2 in ((0, 1), (K, K - 1)):
-            for j in range(J):
-                self.facing(O[j][k], O[j + 1][k], I[j + 1][k], I[j][k], O[j][k] - O[j][k2], region)
-
     def box(self, centre, u, v, w, size, regions):
         """A box: axes u (length), v, w; size (lu, lv, lw); regions for (sides, ends)."""
         c = np.array(centre, float)
@@ -157,37 +136,16 @@ def build_parts(L, T):
     p.anchor = dict(group="torso", zmin=6, zmax=26)
     parts.append(p)
 
-    # Layered shoulder armour: two curved bands round each deltoid (the upper one over the lower,
-    # its top tipped up over the shoulder), bound to the upper arm.
+    # Knee pads on the knees (the legs' measured centre lines, mech_bake.LEGS), turned the way the
+    # front of the knee faces: a pad and a raised cap.
     for side, name in ((1, "r"), (-1, "l")):
-        S0, E, _ = mech_bake.ARMS[side]
-        ax = norm(E - S0)
-        out = norm(side * X - np.dot(side * X, ax) * ax)
-        bk = np.cross(ax, out) * side                           # round the arm toward its back
-        p = Part("shoulder_" + name)
-        for alongs, tips, gap, spread in (((-1.6, -0.4, 1.0, 2.6, 3.8), (50, 30, 10, 0, 0), 0.45, 100),
-                                          ((3.2, 4.6, 6.0), (0, 0, 0), 0.3, 90)):
-            O, I = [], []
-            for a_, tip in zip(alongs, tips):
-                c, t = S0 + ax * a_, math.radians(tip)
-                ring_o, ring_i = [], []
-                for th in np.radians(np.linspace(-spread, spread, 9)):
-                    d = norm((math.cos(th) * out + math.sin(th) * bk) * math.cos(t) - ax * math.sin(t))
-                    hit = mech_art.ray(T, c + d * 10, -d)
-                    r = 10 - hit if hit is not None else 2.0     # the outermost surface on that line
-                    ring_o.append(c + d * (r + gap))
-                    ring_i.append(c + d * (r + gap - 0.3))
-                O.append(ring_o)
-                I.append(ring_i)
-            p.shell(O, I, "plate", "dark")
-        p.anchor = dict(group="uarm_" + name)
-        parts.append(p)
-
-    # Knee pads.
-    for side, name in ((1, "r"), (-1, "l")):
-        x = side * 4.6
+        cx, z = mech_bake.LEGS[side][1][0], -23.4
+        u = norm(np.array([2.4, front(cx + 1.2, z) - front(cx - 1.2, z), 0.0]))   # across the knee
+        v = np.cross(u, Z)                                                       # out of its front
+        f = np.array([cx, front(cx, z), z])
         p = Part("knee_" + name)
-        p.box(np.array([x, front(x, -23.4) - 0.4, -23.4]), X, -Y, -Z, (3.0, 0.9, 3.8), ("plate", "plate"))
+        p.box(f + v * 0.35, u, v, np.cross(u, v), (3.8, 0.7, 4.4), ("armor", "armor"))
+        p.box(f + v * 0.95, u, v, np.cross(u, v), (2.6, 0.5, 3.0), ("armor", "armor"))
         p.anchor = dict(group="knee_" + name)
         parts.append(p)
 
@@ -281,21 +239,21 @@ def layout_atlas(parts, density=7.0):
 
 def bake_atlas(parts, body_tris, out_pcx, A=1024):
     """The parts' texture: each face's cell painted from its 3D surface: material (art/mech/materials),
-    occlusion from the body and the parts, a key light, worn edges, bolts, vents."""
+    occlusion from the body and the parts, a key light, seams, bolts, vents, snaps."""
     from PIL import Image
     mats = {k: mech_bake.material(k, blur=0.8) for k in ("gunmetal", "steel", "webbing", "carbon")}
-    look = {"plate": ("suit", 1, 0), "vest": ("webbing", 1.1, 3), "strap": ("webbing", 1.0, 2),
-            "pouch": ("webbing", 1.3, 4), "steel": ("steel", 0.8, 0), "dark": ("carbon", 0.35, 0),
-            "light": (None, 1, 0), "gunmetal": ("gunmetal", 0.85, 0)}
-    grey = ("vest", "strap", "pouch")                    # the webbing swatch without its olive
-    # ("suit": mech_bake.nanosuit's procedural plating; None: a light)
+    look = {"plate": ("suit", 1, 0), "armor": ("suit", 1, 0), "vest": ("webbing", 1.0, 2),
+            "strap": ("webbing", 0.85, 1), "pouch": ("webbing", 1.1, 2), "steel": ("steel", 0.8, 0),
+            "dark": ("carbon", 0.35, 0), "light": (None, 1, 0), "gunmetal": ("gunmetal", 0.85, 0)}
+    grey = ("vest", "strap", "pouch")                    # the webbing swatch in the vest's olive-black
+    suit = {"plate": (44.0, 3.2, 0.8, mech_bake.COOL), "armor": (60.0, 2.0, 0.6, mech_bake.GUNMETAL)}
+    # ("suit": mech_bake.nanosuit's procedural plating, black or gunmetal; None: a light)
     allf = [f for p in parts for f in p.faces]
     occ = np.concatenate([body_tris] + [np.array([pts[0], pts[1], pts[2]])[None] for pts, _ in allf]
                          + [np.array([pts[0], pts[2], pts[3]])[None] for pts, _ in allf if len(pts) == 4])
     img = np.zeros((A, A, 3))
     mask = np.zeros((A, A), bool)
     k = A / 256.0
-    rng = np.random.default_rng(11)
     for p in parts:
         for (pts, region), (u0, v0, u1, v1) in zip(p.faces, p.cells):
             P = np.array(pts)
@@ -321,23 +279,32 @@ def bake_atlas(parts, body_tris, out_pcx, A=1024):
                 img[ys[ok], xs[ok]] = mech_bake.LIGHT
                 mask[ys[ok], xs[ok]] = True
                 continue
-            if region == "plate":                                  # the suit's own plating, lit
+            if region in suit:                                     # the suit's own plating, lit
+                base, big, fine, tint = suit[region]
                 col = mech_bake.nanosuit(pos.reshape(-1, 3), np.broadcast_to(n, pos.shape).reshape(-1, 3),
-                                         a3.reshape(-1)).reshape(pos.shape)
+                                         a3.reshape(-1), base, big, fine, tint).reshape(pos.shape)
             else:
                 col = mech_bake.triplanar(mats[mname], pos, np.broadcast_to(n, pos.shape), 16) * mul + add
             if region in grey:
-                col = col.mean(-1, keepdims=True) * np.array([0.95, 0.98, 1.04])
+                col = col.mean(-1, keepdims=True) * mech_bake.OLIVE
             if region == "vest":                                   # MOLLE rows, as on the painted vest
                 r = np.mod((pos[..., 2] - 5.0) / 1.05, 1)
                 col = np.where((r < 0.55)[..., None], col * 1.2, col) * (1 - 0.6 * mech_bake.line(r - 0.58, 0.08))[..., None]
+                fw, fh = face_size(P)
+                if fw > 4 and fh > 4:                              # a chest panel's face: a pocket flap, a velcro patch
+                    v_ = ty * fh
+                    col = np.where((v_ > fh * 0.62)[..., None], col * 0.92 + 3, col)
+                    col = col * (1 - 0.6 * mech_bake.line(v_ - fh * 0.62, 0.1))[..., None] + 14 * mech_bake.line(v_ - fh * 0.62 - 0.14, 0.06)[..., None]
+                    patch = (np.abs(sx * fw - fw / 2) < 1.6) & (np.abs(v_ - fh * 0.82) < 0.55)
+                    col = np.where(patch[..., None], col * 0.7 + np.array([6.0, 6, 4]), col)
             w, h = face_size(P)
             edge = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))
             if len(P) == 3:
                 edge = np.minimum(edge, (1 - sx - ty) * min(w, h) * 0.7)
-            wear = (edge > 0.06) & (edge < 0.28) & (rng.random(edge.shape) < 0.75) & (region != "plate")
-            col = np.where(wear[..., None], col * 1.35 + 18, col)
             col *= (0.55 + 0.45 * np.clip(edge / 0.06, 0, 1))[..., None]          # the seam at the very edge
+            if region == "strap" and w > 2.8 and h < 1.0:                          # a flap's steel snap
+                snap = (np.abs(sx * w - w / 2) < 0.3) & (np.abs(ty * h - h / 2) < 0.18)
+                col = np.where(snap[..., None], np.array([110.0, 118, 128]), col)
             if region == "vent":
                 slot = (np.mod(sx * w * 2.2, 1) < 0.45) & (ty > 0.15) & (ty < 0.85)
                 col = np.where(slot[..., None], col * 0.25, col)
@@ -346,10 +313,9 @@ def bake_atlas(parts, body_tris, out_pcx, A=1024):
                     d = np.hypot(sx * w - bs, ty * h - bt)
                     col = np.where((d < 0.16)[..., None], np.array([150.0, 150, 155]), col)
                     col = np.where(((d >= 0.16) & (d < 0.22))[..., None], col * 0.4, col)
-            key = np.array([0.35, -0.55, 0.75]) / np.linalg.norm([0.35, -0.55, 0.75])
-            if region != "plate":
-                light = 0.6 + 0.5 * max(0.0, float(n @ key))
-                col *= (light * (0.45 + 0.55 * np.clip(a3, 0, 1) ** 1.3))[..., None]
+            if region not in suit:                                 # as mech_bake.lit: soft key, occlusion
+                light = 0.6 + 0.55 * (np.clip(float(n @ mech_bake.KEY), -1, 1) * 0.5 + 0.5) ** 2
+                col *= (light * (0.5 + 0.5 * np.clip(a3, 0, 1) ** 1.3))[..., None]
             ok = inside & (ys >= 0) & (ys < A) & (xs >= 0) & (xs < A)
             img[ys[ok], xs[ok]] = col[ok]
             mask[ys[ok], xs[ok]] = True
@@ -385,9 +351,6 @@ def main():
     torso = [i for i in range(len(R)) if 6 < R[i, 2] < 27 and abs(R[i, 0]) < 9]
     groups = dict(rarm=L["rarm"], larm=L["larm"], head=L["head"], torso=torso)
     for side, sx in ((1, "r"), (-1, "l")):
-        groups["shoulder_" + sx] = [i for i in range(len(R)) if 7 < side * R[i, 0] < 14 and 24 < R[i, 2] < 31]
-        arm = L["rarm"] if side > 0 else L["larm"]
-        groups["uarm_" + sx] = [i for i in arm if 13 < R[i, 2] < 25]
         groups["knee_" + sx] = [i for i in range(len(R)) if side * R[i, 0] > 1 and -29 < R[i, 2] < -18]
     parts = build_parts(L, mech_art.triangles(m, R))
     dens = layout_atlas(parts)
