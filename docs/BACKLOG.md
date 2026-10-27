@@ -2,6 +2,21 @@
 
 Ideas and research that are not part of the current release.
 
+## The Arm Cannon as a Metal Storm gun (asked 2026-10-26)
+
+The user's request: the Mech's arm gun (CoopMechCannon, Arsenal) inspired by the real
+Metal Storm system (rounds stacked nose to tail in the barrels, fired electronically, so
+very high and selectable rates of fire), with more than one firing mode and fire rate:
+
+- shotgun mode (a spread of rounds at once);
+- normal full auto (today's gun: the battle rifle values with the host's setting);
+- super full auto, at minigun speed.
+
+Notes for the build: switch modes on the weapon's alt key (as the assault rifle's 20 mm);
+keep the class name CoopMechCannon so saves and the Arm Cannon module keep working; the
+client's copy predicts with its own values (ServerWeaponValues), so each mode's values
+must reach it; the Mech screen's text shows damage as fired (CoopMechAugCannon.LevelInfo).
+
 ## Players in different areas at the same time (research)
 
 Asked 2026-10-21: could players be in different maps at once, each running
