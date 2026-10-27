@@ -82,5 +82,13 @@ images; the edit model's attempts over JC's body barely edited; the text-to-imag
 turnarounds were good and gave the look). Measured in the Gallery (`?GalleryWho=LightMech`):
 `build/shots/lightmech_look`.
 
-Next: the arm blades out past the hands on others' screens (parts on the trench body, as
-`BarrettBlade` is on the Mech's).
+Jensen's arm blades (`tools/jensen_parts.py`: `JensenBlades`): a long flat steel blade on the outer side
+of each forearm, from a third of the way down from the elbow to well past the fist, shown on others'
+screens while the blades are held (`CoopMechParts`, as the Mech's `BarrettBlade`). Each is rigid on three
+of the trench body's vertices (the low-poly sleeve has none between its rings: the hand with the wrist
+ring and the elbow ring are the anchors' candidates), so it follows every animation; the installer
+fills its frames from the player's own `GM_Trench` (bindings `also`: a second body for
+`MechParts.cs` and `mech_art.fill`, both still byte-identical to the HCC build).
+
+Still the stand-in: the Light Mech's own first-person view of its blades is the combat knife's in a
+prosthetic hand, as the Mech's is.

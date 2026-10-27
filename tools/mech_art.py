@@ -117,22 +117,24 @@ def fill(template_path, bindings, out, body_package=None):
     import numpy as np
     B = json.load(open(bindings))
     pkg = ue1mesh.Package(body_package or BODY_PACKAGE)
-    m = pkg.read_mesh(B["body"])
-    if (m["frame_verts"], m["anim_frames"]) != (B["frame_verts"], B["frames"]) or list(m["scale"]) != B["scale"] or list(m["origin"]) != B["origin"]:
-        raise ValueError("this game's %s differs from the one the parts were made for" % B["body"])
-    F = game_frames(pkg, m)
     t = ue1mesh.Package(template_path)
     d = bytearray(t.d)
-    for name, mb in B["meshes"].items():
-        tm = t.read_mesh(name)
-        if tm["verts_count"] != B["frames"] * mb["verts"]:
-            raise ValueError("template mesh %s has %d vertices" % (name, tm["verts_count"]))
-        raw = np.rint(bake(F, mb["parts"], mb["verts"]) / np.array(m["scale"]) + np.array(m["origin"])).astype("<i2")
-        out4 = np.zeros(raw.shape[:2] + (4,), "<i2")
-        out4[:, :, :3] = raw
-        d[tm["verts_off"]:tm["verts_off"] + out4.nbytes] = out4.tobytes()
-    if "arm" in B:
-        fill_arm(B["arm"], F, m, t, d)
+    # The main body's parts, then each other body's ("also": the Light Mech's on JC's trench body).
+    for b in [B] + B.get("also", []):
+        m = pkg.read_mesh(b["body"])
+        if (m["frame_verts"], m["anim_frames"]) != (b["frame_verts"], b["frames"]) or list(m["scale"]) != b["scale"] or list(m["origin"]) != b["origin"]:
+            raise ValueError("this game's %s differs from the one the parts were made for" % b["body"])
+        F = game_frames(pkg, m)
+        for name, mb in b["meshes"].items():
+            tm = t.read_mesh(name)
+            if tm["verts_count"] != b["frames"] * mb["verts"]:
+                raise ValueError("template mesh %s has %d vertices" % (name, tm["verts_count"]))
+            raw = np.rint(bake(F, mb["parts"], mb["verts"]) / np.array(m["scale"]) + np.array(m["origin"])).astype("<i2")
+            out4 = np.zeros(raw.shape[:2] + (4,), "<i2")
+            out4[:, :, :3] = raw
+            d[tm["verts_off"]:tm["verts_off"] + out4.nbytes] = out4.tobytes()
+        if b is B and "arm" in B:
+            fill_arm(B["arm"], F, m, t, d)
     open(out, "wb").write(bytes(d))
     print("filled", out)
 

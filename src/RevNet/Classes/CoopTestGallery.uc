@@ -210,14 +210,13 @@ function bool Pose( string Name, int Look, int Angle )
 }
 
 // The Light Mech as CoopLightMechPlayer.MechLook dresses it (Adam Jensen's look on JC's trench body),
-// standing (Look 0) or mid-shot (1), from the front, three-quarter and the back.
+// standing (Look 0), mid-shot (1) or mid-swing with Jensen's blades out (2: JensenBlades), from the
+// front, three-quarter and the back.
 function bool PoseLightMech( int Look, int Angle )
 {
 	local rotator Face;
 	local int i;
 
-	if ( Look==2 )
-		return false;
 	if ( Model==None )
 		Model = Spawn( class'CoopLookDummy',,, Spot );
 	Model.Mesh = class'CoopLightMechPlayer'.default.Mesh;
@@ -241,9 +240,20 @@ function bool PoseLightMech( int Look, int Angle )
 		Model.AnimFrame = 0.4;
 		Model.AnimRate = 0;
 	}
+	else if ( Look==2 )
+	{
+		Model.AnimSequence = 'Attack';
+		Model.AnimFrame = 0.45;
+		Model.AnimRate = 0;
+	}
 	else
 		Model.LoopAnim( 'BreatheLight' );
-	Label = "LightMech" @ Eval2( Look==1, "shoot", "stand" ) @ "skins" @ Model.MultiSkins[0] @ Model.MultiSkins[1] @ "angle" @ Angle;
+	if ( Parts[0]==None )
+		Parts[0] = class'CoopMechParts'.static.Mount( Model, Model.Mesh, "JensenBlades", class'Weapon' );
+	if ( Parts[0]!=None )
+		Parts[0].bShow = Look==2;
+	Label = "LightMech" @ Eval2( Look==1, "shoot", Eval2( Look==2, "attack", "stand" ) ) @ "skins" @ Model.MultiSkins[0] @ Model.MultiSkins[1]
+		@ "blades" @ (Parts[0]!=None) @ "angle" @ Angle;
 	return true;
 }
 

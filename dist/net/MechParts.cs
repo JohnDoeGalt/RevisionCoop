@@ -193,67 +193,20 @@ public static class MechParts
 			js.MaxJsonLength = int.MaxValue;
 			var B = (Dictionary<string, object>)js.DeserializeObject(File.ReadAllText(bindingsPath));
 			var body = new Package(bodyPackage);
-			Mesh bm = body.ReadMesh((string)B["body"], true);
-			var bs = (object[])B["scale"];
-			var bo = (object[])B["origin"];
-			if (bm.FrameVerts != Convert.ToInt32(B["frame_verts"]) || bm.Frames != Convert.ToInt32(B["frames"])
-				|| bm.VertsCount != bm.FrameVerts * bm.Frames)
-				return "this game's " + B["body"] + " has other animations than the one the parts were made for";
-			for (int a = 0; a < 3; a++)
-				if (bm.Scale[a] != D(bs[a]) || bm.Origin[a] != D(bo[a]))
-					return "this game's " + B["body"] + " is scaled differently from the one the parts were made for";
-			// The body's frames in game units.
-			int nf = bm.Frames, fv = bm.FrameVerts;
-			double[,,] F = new double[nf, fv, 3];
-			for (int f = 0; f < nf; f++)
-				for (int v = 0; v < fv; v++)
-					for (int a = 0; a < 3; a++)
-					{
-						int raw = BitConverter.ToInt16(body.D, bm.VertsOffset + (f * fv + v) * 8 + a * 2);
-						F[f, v, a] = (raw - bm.Origin[a]) * bm.Scale[a];
-					}
 			var tpl = new Package(templatePath);
 			byte[] outData = (byte[])tpl.D.Clone();
-			var meshes = (Dictionary<string, object>)B["meshes"];
-			foreach (var kv in meshes)
-			{
-				var mb = (Dictionary<string, object>)kv.Value;
-				int nv = Convert.ToInt32(mb["verts"]);
-				Mesh tm = tpl.ReadMesh(kv.Key);
-				if (tm.VertsCount != nf * nv)
-					return "the template's " + kv.Key + " doesn't match its bindings";
-				foreach (object po in (object[])mb["parts"])
+			Mesh bm;
+			double[,,] F;
+			string why0 = FillBody(body, B, tpl, outData, out bm, out F);
+			if (why0 != null) return why0;
+			if (B.ContainsKey("also"))
+				foreach (object o in (object[])B["also"])
 				{
-					var part = (Dictionary<string, object>)po;
-					var an = (object[])part["anchors"];
-					int i = Convert.ToInt32(an[0]), j = Convert.ToInt32(an[1]), k = Convert.ToInt32(an[2]);
-					int first = Convert.ToInt32(part["first"]);
-					var local = (object[])part["local"];
-					for (int f = 0; f < nf; f++)
-					{
-						double[] A = { F[f, i, 0], F[f, i, 1], F[f, i, 2] };
-						double[] AB = { F[f, j, 0] - A[0], F[f, j, 1] - A[1], F[f, j, 2] - A[2] };
-						double[] AC = { F[f, k, 0] - A[0], F[f, k, 1] - A[1], F[f, k, 2] - A[2] };
-						double[] e1 = Norm(AB), n = Norm(Cross(AB, AC)), e2 = Cross(n, e1);
-						for (int q = 0; q < local.Length; q++)
-						{
-							var l = (object[])local[q];
-							double l0 = D(l[0]), l1 = D(l[1]), l2 = D(l[2]);
-							int at = tm.VertsOffset + (f * nv + first + q) * 8;
-							for (int a = 0; a < 3; a++)
-							{
-								double g = A[a] + (l0 * e1[a] + l1 * e2[a] + l2 * n[a]);
-								double r = Math.Round(g / bm.Scale[a] + bm.Origin[a]);
-								short s = (short)Math.Max(-32768, Math.Min(32767, r));
-								outData[at + a * 2] = (byte)(s & 0xFF);
-								outData[at + a * 2 + 1] = (byte)((s >> 8) & 0xFF);
-							}
-							outData[at + 6] = 0;
-							outData[at + 7] = 0;
-						}
-					}
+					Mesh am;
+					double[,,] AF;
+					why0 = FillBody(body, (Dictionary<string, object>)o, tpl, outData, out am, out AF);
+					if (why0 != null) return why0;
 				}
-			}
 			if (B.ContainsKey("arm"))
 			{
 				string why = FillArm((Dictionary<string, object>)B["arm"], bm, F, tpl, outData);
@@ -267,6 +220,72 @@ public static class MechParts
 			LastError = e.ToString();
 			return e.Message;
 		}
+	}
+
+	// One body's parts (B: its name, the shape of its animation, its meshes): their frames from this PC's body.
+	static string FillBody(Package body, Dictionary<string, object> B, Package tpl, byte[] outData, out Mesh bm, out double[,,] F)
+	{
+		F = null;
+		bm = body.ReadMesh((string)B["body"], true);
+		var bs = (object[])B["scale"];
+		var bo = (object[])B["origin"];
+		if (bm.FrameVerts != Convert.ToInt32(B["frame_verts"]) || bm.Frames != Convert.ToInt32(B["frames"])
+			|| bm.VertsCount != bm.FrameVerts * bm.Frames)
+			return "this game's " + B["body"] + " has other animations than the one the parts were made for";
+		for (int a = 0; a < 3; a++)
+			if (bm.Scale[a] != D(bs[a]) || bm.Origin[a] != D(bo[a]))
+				return "this game's " + B["body"] + " is scaled differently from the one the parts were made for";
+		// The body's frames in game units.
+		int nf = bm.Frames, fv = bm.FrameVerts;
+		F = new double[nf, fv, 3];
+		for (int f = 0; f < nf; f++)
+			for (int v = 0; v < fv; v++)
+				for (int a = 0; a < 3; a++)
+				{
+					int raw = BitConverter.ToInt16(body.D, bm.VertsOffset + (f * fv + v) * 8 + a * 2);
+					F[f, v, a] = (raw - bm.Origin[a]) * bm.Scale[a];
+				}
+		var meshes = (Dictionary<string, object>)B["meshes"];
+		foreach (var kv in meshes)
+		{
+			var mb = (Dictionary<string, object>)kv.Value;
+			int nv = Convert.ToInt32(mb["verts"]);
+			Mesh tm = tpl.ReadMesh(kv.Key);
+			if (tm.VertsCount != nf * nv)
+				return "the template's " + kv.Key + " doesn't match its bindings";
+			foreach (object po in (object[])mb["parts"])
+			{
+				var part = (Dictionary<string, object>)po;
+				var an = (object[])part["anchors"];
+				int i = Convert.ToInt32(an[0]), j = Convert.ToInt32(an[1]), k = Convert.ToInt32(an[2]);
+				int first = Convert.ToInt32(part["first"]);
+				var local = (object[])part["local"];
+				for (int f = 0; f < nf; f++)
+				{
+					double[] A = { F[f, i, 0], F[f, i, 1], F[f, i, 2] };
+					double[] AB = { F[f, j, 0] - A[0], F[f, j, 1] - A[1], F[f, j, 2] - A[2] };
+					double[] AC = { F[f, k, 0] - A[0], F[f, k, 1] - A[1], F[f, k, 2] - A[2] };
+					double[] e1 = Norm(AB), n = Norm(Cross(AB, AC)), e2 = Cross(n, e1);
+					for (int q = 0; q < local.Length; q++)
+					{
+						var l = (object[])local[q];
+						double l0 = D(l[0]), l1 = D(l[1]), l2 = D(l[2]);
+						int at = tm.VertsOffset + (f * nv + first + q) * 8;
+						for (int a = 0; a < 3; a++)
+						{
+							double g = A[a] + (l0 * e1[a] + l1 * e2[a] + l2 * n[a]);
+							double r = Math.Round(g / bm.Scale[a] + bm.Origin[a]);
+							short s = (short)Math.Max(-32768, Math.Min(32767, r));
+							outData[at + a * 2] = (byte)(s & 0xFF);
+							outData[at + a * 2 + 1] = (byte)((s >> 8) & 0xFF);
+						}
+						outData[at + 6] = 0;
+						outData[at + 7] = 0;
+					}
+				}
+			}
+		}
+		return null;
 	}
 
 	// The Mech's own arms in its view (StormArm): its triangles are the body's faces (each corner's vertex

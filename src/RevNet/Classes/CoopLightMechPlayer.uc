@@ -63,20 +63,25 @@ static function Texture LightSkin( int i )
 	return Texture( DynamicLoadObject( "RevNetMech." $ N, class'Texture', true ) );
 }
 
-// Its look on every machine (CoopBodySkins: the host's skins can't reach clients).
+// Its look on every machine (CoopBodySkins: the host's skins can't reach clients), and Jensen's arm
+// blades out of both forearms while the blades are held (CoopMechParts: JensenBlades, tools/jensen_parts.py).
 simulated function MountParts()
 {
 	local int i;
 
-	if ( BodySkins!=None )
-		return;
-	BodySkins = Spawn( class'CoopBodySkins', Self,, Location );
 	if ( BodySkins==None )
-		return;
-	BodySkins.Body = Self;
-	BodySkins.BodyMesh = default.Mesh;
-	for ( i=0; i<8; i++ )
-		BodySkins.Skins[i] = LightSkin( i );
+	{
+		BodySkins = Spawn( class'CoopBodySkins', Self,, Location );
+		if ( BodySkins!=None )
+		{
+			BodySkins.Body = Self;
+			BodySkins.BodyMesh = default.Mesh;
+			for ( i=0; i<8; i++ )
+				BodySkins.Skins[i] = LightSkin( i );
+		}
+	}
+	if ( Parts[0]==None )
+		Parts[0] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "JensenBlades", class'CoopMechBlade' );
 }
 
 // Built in: the arm blades only (and no Mech's arm cannon: a record from a Mech game).
