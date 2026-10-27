@@ -16,7 +16,7 @@ $suite = [ordered]@{
 	AugSave = @("-Seconds", 150); Augs = @("-Seconds", 200); Body = @("-Seconds", 200)
 	Capture = @("-Map", "04_NYC_Hotel", "-Seconds", 220); Carry = @("-Seconds", 180); Death = @("-Seconds", 300)
 	Drones = @("-Seconds", 90, "-ClientAgent", "Mech"); Devices = @("-Seconds", 200); Doors = @("-Seconds", 240); Hazards = @("-Seconds", 240); Heal = @("-Seconds", 200)
-	Items = @("-Seconds", 600); Leave = @("-Seconds", 220); Mech = @("-Seconds", 160, "-ClientAgent", "Mech")
+	Items = @("-Seconds", 600); Leave = @("-Seconds", 220); LightMech = @("-Seconds", 200, "-ClientAgent", "LightMech"); Mech = @("-Seconds", 160, "-ClientAgent", "Mech")
 	MechTree = @("-Seconds", 300, "-ClientAgent", "Mech"); Mission = @("-Seconds", 600); NPC = @("-Seconds", 240, "-Url", "?Difficulty=3")
 	Progress = @("-Seconds", 240); Quake = @("-Map", "09_NYC_Ship", "-Seconds", 200); Rejoin = @("-Seconds", 70)
 	Revisit = @("-Seconds", 260); Rifle = @("-Seconds", 200); Save = @("-Seconds", 200); Talk = @("-Seconds", 160)

@@ -19,7 +19,7 @@ class CoopLaunch extends Object
 var config string AutoOpen; // e.g. "01_NYC_UNATCOIsland?Listen?Game=RevNet.CoopGameInfo" or "127.0.0.1:7790"
 var config int Rejoins;     // tries left for AutoOpen
 var config string LastHost; // the host this client last played with
-var config string Agent;    // the launcher's class choice: "Mech" or "" (?RevClass=)
+var config string Agent;    // the launcher's class choice: "Mech", "LightMech" or "" (?RevClass=)
 
 static function Remember( string Host )
 {

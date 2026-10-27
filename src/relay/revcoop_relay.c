@@ -614,8 +614,9 @@ static const char *ff_values[] = { "0.000000", "0.500000", "1.000000" };
 static const char *ff_names[] = { "Off", "Half damage", "Full damage" };
 /* CoopGameInfo.DeathRule and SaveRule. */
 static int g_death = 0, g_saves = 0;
-static int g_agent = 0;  /* the player's own class: 0 JC's kind (nano), 1 the Mech (docs/MECH_CLASS.md) */
-static const char *agent_names[] = { "Nano-augmented agent (JC's kind)", "Mech: mechanical augmentation (heavy)" };
+static int g_agent = 0;  /* the player's own class: 0 JC's kind (nano), 1 the Mech (docs/MECH_CLASS.md), 2 the Light Mech (docs/LIGHT_MECH_CLASS.md) */
+static const char *agent_names[] = { "Nano-augmented agent (JC's kind)", "Mech: mechanical augmentation (heavy)", "Light Mech: Adam Jensen's augmentations (light)" };
+static const char *agent_keys[] = { "", "Mech", "LightMech" };  /* RevNet.CoopLaunch Agent */
 static const char *death_names[] = { "Downed: a teammate revives you with a medkit", "The team reloads the last save at once" };
 static const char *save_names[] = { "Quick saves and autosaves", "Autosaves only (harder)" };
 /* CoopGameInfo.RifleRework: 0 here = on (the rifle as a 7.62 battle rifle with select fire, for everyone). */
@@ -633,7 +634,7 @@ static void load_settings(void)
         else if (!strncmp(line, "FriendlyFire=", 13)) { g_friendly_fire = atoi(line + 13); if (g_friendly_fire < 0 || g_friendly_fire > 2) g_friendly_fire = 0; }
         else if (!strncmp(line, "Death=", 6)) g_death = atoi(line + 6) & 1;
         else if (!strncmp(line, "Saves=", 6)) g_saves = atoi(line + 6) & 1;
-        else if (!strncmp(line, "Agent=", 6)) g_agent = atoi(line + 6) & 1;
+        else if (!strncmp(line, "Agent=", 6)) { g_agent = atoi(line + 6); if (g_agent < 0 || g_agent > 2) g_agent = 0; }
         else if (!strncmp(line, "Rifle=", 6)) g_rifle = atoi(line + 6) & 1;
     }
     fclose(f);
@@ -713,7 +714,7 @@ static void name_option(char *out, size_t size)
 static void set_auto_open(const char *url)
 {
     set_ini_key("RevNetUser.ini", "RevNet.CoopLaunch", "AutoOpen", url);
-    set_ini_key("RevNetUser.ini", "RevNet.CoopLaunch", "Agent", g_agent ? "Mech" : "");
+    set_ini_key("RevNetUser.ini", "RevNet.CoopLaunch", "Agent", agent_keys[g_agent]);
 }
 
 /* The game's environment: ours without SteamAppId/SteamGameId. Steam's API set them to this
@@ -1401,7 +1402,7 @@ static void create_controls(void)
     ctl(0, WC_STATICW, "Deus Ex: Revision Co-op", 0, 58, 10, 380, 28, ID_TITLE, g_big);
     ctl(0, WC_STATICW, "Not signed in to Steam yet.", 0, 58, 40, 380, 18, ID_WHO, g_font);
 
-    combo(68, "You play as", ID_AGENT, agent_names, 2, g_agent);
+    combo(68, "You play as", ID_AGENT, agent_names, 3, g_agent);
 
     ctl(0, WC_BUTTONW, "Your game: everyone who joins plays with these", BS_GROUPBOX, 12, 102, 436, 266, 0, g_font);
     combo(128, "Mode", ID_MODE, titles, g_modes, cur);
@@ -1449,7 +1450,8 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             }
             update_enabled();
         } else if (id == ID_AGENT && code == CBN_SELCHANGE) {
-            g_agent = cursel(ID_AGENT) & 1;
+            g_agent = cursel(ID_AGENT);
+            if (g_agent < 0 || g_agent > 2) g_agent = 0;
             save_settings();
         } else if ((id == ID_DIFF || id == ID_FF || id == ID_DEATH || id == ID_SAVES || id == ID_RIFLE) && code == CBN_SELCHANGE) {
             g_difficulty = cursel(ID_DIFF) & 3;

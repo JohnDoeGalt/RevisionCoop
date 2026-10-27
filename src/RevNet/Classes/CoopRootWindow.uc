@@ -14,6 +14,8 @@ event MutateNewChild( Window NewParent, out class<Window> DesignatedClass )
 	Super.MutateNewChild( NewParent, DesignatedClass );
 	if ( DesignatedClass==class'RevPersonaScreenInventory' )
 		DesignatedClass = class'CoopScreenInventory';
+	else if ( DesignatedClass==class'RevPersonaScreenAugmentations' && CoopLightMechPlayer(parentPawn)!=None )
+		DesignatedClass = class'CoopScreenLightMech'; // the Light Mech's (docs/LIGHT_MECH_CLASS.md)
 	else if ( DesignatedClass==class'RevPersonaScreenAugmentations' && CoopMechPlayer(parentPawn)!=None )
 		DesignatedClass = class'CoopScreenMech'; // a Mech's modules (docs/MECH_CLASS.md)
 	else if ( DesignatedClass==class'RevPersonaScreenAugmentations' )

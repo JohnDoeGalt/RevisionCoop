@@ -19,6 +19,17 @@ function SetModule( class<CoopMechAug> C, CoopMechPlayer M )
 	RefreshSkillInfo();
 }
 
+// Shorter rows (the Light Mech's fourteen modules in the space of the skills screen's eleven).
+function Compact()
+{
+	SetHeight( 21 );
+	winIcon.SetSize( 20, 20 );
+	winName.SetHeight( 21 );
+	winLevel.SetHeight( 21 );
+	winLevelIcons.SetPos( 229, 8 );
+	winPointsNeeded.SetHeight( 21 );
+}
+
 function int Lvl()
 {
 	return Mech.ModLevel( ModClass );

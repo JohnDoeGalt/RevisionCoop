@@ -20,14 +20,15 @@ var float PushMult;      // ... knockback
 var float SpeedMult;     // (the jump, mass and buoyancy: defaults, 0.9 and 1.8 times JC's; Revision
                          // derives the jump from the default: SkillManager, the Swimming skill)
 var float MechRaise;     // its body (bigger: DrawScale) stands this much taller than JC's (PrePivot)
-var class<CoopMechAug> Modules[12]; // in the screen's order: Arsenal, Chassis, Systems
+var class<CoopMechAug> Modules[15]; // in the screen's order: Arsenal, Chassis, Systems
 var travel int Salvage;
-var byte ModuleLevels[12];          // (to its machine) each module's level + 1 (0: not installed) ...
-var byte ModulesOn[12];             // ... and whether it is on: HR's aug list never reaches a client
-var byte PendingLevels[12];         // (host) levels + 1 from a save, for modules not made yet (HR
+var byte ModuleLevels[15];          // (to its machine) each module's level + 1 (0: not installed) ...
+var byte ModulesOn[15];             // ... and whether it is on: HR's aug list never reaches a client
+var byte PendingLevels[15];         // (host) levels + 1 from a save, for modules not made yet (HR
                                     // makes its augs after the restore: CoopSave.LoadPlayer)
-var byte PendingKeys[12];
+var byte PendingKeys[15];
 var int ScrapAug, ScrapUpgrade;     // salvage for a scrapped nano canister / upgrade canister
+var bool bRobotSalvage;             // strips destroyed robots for salvage (the Light Mech: Praxis instead)
 var float RebootAt;      // (host) a downed Mech's Failsafe Reboot (HostSecond)
 var bool bRebooted;      // (host) used on this map
 var Inventory Scrapped[8];          // (host) scrapped canisters, deleted a moment later (a client's
@@ -392,7 +393,7 @@ static function RobotSalvage( LevelInfo L, Pawn Robot )
 	else if ( Robot.IsA('CleanerBot') )
 		n = 2;
 	for ( P=L.PawnList; P!=None; P=P.nextPawn )
-		if ( CoopMechPlayer(P)!=None && P.Health>0 && VSize(P.Location - Robot.Location)<2000 )
+		if ( CoopMechPlayer(P)!=None && CoopMechPlayer(P).bRobotSalvage && P.Health>0 && VSize(P.Location - Robot.Location)<2000 )
 			CoopMechPlayer(P).AddSalvage( n, Robot.UnfamiliarName );
 }
 
@@ -519,6 +520,18 @@ function Landed( vector HitNormal )
 		PlaySound( Sound'DeusExSounds.Generic.MediumExplosion2', SLOT_None, 1.5,, 1024 );
 	}
 	Super.Landed( HitNormal );
+}
+
+// Its blades (CoopMechBlade): the level of the module that drives them (from its level 3 a cut kills a
+// character that has noticed nobody), and how much harder they hit doors.
+function int BladeLevel()
+{
+	return class'CoopMechAug'.static.LevelOf( Self, class'CoopMechAugBlades' );
+}
+
+function float BladeDoorMult()
+{
+	return class'CoopMechAug'.static.ValueOf( Self, class'CoopMechAugServo', 1.0 );
 }
 
 // Servo Arms: heavy things are lighter to its arms (for this check only).
@@ -777,6 +790,7 @@ defaultproperties
 	Modules(11)=Class'CoopMechAugHardening'
 	ScrapAug=6
 	ScrapUpgrade=4
+	bRobotSalvage=True
 	NoNanoText="A mechanical body has no place for nano-augmentation."
 	BuiltInText="It's built into your body."
 	SalvageText="Salvage +%d (%s): %d."

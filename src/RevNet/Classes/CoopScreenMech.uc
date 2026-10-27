@@ -54,6 +54,9 @@ function CreateSkillsList()
 			if ( First==None )
 				First = B;
 		}
+	if ( n>11 )
+		for ( i=0; i<n; i++ )
+			CoopMechButton(skillButtons[i]).Compact();
 	if ( First!=None )
 		SelectSkillButton( First );
 }

@@ -3,9 +3,13 @@
 # (the game must start a co-op game, with or without the rifle rework as picked). Steam must be
 # running. What it touches (RevNet.ini, RevNetUser.ini, Modes\settings.txt) is put back after;
 # the game runs windowed and is closed.
-#   powershell -NoProfile -File tools/run_launcher_test.ps1 [-Rifle 0|1] [-NetName CoopNet]
+#   powershell -NoProfile -File tools/run_launcher_test.ps1 [-Rifle 0|1] [-Agent 0|1|2] [-NetName CoopNet]
 #   -Rifle 0: "7.62 battle rifle, select fire" (RifleRework=1); 1: "The mode's own" (RifleRework=0)
-param([int]$Rifle = 1, [string]$NetName = "CoopNet", [int]$Wait = 50)
+#   -Agent (optional) "You play as": 0 JC's kind, 1 the Mech, 2 the Light Mech: RevNetUser.ini's
+#   Agent and the class the host plays as (the game's log) must follow.
+param([int]$Rifle = 1, [int]$Agent = -1, [string]$NetName = "CoopNet", [int]$Wait = 50)
+$agentKeys = @("", "Mech", "LightMech")
+$agentLogs = @("", "is a Mech", "is a Light Mech")
 $ErrorActionPreference = "Stop"
 $net = Join-Path "C:\Program Files (x86)\Steam\steamapps\common\Deus Ex\Revision" $NetName
 . (Join-Path $PSScriptRoot "desktop_helpers.ps1")
@@ -36,16 +40,20 @@ try {
 	$until = (Get-Date).AddSeconds(60)
 	while (-not $hostBtn.Current.IsEnabled -and (Get-Date) -lt $until) { Start-Sleep -Seconds 1 }
 	if (-not $hostBtn.Current.IsEnabled) { throw "Host stays disabled (is Steam running?)" }
-	$hc = [IntPtr](Ctl 117).Current.NativeWindowHandle
-	$cur = [int][LaunchU]::SendMessage($hc, 0x147, [IntPtr]::Zero, [IntPtr]::Zero)          # CB_GETCURSEL
-	while ($cur -ne $Rifle) {
-		$vk = if ($Rifle -gt $cur) { 0x28 } else { 0x26 }                                     # VK_DOWN / VK_UP
-		[LaunchU]::SendMessage($hc, 0x100, [IntPtr]$vk, [IntPtr]::Zero) | Out-Null
-		[LaunchU]::SendMessage($hc, 0x101, [IntPtr]$vk, [IntPtr]::Zero) | Out-Null
-		$next = [int][LaunchU]::SendMessage($hc, 0x147, [IntPtr]::Zero, [IntPtr]::Zero)
-		if ($next -eq $cur) { throw "the rifle combo did not move" }
-		$cur = $next
+	function Pick($id, $want) {
+		$hc = [IntPtr](Ctl $id).Current.NativeWindowHandle
+		$cur = [int][LaunchU]::SendMessage($hc, 0x147, [IntPtr]::Zero, [IntPtr]::Zero)      # CB_GETCURSEL
+		while ($cur -ne $want) {
+			$vk = if ($want -gt $cur) { 0x28 } else { 0x26 }                                 # VK_DOWN / VK_UP
+			[LaunchU]::SendMessage($hc, 0x100, [IntPtr]$vk, [IntPtr]::Zero) | Out-Null
+			[LaunchU]::SendMessage($hc, 0x101, [IntPtr]$vk, [IntPtr]::Zero) | Out-Null
+			$next = [int][LaunchU]::SendMessage($hc, 0x147, [IntPtr]::Zero, [IntPtr]::Zero)
+			if ($next -eq $cur) { throw "the combo $id did not move" }
+			$cur = $next
+		}
 	}
+	Pick 117 $Rifle
+	if ($Agent -ge 0) { Pick 116 $Agent; Write-Output ("plays as '{0}'" -f (Ctl 116).Current.Name) }
 	Start-Sleep -Seconds 1
 	$saved = (Get-Content (Join-Path $net "Modes\settings.txt")) -match '^Rifle='
 	Write-Output ("picked '{0}'; settings.txt {1}" -f (Ctl 117).Current.Name, $(if ($saved) { $saved } else { "(unchanged)" }))
@@ -53,6 +61,8 @@ try {
 	Start-Sleep -Seconds 3
 	$rework = ((Get-Content (Join-Path $net "RevNet.ini")) -match '^RifleRework=') -join ","
 	Write-Output "RevNet.ini $rework"
+	$agentLine = ((Get-Content (Join-Path $net "RevNetUser.ini")) -match '^Agent=') -join ","
+	if ($Agent -ge 0) { Write-Output "RevNetUser.ini $agentLine" }
 	Start-Sleep -Seconds $Wait
 	Write-Output ("launcher: '{0}'" -f (Ctl 114).Current.Name)
 }
@@ -62,13 +72,18 @@ finally {
 	Get-Process Revision -ErrorAction SilentlyContinue | Stop-Process -Force
 	if ($launcher -and -not $launcher.HasExited) { $launcher.CloseMainWindow() | Out-Null; Start-Sleep -Seconds 3; if (-not $launcher.HasExited) { $launcher.Kill() } }
 	$lines = @()
-	if (Test-Path $log) { $lines = @(Get-Content $log | Where-Object { $_ -match 'RevNet: co-op game True|RevNet: assault rifle|Critical' }) }
-	$lines | Select-Object -First 4
+	if (Test-Path $log) { $lines = @(Get-Content $log | Where-Object { $_ -match 'RevNet: co-op game True|RevNet: assault rifle|Critical|is a (Light )?Mech' }) }
+	$lines | Select-Object -First 5
 	$coop = @($lines | Where-Object { $_ -match 'co-op game True' }).Count -gt 0
 	$reworked = @($lines | Where-Object { $_ -match 'assault rifle' }).Count -gt 0   # (not $rifle: PowerShell names ignore case)
 	$ok = $coop -and ($reworked -eq ($Rifle -eq 0)) -and ($rework -eq "RifleRework=$(1 - $Rifle)")
+	if ($Agent -ge 0) {
+		$classed = @($lines | Where-Object { $_ -match 'is a (Light )?Mech' })
+		$asPicked = if ($Agent -eq 0) { $classed.Count -eq 0 } else { @($classed | Where-Object { $_ -match "$($agentLogs[$Agent])`$" }).Count -gt 0 }
+		$ok = $ok -and ($agentLine -eq "Agent=$($agentKeys[$Agent])") -and $asPicked
+	}
 	foreach ($f in $files) { $b = Join-Path $bak ($f -replace '\\', '_'); if (Test-Path $b) { Copy-Item $b (Join-Path $net $f) -Force } }
 	Remove-Item $log, (Join-Path $net "Running.ini") -ErrorAction SilentlyContinue
 	if (-not $coop) { Write-Output "the game logged no co-op start (a Steam error dialog, Recovery Mode?)" }
-	Write-Output $(if ($ok) { "PASS launcher rifle=$Rifle" } else { "FAIL launcher rifle=$Rifle" })
+	Write-Output $(if ($ok) { "PASS launcher rifle=$Rifle agent=$Agent" } else { "FAIL launcher rifle=$Rifle agent=$Agent" })
 }

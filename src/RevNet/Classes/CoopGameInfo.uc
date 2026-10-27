@@ -259,12 +259,14 @@ event Timer()
 
 function bool ApproveClass( class<PlayerPawn> SpawnClass )
 {
-	return SpawnClass==class'CoopPlayer' || SpawnClass==class'CoopMechPlayer';
+	return SpawnClass==class'CoopPlayer' || SpawnClass==class'CoopMechPlayer' || SpawnClass==class'CoopLightMechPlayer';
 }
 
-// The class the player picked in the launcher (CoopLaunch.Agent): the Mech, else JC's kind.
+// The class the player picked in the launcher (CoopLaunch.Agent): the Mech, the Light Mech, else JC's kind.
 function class<PlayerPawn> PlayerClass( string Options )
 {
+	if ( ParseOption( Options, "RevClass" )~="LightMech" )
+		return class'CoopLightMechPlayer';
 	if ( ParseOption( Options, "RevClass" )~="Mech" )
 		return class'CoopMechPlayer';
 	return class'CoopPlayer';

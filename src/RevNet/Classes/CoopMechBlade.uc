@@ -16,22 +16,21 @@ function texture GetWeaponHandTex()
 	return MechHandTex;
 }
 
-// Its damage is the Arm Blades module's (CoopMechPlayer.RefreshModules). From its
-// level 3 a character that has noticed nobody dies in one cut; Servo Arms hit doors
-// harder.
+// Its damage is the module's that drives the blades (CoopMechPlayer.RefreshModules:
+// the Mech's Arm Blades, the Light Mech's Cybernetic Arms). From its level 3 a character
+// that has noticed nobody dies in one cut; doors take BladeDoorMult.
 simulated function ProcessTraceHit( Actor Other, Vector HitLocation, Vector HitNormal, Vector X, Vector Y, Vector Z )
 {
 	local int Damage;
 	local float Mult;
 
 	Mult = 1.0;
-	if ( Role==ROLE_Authority && Pawn(Owner)!=None )
+	if ( Role==ROLE_Authority && CoopMechPlayer(Owner)!=None )
 	{
-		if ( ScriptedPawn(Other)!=None && ScriptedPawn(Other).Enemy==None
-			&& class'CoopMechAug'.static.LevelOf( Pawn(Owner), class'CoopMechAugBlades' )>=2 )
+		if ( ScriptedPawn(Other)!=None && ScriptedPawn(Other).Enemy==None && CoopMechPlayer(Owner).BladeLevel()>=2 )
 			Mult = 10;
 		else if ( DeusExMover(Other)!=None )
-			Mult = class'CoopMechAug'.static.ValueOf( Pawn(Owner), class'CoopMechAugServo', 1.0 );
+			Mult = CoopMechPlayer(Owner).BladeDoorMult();
 	}
 	Damage = HitDamage;
 	HitDamage = int(HitDamage * Mult);

@@ -20,10 +20,12 @@ Year Edition and Deus Ex: Revision (free for Deus Ex owners).
   `docs/netmode_audit.json` and `docs/REVNET_DEV.md`).
 - **Saves** are co-op checkpoints (`CoopSave`) with map memory (`CoopMapMemory`): flags,
   goals, notes, inventory per player, and the state of every map visited.
-- **Two classes.** Each player picks one in the launcher: JC's kind (nano-augmented) or
-  the Mech (`CoopMechPlayer`: a big augmented body with its own armour, a built-in arm cannon
+- **Three classes.** Each player picks one in the launcher: JC's kind (nano-augmented), the
+  Mech (`CoopMechPlayer`: a big augmented body with its own armour, a built-in arm cannon
   and blades that come out when drawn, plating, heavier and louder, and its own three upgrade
-  trees bought with salvage from robots; see `docs/MECH_CLASS.md`). Its armour
+  trees bought with salvage from robots; see `docs/MECH_CLASS.md`), or the Light Mech
+  (`CoopLightMechPlayer`: Adam Jensen's augmentations from Mankind Divided as fourteen modules
+  bought with Praxis, light, quick and quiet; see `docs/LIGHT_MECH_CLASS.md`). Its armour
   (`RevNetMech.u`) is built at install from the player's own game files (`MechParts.cs`), so
   the release carries none of the game's data.
 - **Steam relay** (`src/relay`): the launcher window (plain Win32, one exe) that creates a friends-only Steam lobby and
