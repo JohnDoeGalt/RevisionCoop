@@ -64,10 +64,23 @@ framework now has room for fifteen modules (the screen's rows shorten past eleve
 read their driving module from the player (`BladeLevel`, `BladeDoorMult`), and only the Mech
 strips robots (`bRobotSalvage`).
 
-## The look (next)
+## The look
 
-Jensen's: black trench coat with a high collar, black and gold mechanical arms, retractable lens
-shades, short dark hair and beard. Built as the Mech's: JC's trench body (it has every player
-animation) in our own skins, with our own parts over it, made at install from the player's own
-game files; no game art ships. Concept art first (grounded in the body and reference art), the
-user picks, then the build.
+Jensen's (the user: "the model should be based off of him too"): JC's trench body (`GM_Trench`, it
+has every player animation) in our own skins (`tools/jensen_bake.py`, into RevNetMech with the
+Mech's art, `CoopLightMechPlayer.LightSkin`): a black leather trench coat with thin gold trim along
+its edges (slots 1 and 5, one texture, palette index 0 unused for the masked tails), black trousers
+(2), a black ribbed turtleneck (4); the head and hands (0): a head sheet made for it
+(`art/lightmech/jensen_head.png`, Z-Image Turbo: short spiky dark hair, trimmed beard and goatee,
+shades; its front and right profile) projected by each texel's 3D point against the head's
+landmarks (eyes from the lens faces), and black carbon prosthetic hands with gold seams. The shades
+(6, 7) are the game's own. Every machine puts the skins on itself (`CoopBodySkins`: RevNetMech isn't
+in the package map). Without RevNetMech.u the Light Mech wears JC's own.
+
+Reference and concepts (not shipped): `build/concepts/jensen` (the reference art: Wikipedia's two
+images; the edit model's attempts over JC's body barely edited; the text-to-image head sheets and
+turnarounds were good and gave the look). Measured in the Gallery (`?GalleryWho=LightMech`):
+`build/shots/lightmech_look`.
+
+Next: the arm blades out past the hands on others' screens (parts on the trench body, as
+`BarrettBlade` is on the Mech's).

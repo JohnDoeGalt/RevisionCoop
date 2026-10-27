@@ -14,6 +14,7 @@ class CoopLightMechPlayer extends CoopMechPlayer;
 var int PraxisPoints;           // skill points for one Praxis
 var travel int PointsToPraxis;  // skill points toward the next
 var float HurtAt;               // (host) when it was last hurt (Sentinel RX)
+var CoopBodySkins BodySkins;    // its look, on this machine
 var localized string PraxisText;
 
 replication
@@ -22,9 +23,11 @@ replication
 		ClientVision, ClientDash;
 }
 
-// The body: JC's trench coat, his face as the player picked it.
+// The body: JC's trench body in Adam Jensen's look (LightSkin: RevNetMech, tools/jensen_bake.py);
+// without RevNetMech.u, JC's own, his face as the player picked it.
 function MechLook()
 {
+	local Texture T;
 	local int i;
 
 	Mesh = default.Mesh;
@@ -32,17 +35,48 @@ function MechLook()
 	for ( i=0; i<8; i++ )
 	{
 		NewSkins[i] = class'CoopPlayer'.default.MultiSkins[i];
+		if ( i==0 )
+			NewSkins[i] = JCTex[PlayerSkin];
+		T = LightSkin( i );
+		if ( T!=None )
+			NewSkins[i] = T;
 		MultiSkins[i] = NewSkins[i];
 	}
-	NewSkins[0] = JCTex[PlayerSkin];
-	MultiSkins[0] = NewSkins[0];
 	Texture = class'CoopPlayer'.default.Texture;
 	CarcassType = default.CarcassType;
 }
 
-// (No parts of its own yet.)
+// The body's skin in slot i in Jensen's look (None: the slot keeps JC's; the shades are the game's).
+static function Texture LightSkin( int i )
+{
+	local string N;
+
+	switch ( i )
+	{
+		case 0: N = "JensenSkin"; break;      // head and hands
+		case 1:
+		case 5: N = "JensenCoat"; break;      // the coat and its tails
+		case 2: N = "JensenPants"; break;
+		case 4: N = "JensenShirt"; break;
+		default: return None;
+	}
+	return Texture( DynamicLoadObject( "RevNetMech." $ N, class'Texture', true ) );
+}
+
+// Its look on every machine (CoopBodySkins: the host's skins can't reach clients).
 simulated function MountParts()
 {
+	local int i;
+
+	if ( BodySkins!=None )
+		return;
+	BodySkins = Spawn( class'CoopBodySkins', Self,, Location );
+	if ( BodySkins==None )
+		return;
+	BodySkins.Body = Self;
+	BodySkins.BodyMesh = default.Mesh;
+	for ( i=0; i<8; i++ )
+		BodySkins.Skins[i] = LightSkin( i );
 }
 
 // Built in: the arm blades only (and no Mech's arm cannon: a record from a Mech game).

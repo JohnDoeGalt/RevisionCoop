@@ -150,6 +150,8 @@ function bool Pose( string Name, int Look, int Angle )
 
 	if ( Name=="Mech" )
 		return PoseMech( Look, Angle );
+	if ( Name=="LightMech" )
+		return PoseLightMech( Look, Angle );
 	if ( Look==2 )
 		return false;
 	bHDTP = Look==1;
@@ -204,6 +206,44 @@ function bool Pose( string Name, int Look, int Angle )
 	else
 		Label = Name @ "plain";
 	Label = Label @ Model.Mesh.Name @ "angle" @ Angle;
+	return true;
+}
+
+// The Light Mech as CoopLightMechPlayer.MechLook dresses it (Adam Jensen's look on JC's trench body),
+// standing (Look 0) or mid-shot (1), from the front, three-quarter and the back.
+function bool PoseLightMech( int Look, int Angle )
+{
+	local rotator Face;
+	local int i;
+
+	if ( Look==2 )
+		return false;
+	if ( Model==None )
+		Model = Spawn( class'CoopLookDummy',,, Spot );
+	Model.Mesh = class'CoopLightMechPlayer'.default.Mesh;
+	Model.DrawScale = class'CoopLightMechPlayer'.default.DrawScale;
+	Model.Texture = class'CoopPlayer'.default.Texture;
+	for ( i=0; i<8; i++ )
+	{
+		Model.MultiSkins[i] = class'CoopLightMechPlayer'.static.LightSkin( i );
+		if ( Model.MultiSkins[i]==None )
+			Model.MultiSkins[i] = class'CoopPlayer'.default.MultiSkins[i];
+	}
+	Model.SetLocation( Floor + vect(0,0,1) * class'CoopLightMechPlayer'.default.CollisionHeight );
+	Model.PrePivot = vect(0,0,0);
+	Face = View;
+	Face.Pitch = 0;
+	Face.Yaw += 32768 - Angle * 12288;
+	Model.SetRotation( Face );
+	if ( Look==1 )
+	{
+		Model.AnimSequence = 'Shoot';
+		Model.AnimFrame = 0.4;
+		Model.AnimRate = 0;
+	}
+	else
+		Model.LoopAnim( 'BreatheLight' );
+	Label = "LightMech" @ Eval2( Look==1, "shoot", "stand" ) @ "skins" @ Model.MultiSkins[0] @ Model.MultiSkins[1] @ "angle" @ Angle;
 	return true;
 }
 
