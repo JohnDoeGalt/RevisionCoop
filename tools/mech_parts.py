@@ -425,28 +425,43 @@ def storm_parts(F, L, T, m, texdir):
 
     # On the right forearm (the gun's frame is the forearm's), its top the side that faces up as it shoots;
     # level as it shoots (the user's ask): the forearm points up in the Shoot frames, so the gun is turned
-    # down by as much about the wrist's pin, and lifted to clear the hand.
+    # down by as much about the wrist's pin, then seated as low as it goes on the arm (the user's ask: low,
+    # "practically attached to his forearm", "it can clip a little"): its underside sinks into the arm's
+    # top by CLIP at most. (The forearm and hand move as one, so the arm in the rest frame is the arm in
+    # every frame, in the gun's frame.)
     e, w, ax, up = forearm_frame(F, L)
     R = F[REST]
     ei = [i for i in L["rarm"] if 3 < R[i, 2] < 9]
     wi = [i for i in L["rarm"] if -7 < R[i, 2] < -3]
     rise = np.degrees(np.mean([math.asin(norm(F[f][wi].mean(0) - F[f][ei].mean(0))[2]) for f in range(100, 106)]))
+    D = R[L["rarm"]] - e
+    arm = np.stack([D @ ax, D @ -np.cross(up, ax), D @ up], -1)
+    CLIP = 1.2
+    C, B = mech_storm.CASS, mech_storm.BRICK
 
     def level(V, G):
         g = np.isin(np.asarray(G), ("gun", "brick"))
         V = V.copy()
         V[g] = mech_storm.spin(V[g], rise)
-        over = g & (V[:, 0] > mech_storm.PIVOT[0] + 0.5)
-        V[g, 2] += max(0.0, 1.9 - V[over, 2].min())         # (the hand's top: about 1.6)
+        sink = []                       # how far the arm's top is above the underside, at points along it
+        for x0, x1, zb, hw in ((C["x0"], C["x1"], C["z"] - C["h"], C["h"]), (B["x0"], B["x1"], B["z0"], B["y"])):
+            for x in np.linspace(x0, x1, 17):
+                P = mech_storm.spin(np.array([[x, 0.0, zb]]), rise)[0]
+                below = arm[(np.abs(arm[:, 0] - P[0]) < 1.0) & (np.abs(arm[:, 1]) < hw + 0.3)]
+                if len(below):
+                    sink.append(below[:, 2].max() - P[2])
+        dz = max(sink) - CLIP
+        V[g, 2] += dz
+        print("cannon: turned down %.1f degrees to shoot level, raised %+.2f: into the arm %.2f at most, "
+              "%.2f over the wrist" % (rise, dz, CLIP, -(sink[0] - dz)))
         return V
-    print("cannon: turned down %.1f degrees to shoot level" % rise)
     placed("cannon", "BarrettCannon", mech_storm.THIRD, e, ax, up, dict(group="rarm", zmin=-8, zmax=8), level)
     # Behind the right shoulder blade: muzzle down, its underside (the yoke's side) on the back.
     x, z = 4.8, 15.0
     back = 40 - mech_art.ray(T, (x, 40, z), (0, -1, 0))
     centre = np.array([x, back, z])
     down, out_ = np.array([0.0, 0.0, -1.0]), np.array([0.0, 1.0, 0.0])
-    gx, gz = (mech_storm.BRICK["x0"] + mech_storm.CASS["x1"]) / 2, 2.7
+    gx, gz = (mech_storm.BRICK["x0"] + mech_storm.CASS["x1"]) / 2, mech_storm.CASS["z"] - mech_storm.CASS["h"]
     placed("cannon_back", "BarrettCannonBack", mech_storm.BACK, centre - gx * down - gz * out_, down, out_,
            dict(group="torso", zmin=8, zmax=24))
     return out, mech_storm.view_mesh(p), arm_mesh(F, L, m, mech_storm.frames_of)

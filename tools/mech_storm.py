@@ -29,15 +29,18 @@ from mech_parts import Part, face_size, shelf_pack
 
 WRIST = 13.8                                   # the forearm's armour ends here (the body's forearm: 14.25)
 PIVOT = (14.1, 0.0)                            # (x, z) the gun spins about (a lateral pin through the wrist)
-CASS = dict(x0=12.6, x1=20.6, h=1.3, c=0.22, z=4.0)  # the barrel block (deployed): slender, square in section
-BRICK = dict(x0=8.8, x1=12.6, y=1.5, z0=2.7, z1=5.3)   # the magazine on the barrel block's back
+# The barrel block (deployed): slender, square in section, its underside down on the back of the hand (the
+# hand's top: 1.6), dipping into the wrist (2.7): low over its mount, for less leverage in the recoil (the
+# user's ask, 2026-10-26: "practically attached to his forearm"; it may clip a little).
+CASS = dict(x0=12.6, x1=20.6, h=1.3, c=0.22, z=3.0)
+BRICK = dict(x0=8.8, x1=12.6, y=1.5, z0=1.7, z1=4.3)   # the magazine on the barrel block's back
 RIM, RECESS = 0.22, 0.25                       # the muzzle's rim; how far the bore plate is set in
 GRID, BORE = 3, 0.22                           # the bore plate's 3 x 3 cells; a bore's radius (about 9 mm across)
 NINE = tuple((i, j) for i in range(3) for j in range(3))   # the bored cells: nine, or
 FIVE = ((0, 0), (2, 0), (1, 1), (0, 2), (2, 2))            # five, as a die shows five (the user's latest)
 DICE = FIVE
 BORE_DEPTH, NOSE = 1.0, 0.4                    # a bore's depth; a round's nose
-GRAB = np.array([10.7, 0.4, 7.9])              # the left fist's centre, on the brick's handle
+GRAB = np.array([10.7, 0.4, BRICK["z1"] + 2.6])  # the left fist's centre, on the brick's handle
 SHARED = ("bore", "cap", "nose")               # regions sharing one texture cell each
 SHEET = {"casing": 0, "chevron": 0, "brick": 1}   # three skins (else 2): byte UVs, so each skin's
                                                  # 256 steps go further
@@ -179,12 +182,13 @@ def build():
                 p.add_tri(base[k], base[(k + 1) % 8], tip, "nose")
     # The muzzle as one flat face, the bores painted on (the far-off copies, THIRD and BACK).
     p.add_quad(X(face_x, (-r, zc - r)), X(face_x, (r, zc - r)), X(face_x, (r, zc + r)), X(face_x, (-r, zc + r)), "muzzle")
-    # Under it: a spine, and the yoke down to the wrist's pin (outside the trunnions).
-    block(p, (12.2, -1.1, 2.3), (14.8, 1.1, zc - h), "frame")
-    block(p, (13.4, -3.0, 2.3), (14.8, 3.0, 2.7), "frame")
+    # Under it: a spine, and the yoke down to the wrist's pin (outside the trunnions): a short post.
+    zb = zc - h
+    block(p, (12.2, -1.1, zb - 0.4), (14.8, 1.1, zb), "frame")
+    block(p, (13.4, -3.0, zb - 0.4), (14.8, 3.0, zb), "frame")
     for s in (1, -1):
         lo, hi = sorted((s * 2.6, s * 3.0))
-        block(p, (13.4, lo, -0.8), (14.8, hi, 2.3), "frame")
+        block(p, (13.4, lo, -0.8), (14.8, hi, zb - 0.4), "frame")
     tag(p, "gun")
     # The brick: a big box on the barrel block's back, a handle on top.
     b = BRICK

@@ -131,7 +131,9 @@ loading a Mech's record doesn't get them.
 - **Arm Cannon** (`CoopMechCannon`, the mini-crossbow's code switched to automatic instant
   hits), the user's design: a Metal Storm gun, a slender casing over the back of the hand
   with five barrels as a die shows five (10 mm bores), a brick magazine on its back, carried
-  behind the right shoulder blade; level when aimed. 7.62 mm rounds, the assault rifle's ammo;
+  behind the right shoulder blade. It sits low, its underside on the back of the hand and a short post
+  down to the wrist's pin (less leverage in the recoil: the user's ask); level when aimed, seated on
+  the arm as low as it goes and sinking a little into the fist (the arm points up as he shoots). 7.62 mm rounds, the assault rifle's ammo;
   Heavy Weapons skill; 5 damage and a 40-round magazine at level 1, up to 9 and 80. Fire modes
   (shotgun, full auto, minigun speed): backlog.
 
