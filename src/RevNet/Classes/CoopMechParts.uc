@@ -3,8 +3,8 @@
 //
 // The Mech's own parts (RevNetMech, docs/MECH_CLASS.md phase 3) drawn over its body:
 // BarrettParts always (shoulder plates, vest, steel jaw, forearm housings that end at the
-// wrists); BarrettCannon while it holds its arm cannon, BarrettBlade while it holds its arm
-// blades (When). A parts mesh has the body's animations frame for frame (its vertices ride the
+// wrists); BarrettCannon while it holds its arm cannon (BarrettCannonBack, the same gun behind
+// its shoulder blade, while it doesn't: bUnless), BarrettBlade while it holds its arm blades (When). A parts mesh has the body's animations frame for frame (its vertices ride the
 // body's: tools/mech_parts.py), so the parts follow the body by copying its animation every
 // tick, blend channels too (as UT's shield belt effect follows its owner). Each machine makes
 // its own for each Mech (CoopMechPlayer.MountParts): nothing replicates (a pawn's Weapon does).
@@ -16,11 +16,12 @@ class CoopMechParts extends Actor;
 var Actor Body;
 var Mesh BodyMesh;          // the body these parts fit (another look on it: hidden)
 var class<Weapon> When;     // drawn only while the body holds one of these (None: always)
+var bool bUnless;           // drawn only while it doesn't
 var bool bShow;             // (CoopTestGallery) drawn whatever it holds
 var Texture Skins[8];       // (the always-drawn parts) the body's own skins, put on it here: the
                             // host's can't reach clients (RevNetMech, each PC's own, isn't sent)
 
-static function CoopMechParts Mount( Actor Body, Mesh Fits, string MeshName, optional class<Weapon> When )
+static function CoopMechParts Mount( Actor Body, Mesh Fits, string MeshName, optional class<Weapon> When, optional bool bUnless )
 {
 	local Mesh M;
 	local CoopMechParts P;
@@ -38,6 +39,7 @@ static function CoopMechParts Mount( Actor Body, Mesh Fits, string MeshName, opt
 		P.Body = Body;
 		P.BodyMesh = Fits;
 		P.When = When;
+		P.bUnless = bUnless;
 		if ( When==None )
 			for ( i=0; i<8; i++ )
 				P.Skins[i] = class'CoopMechPlayer'.static.MechSkin( i );
@@ -91,7 +93,7 @@ simulated function Follow()
 	P = PlayerPawn(Body);
 	bHidden = Body.bHidden || Body.Mesh!=BodyMesh || Body.DrawType!=DT_Mesh
 		|| (P!=None && Viewport(P.Player)!=None && !P.bBehindView)
-		|| (When!=None && !bShow && (Pawn(Body)==None || Pawn(Body).Weapon==None || !ClassIsChildOf( Pawn(Body).Weapon.Class, When )));
+		|| (When!=None && !bShow && bUnless == (Pawn(Body)!=None && Pawn(Body).Weapon!=None && ClassIsChildOf( Pawn(Body).Weapon.Class, When )));
 }
 
 defaultproperties

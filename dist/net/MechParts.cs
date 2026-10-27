@@ -62,6 +62,7 @@ public static class MechParts
 			}
 		}
 
+		public int U16() { int v = BitConverter.ToUInt16(D, P); P += 2; return v; }
 		public uint U32() { uint v = BitConverter.ToUInt32(D, P); P += 4; return v; }
 		public int I32() { int v = BitConverter.ToInt32(D, P); P += 4; return v; }
 		public float F32() { float v = BitConverter.ToSingle(D, P); P += 4; return v; }
@@ -101,8 +102,9 @@ public static class MechParts
 
 		int Lazy() { if (Version > 61) I32(); return CI(); }
 
-		// A Mesh or LodMesh export: where its vertices are, and the values after them.
-		public Mesh ReadMesh(string name)
+		// A Mesh or LodMesh export: where its vertices and triangles are, and the values after them; with
+		// lod, a LodMesh's faces, wedges and materials too (the body's).
+		public Mesh ReadMesh(string name, bool lod = false)
 		{
 			int k = ExportNames.FindIndex(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
 			if (k < 0) throw new Exception("no " + name + " in the package");
@@ -113,7 +115,10 @@ public static class MechParts
 			m.VertsCount = Lazy();
 			m.VertsOffset = P;
 			P += m.VertsCount * 8;
-			int cnt = Lazy(); P += cnt * 20;                       // Tris (count first: P += f() reads P before f moves it)
+			m.TrisCount = Lazy();                                  // Tris
+			m.TrisOffset = P;
+			P += m.TrisCount * 20;
+			int cnt;
 			int seqs = CI();
 			for (int i = 0; i < seqs; i++)
 			{
@@ -134,14 +139,36 @@ public static class MechParts
 			I32(); I32();
 			m.Scale = new double[] { F32(), F32(), F32() };
 			m.Origin = new double[] { F32(), F32(), F32() };
+			if (!lod) return m;
+			I32(); I32(); I32();                                   // RotOrigin
+			I32(); I32();                                          // CurPoly, CurVertex
+			if (Version == 65) F32();
+			else if (Version >= 66) { cnt = CI(); P += cnt * 4; }  // TextureLOD
+			cnt = CI(); P += cnt * 2;                              // CollapsePointThus
+			cnt = CI(); P += cnt * 2;                              // FaceLevel
+			cnt = CI();
+			m.Faces = new int[cnt, 4];
+			for (int i = 0; i < cnt; i++) for (int j = 0; j < 4; j++) m.Faces[i, j] = U16();
+			cnt = CI(); P += cnt * 2;                              // CollapseWedgeThus
+			cnt = CI();
+			m.Wedges = new int[cnt, 3];
+			for (int i = 0; i < cnt; i++) { m.Wedges[i, 0] = U16(); m.Wedges[i, 1] = D[P++]; m.Wedges[i, 2] = D[P++]; }
+			cnt = CI();
+			m.MatTex = new int[cnt];
+			for (int i = 0; i < cnt; i++) { U32(); m.MatTex[i] = I32(); }
+			cnt = CI(); P += cnt * 8;                              // SpecialFaces
+			I32();                                                 // ModelVerts
+			m.SpecialVerts = I32();
 			return m;
 		}
 	}
 
 	class Mesh
 	{
-		public int VertsCount, VertsOffset, FrameVerts, Frames;
+		public int VertsCount, VertsOffset, TrisCount, TrisOffset, FrameVerts, Frames, SpecialVerts;
 		public double[] Scale, Origin;
+		public int[,] Faces, Wedges;     // (a LodMesh's) wedges per face and its material; vertex and UV per wedge
+		public int[] MatTex;             // each material's skin
 	}
 
 	static double D(object o) { return Convert.ToDouble(o, System.Globalization.CultureInfo.InvariantCulture); }
@@ -166,7 +193,7 @@ public static class MechParts
 			js.MaxJsonLength = int.MaxValue;
 			var B = (Dictionary<string, object>)js.DeserializeObject(File.ReadAllText(bindingsPath));
 			var body = new Package(bodyPackage);
-			Mesh bm = body.ReadMesh((string)B["body"]);
+			Mesh bm = body.ReadMesh((string)B["body"], true);
 			var bs = (object[])B["scale"];
 			var bo = (object[])B["origin"];
 			if (bm.FrameVerts != Convert.ToInt32(B["frame_verts"]) || bm.Frames != Convert.ToInt32(B["frames"])
@@ -227,6 +254,11 @@ public static class MechParts
 					}
 				}
 			}
+			if (B.ContainsKey("arm"))
+			{
+				string why = FillArm((Dictionary<string, object>)B["arm"], bm, F, tpl, outData);
+				if (why != null) return why;
+			}
 			File.WriteAllBytes(outPath, outData);
 			return null;
 		}
@@ -235,5 +267,61 @@ public static class MechParts
 			LastError = e.ToString();
 			return e.Message;
 		}
+	}
+
+	// The Mech's own arms in its view (StormArm): its triangles are the body's faces (each corner's vertex
+	// and UV from its wedge, the face's skin), its frames frame A["frame"]'s vertices through each frame's
+	// maps. Same steps as tools/mech_art.py fill_arm (its bytes must match).
+	static string FillArm(Dictionary<string, object> A, Mesh bm, double[,,] F, Package tpl, byte[] outData)
+	{
+		string name = (string)A["mesh"];
+		Mesh tm = tpl.ReadMesh(name);
+		var verts = (object[])A["verts"];
+		var groups = (object[])A["groups"];
+		var faces = (object[])A["faces"];
+		var xforms = (object[])A["xforms"];
+		int nv = verts.Length, nf = xforms.Length, frame = Convert.ToInt32(A["frame"]);
+		if (tm.TrisCount != faces.Length || tm.VertsCount != nf * nv)
+			return "the template's " + name + " doesn't match its bindings";
+		var index = new Dictionary<int, int>();
+		for (int i = 0; i < nv; i++) index[Convert.ToInt32(verts[i])] = i;
+		for (int t = 0; t < faces.Length; t++)
+		{
+			int fi = Convert.ToInt32(faces[t]);
+			int at = tm.TrisOffset + t * 20;
+			for (int c = 0; c < 3; c++)
+			{
+				int w = bm.Faces[fi, c];
+				int v = index[bm.Wedges[w, 0] + bm.SpecialVerts];
+				outData[at + c * 2] = (byte)(v & 0xFF);
+				outData[at + c * 2 + 1] = (byte)((v >> 8) & 0xFF);
+				outData[at + 6 + c * 2] = (byte)bm.Wedges[w, 1];
+				outData[at + 7 + c * 2] = (byte)bm.Wedges[w, 2];
+			}
+			for (int b = 12; b < 16; b++) outData[at + b] = 0;     // PolyFlags
+			Array.Copy(BitConverter.GetBytes(bm.MatTex[bm.Faces[fi, 3]]), 0, outData, at + 16, 4);
+		}
+		for (int f = 0; f < nf; f++)
+		{
+			var per = (object[])xforms[f];
+			for (int q = 0; q < nv; q++)
+			{
+				var M = (object[])per[Convert.ToInt32(groups[q])];
+				int v = Convert.ToInt32(verts[q]);
+				double x = F[frame, v, 0], y = F[frame, v, 1], z = F[frame, v, 2];
+				int at = tm.VertsOffset + (f * nv + q) * 8;
+				for (int a = 0; a < 3; a++)
+				{
+					double pos = ((D(M[4 * a]) * x + D(M[4 * a + 1]) * y) + D(M[4 * a + 2]) * z) + D(M[4 * a + 3]);
+					double r = Math.Round(pos * 256);
+					short s = (short)Math.Max(-32768, Math.Min(32767, r));
+					outData[at + a * 2] = (byte)(s & 0xFF);
+					outData[at + a * 2 + 1] = (byte)((s >> 8) & 0xFF);
+				}
+				outData[at + 6] = 0;
+				outData[at + 7] = 0;
+			}
+		}
+		return null;
 	}
 }

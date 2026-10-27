@@ -14,7 +14,7 @@
 class CoopMechPlayer extends CoopPlayer;
 
 var Texture MechSkins[8];  // the body's skins (MechLook: Gunther Hermann's)
-var CoopMechParts Parts[3]; // its own parts, drawn on this machine (MountParts)
+var CoopMechParts Parts[4]; // its own parts, drawn on this machine (MountParts)
 var float StunMult;      // damage taken from prods and batons
 var float PushMult;      // ... knockback
 var float SpeedMult;     // (the jump, mass and buoyancy: defaults, 0.9 and 1.8 times JC's; Revision
@@ -115,8 +115,8 @@ simulated function PostNetBeginPlay()
 	MountParts();
 }
 
-// Its parts on this machine: always, the arm cannon out with the cannon in hand, the blades
-// out with the blades in hand (CoopMechParts).
+// Its parts on this machine: always, the arm cannon on the hand with the cannon in hand (else
+// behind the shoulder blade), the blades out with the blades in hand (CoopMechParts).
 simulated function MountParts()
 {
 	if ( Parts[0]!=None )
@@ -124,7 +124,8 @@ simulated function MountParts()
 	Parts[0] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettParts" );
 	Parts[1] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettCannon", class'CoopMechCannon' );
 	Parts[2] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettBlade", class'CoopMechBlade' );
-	Log( "RevNet: a Mech's parts on this machine (its role" @ int(Role) $ "):" @ (Parts[0]!=None) @ (Parts[1]!=None) @ (Parts[2]!=None), 'RevNet' );
+	Parts[3] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettCannonBack", class'CoopMechCannon', true );
+	Log( "RevNet: a Mech's parts on this machine (its role" @ int(Role) $ "):" @ (Parts[0]!=None) @ (Parts[1]!=None) @ (Parts[2]!=None) @ (Parts[3]!=None), 'RevNet' );
 }
 
 function TravelPostAccept()

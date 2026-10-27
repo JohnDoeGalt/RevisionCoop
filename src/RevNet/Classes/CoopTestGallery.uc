@@ -18,7 +18,7 @@ var bool bShotPending;
 var rotator View;
 var vector Spot, Floor;
 var CoopLookDummy Model, Lamp;
-var CoopMechParts Parts[3];
+var CoopMechParts Parts[4];
 var string Label;
 
 const Looks = 3;   // plain, HDTP (the Mech: standing, cannon out, blades out)
@@ -253,12 +253,15 @@ function bool PoseMech( int Look, int Angle )
 		Parts[0] = class'CoopMechParts'.static.Mount( Model, Model.Mesh, "BarrettParts" );
 		Parts[1] = class'CoopMechParts'.static.Mount( Model, Model.Mesh, "BarrettCannon", class'Weapon' );
 		Parts[2] = class'CoopMechParts'.static.Mount( Model, Model.Mesh, "BarrettBlade", class'Weapon' );
+		Parts[3] = class'CoopMechParts'.static.Mount( Model, Model.Mesh, "BarrettCannonBack", class'Weapon' );
 	}
 	// Standing: arms in; mid-shot: the cannon out; mid-swing: the blades out.
 	if ( Parts[1]!=None )
 		Parts[1].bShow = Look==1;
 	if ( Parts[2]!=None )
 		Parts[2].bShow = Look==2;
+	if ( Parts[3]!=None )
+		Parts[3].bShow = Look!=1;      // the cannon behind the shoulder blade unless it is out
 	Label = "Mech" @ Eval2( Look==1, "shoot", Eval2( Look==2, "attack", "stand" ) ) @ "parts" @ (Parts[0]!=None) @ (Parts[1]!=None) @ (Parts[2]!=None) @ "angle" @ Angle;
 	return true;
 }

@@ -88,14 +88,20 @@ BOX = struct.pack("<6fB", -16000, -16000, -1000, 16000, 16000, 27000, 1)
 SPHERE = struct.pack("<4f", 0, 0, 13000, 22000)
 
 
+WHOLE = ("StormView",)      # meshes made here with no game data in them (tools/mech_storm.py): kept whole
+FROM_BODY = ("StormArm",)   # the body's own faces (mech_parts.arm_mesh): their triangles emptied too
+
+
 def template(full, out):
     pkg = ue1mesh.Package(full)
     d = bytearray(pkg.d)
     for e in pkg.exports:
-        if pkg.class_name(e["cls"]) != "Mesh":
+        if pkg.class_name(e["cls"]) != "Mesh" or e["name"] in WHOLE:
             continue
         m = pkg.read_mesh(e["name"])
         d[m["verts_off"]:m["verts_off"] + m["verts_count"] * 8] = bytes(m["verts_count"] * 8)
+        if e["name"] in FROM_BODY:
+            d[m["tris_off"]:m["tris_off"] + m["tris_count"] * 20] = bytes(m["tris_count"] * 20)
         for off in (m["prim_bounds"], m["mesh_bounds"]):
             d[off:off + 41] = BOX + SPHERE
         off, n = m["boxes"]
@@ -125,8 +131,38 @@ def fill(template_path, bindings, out, body_package=None):
         out4 = np.zeros(raw.shape[:2] + (4,), "<i2")
         out4[:, :, :3] = raw
         d[tm["verts_off"]:tm["verts_off"] + out4.nbytes] = out4.tobytes()
+    if "arm" in B:
+        fill_arm(B["arm"], F, m, t, d)
     open(out, "wb").write(bytes(d))
     print("filled", out)
+
+
+def fill_arm(A, F, bm, t, d):
+    """The Mech's own arms in its view (StormArm, mech_parts.arm_mesh) from this PC's body: its triangles (the
+    body's faces: each corner's vertex and UV from its wedge, the face's skin) and its frames (frame A["frame"]'s
+    vertices through each frame's maps, summed in MechParts.cs's order)."""
+    import numpy as np
+    tm = t.read_mesh(A["mesh"])
+    sv = bm["special_verts"]
+    index = {v: i for i, v in enumerate(A["verts"])}
+    tris = bytearray()
+    for fi in A["faces"]:
+        f = bm["faces"][fi]
+        w = [bm["wedges"][k] for k in f[:3]]
+        tris += struct.pack("<3H6BIi", index[w[0][0] + sv], index[w[1][0] + sv], index[w[2][0] + sv],
+                            w[0][1], w[0][2], w[1][1], w[1][2], w[2][1], w[2][2], 0, bm["materials"][f[3]][1])
+    if len(tris) != tm["tris_count"] * 20 or tm["verts_count"] != len(A["xforms"]) * len(A["verts"]):
+        raise ValueError("template mesh %s doesn't match its bindings" % A["mesh"])
+    d[tm["tris_off"]:tm["tris_off"] + len(tris)] = tris
+    P = F[A["frame"]][A["verts"]]
+    g = np.array(A["groups"])
+    out = np.zeros((len(A["xforms"]), len(P), 4), "<i2")
+    for f, per in enumerate(A["xforms"]):
+        M = np.array(per)[g]
+        for a in range(3):
+            pos = ((M[:, 4 * a] * P[:, 0] + M[:, 4 * a + 1] * P[:, 1]) + M[:, 4 * a + 2] * P[:, 2]) + M[:, 4 * a + 3]
+            out[f, :, a] = np.rint(pos * 256)
+    d[tm["verts_off"]:tm["verts_off"] + out.nbytes] = out.tobytes()
 
 
 def triangles(m, V):

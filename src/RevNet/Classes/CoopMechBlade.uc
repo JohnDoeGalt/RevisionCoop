@@ -39,7 +39,9 @@ simulated function ProcessTraceHit( Actor Other, Vector HitLocation, Vector HitN
 	HitDamage = Damage;
 }
 
-// Others see the blades out of its forearms (CoopMechParts), not a knife in its hand.
+// Others see the blades out of its forearms (CoopMechParts), not a knife in its hand: no
+// third-person model at all. The engine draws a pawn's selected item's ThirdPersonMesh at its
+// hand, and the "invisible" InvisibleWeapon is drawn too, as pale scraps floating there.
 function bool Facelift( bool bOn )
 {
 	local bool ret;
@@ -60,7 +62,7 @@ defaultproperties
 {
 	MechHandTex=Texture'DeusExCharacters.Skins.MilitaryBotTex1'
 	HitDamage=16
-	ThirdPersonMesh=LodMesh'DeusExItems.InvisibleWeapon'
+	ThirdPersonMesh=None
 	ItemName="Arm Blades"
 	ItemArticle="the"
 	beltDescription="BLADES"

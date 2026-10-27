@@ -51,8 +51,8 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   row of mag pouches with steel snaps across the belly, MOLLE rows, a channel for the spine), a
   black belt with a steel buckle and pouches, gunmetal knee pads on the knees, combat boots,
   plated gloves. His hands show;
-  the arm cannon comes out over the right hand only while he holds it; blades come out past
-  both fists only while he holds them.
+  the arm cannon rides behind his right shoulder blade and lies over the right hand only while
+  he holds it; blades come out past both fists only while he holds them.
 - **Body:** Gunther Hermann's mesh (`DeusExCharacters.GM_DressShirt_B`, the game's big man) in
   the Mech's own skins (`MechSkin`: slot 0 suit and arms, 1 legs, 3 face and hands; 512x512),
   drawn 6% bigger (`DrawScale` 1.06, raised by `MechRaise`); without `RevNetMech.u`, Gunther's
@@ -72,8 +72,9 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   the head's; the collar and the gloves as the suit (`tools/mech_face.py`). The parts have a
   cell per face in a 1024x1024 atlas, their plates in the same procedural plating
   (`tools/mech_parts.py`). `tools/mech_uv.py` draws the body's texture layout.
-- **Parts:** `RevNetMech.u`, three meshes (`BarrettParts` always, `BarrettCannon` with the
-  arm cannon in hand, `BarrettBlade` with the arm blades in hand). Each part is rigid and rides a frame made from three of
+- **Parts:** `RevNetMech.u`, four meshes (`BarrettParts` always, `BarrettCannon` with the
+  arm cannon in hand, `BarrettCannonBack` the same gun stowed behind the right shoulder blade
+  while he doesn't hold it, `BarrettBlade` with the arm blades in hand). Each part is rigid and rides a frame made from three of
   the body's vertices, chosen where they keep their distances in all 358 frames
   (`tools/mech_parts.py`); a parts mesh therefore has the body's animations frame for frame,
   and `CoopMechParts` draws it over the body by copying the body's animation (and blend
@@ -85,12 +86,23 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   and shape around them). `Install-RevNet.ps1` fills the frames in from the player's own
   `DeusExCharacters.u` (`MechParts.cs`, 86 ms; byte-identical to `tools/mech_art.py fill`). If
   it can't (a different body), the Mech plays with the body alone. The release builder
-  refuses a template that still has frames.
+  refuses a template that still has frames. `StormArm` (the first-person arms) is filled the
+  same way, its triangles too (they are the body's own); `StormView` (the gun, RevNet's own
+  model) ships whole.
 - **Collision:** JC's.
-- **First person:** the arm cannon uses the wrist-mounted mini-crossbow's view model, and the
-  blades the combat knife's; both drawn with the military bot's plating as the hand texture
-  (their `GetWeaponHandTex`). Other weapons the Mech picks up show JC's hands. Phase 3: real
-  arm meshes.
+- **First person:** the arm cannon is `StormView` (the gun, `tools/mech_storm.py`; its
+  `preview` renders the poses with `tools/blender_storm.py`): drawn,
+  it slides from behind the shoulder down the back of the arm and spins over the hand like a
+  flipped revolver; reloading, the left hand pulls the brick magazine off its back and puts a
+  new one on. With it `CoopMechViewArm` draws `StormArm`, the Mech's own forearms and hands
+  (the body's faces, on the gun's frames: `CoopMechCannon.RenderOverlays`). Without
+  `RevNetMech.u` the cannon uses the wrist-mounted mini-crossbow's view model. The blades use
+  the combat knife's, with the military bot's plating as the hand texture
+  (`GetWeaponHandTex`). Other weapons the Mech picks up show JC's hands.
+- **No model at the hand for others:** the Mech's weapons have no `ThirdPersonMesh` (others see
+  them as its parts). The engine draws a pawn's selected item's third-person model at its hand,
+  and `InvisibleWeapon` is drawn there too, as pale scraps that float round the hands and
+  follow the arms (the user saw them on 2026-10-26).
 
 ## Base rules (every Mech)
 
@@ -117,9 +129,11 @@ loading a Mech's record doesn't get them.
   to 34; from level 3 a character that has noticed nobody (`Enemy==None`) dies in one cut;
   Servo Arms multiply its damage against doors. Low-Tech skill applies.
 - **Arm Cannon** (`CoopMechCannon`, the mini-crossbow's code switched to automatic instant
-  hits): 7.62 mm rounds, the assault rifle's ammo; Heavy Weapons skill; 5 damage and a
-  40-round magazine at level 1, up to 9 and 80. Teammates see no gun in its hand: the
-  Commando body has its own arm guns.
+  hits), the user's design: a Metal Storm gun, a slender casing over the back of the hand
+  with five barrels as a die shows five (10 mm bores), a brick magazine on its back, carried
+  behind the right shoulder blade; level when aimed. 7.62 mm rounds, the assault rifle's ammo;
+  Heavy Weapons skill; 5 damage and a 40-round magazine at level 1, up to 9 and 80. Fire modes
+  (shotgun, full auto, minigun speed): backlog.
 
 ## The trees
 

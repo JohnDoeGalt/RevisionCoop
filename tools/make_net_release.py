@@ -51,14 +51,16 @@ def main(version):
     shutil.copy(os.path.join(here, 'build', 'net', 'RevNet.u'), net)
     # The Mech's own parts: the template (frames empty) and bindings; the installer fills the
     # frames in from the player's own game (MechParts.cs). Never a template with frames in it.
-    import ue1mesh
+    import ue1mesh, mech_art
     tpl = os.path.join(here, 'build', 'mech', 'RevNetMech.template')
     pkg = ue1mesh.Package(tpl)
     for e in pkg.exports:
-        if pkg.class_name(e['cls']) == 'Mesh':
+        if pkg.class_name(e['cls']) == 'Mesh' and e['name'] not in mech_art.WHOLE:   # (WHOLE: no game data in it)
             m = pkg.read_mesh(e['name'])
             if any(pkg.d[m['verts_off']:m['verts_off'] + m['verts_count'] * 8]):
                 raise SystemExit(f'{tpl}: {e["name"]} still has frames (tools/mech_art.py template)')
+            if e['name'] in mech_art.FROM_BODY and any(pkg.d[m['tris_off']:m['tris_off'] + m['tris_count'] * 20]):
+                raise SystemExit(f'{tpl}: {e["name"]} still has the body\'s faces (tools/mech_art.py template)')
     shutil.copy(tpl, net)
     shutil.copy(os.path.join(here, 'build', 'mech', 'art', 'bindings.json'), os.path.join(net, 'RevNetMech.bindings.json'))
     shutil.copy(os.path.join(dist, 'MechParts.cs'), pay)
