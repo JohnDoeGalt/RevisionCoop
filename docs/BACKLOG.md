@@ -2,7 +2,7 @@
 
 Ideas and research that are not part of the current release.
 
-## The Arm Cannon as a Metal Storm gun (asked 2026-10-26)
+## The Arm Cannon as a Metal Storm gun (asked 2026-10-26: done 2026-10-27, docs/MECH_CLASS.md)
 
 The user's request: the Mech's arm gun (CoopMechCannon, Arsenal) inspired by the real
 Metal Storm system (rounds stacked nose to tail in the barrels, fired electronically, so

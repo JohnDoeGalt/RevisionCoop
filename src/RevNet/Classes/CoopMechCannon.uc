@@ -11,9 +11,30 @@
 //=============================================================================
 class CoopMechCannon extends WeaponMiniCrossbow;
 
+// Its own sounds (tools/storm_sounds.py: synthesized, ours; in RevNet, which every player has, so
+// each hears them).
+#exec AUDIO IMPORT FILE="Sounds\StormShot.wav" NAME="StormShot" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormBlast.wav" NAME="StormBlast" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormLoop.wav" NAME="StormLoop" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormTail.wav" NAME="StormTail" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormDraw.wav" NAME="StormDraw" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormDown.wav" NAME="StormDown" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormReload.wav" NAME="StormReload" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormDry.wav" NAME="StormDry" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormMode.wav" NAME="StormMode" GROUP="MechCannon"
+
 var Texture MechHandTex;
 var Mesh StormView, StormArm;
 var CoopMechViewArm ViewArm;    // the Mech's own arms, drawn with the gun in its view
+var travel byte Mode;           // 0 full auto, 1 Storm (a minigun's rate), 2 Spread (CycleMode)
+var localized string ModeNames[3];
+var CoopSoundLoop Loop;         // (host) Storm's BRRRT while it fires
+
+replication
+{
+	reliable if ( Role==ROLE_Authority )
+		ClientMode;
+}
 
 function texture GetWeaponHandTex()
 {
@@ -82,10 +103,131 @@ simulated function RenderOverlays( Canvas Canvas )
 	ViewArm.bHidden = true;
 }
 
+// ----------------------------------------------------------------------
+// Fire modes (the user's design, after Metal Storm: rounds stacked in the barrels, fired
+// electronically, so its rate is chosen, not built in), switched with the ammo key
+// (CoopPlayerCore.SwitchAmmo): full auto; Storm, at a minigun's rate (its BRRRT a loop
+// while it fires: CoopSoundLoop); Spread, all five barrels at once, one blast a pull.
+// ----------------------------------------------------------------------
+
+// The next mode (on the host).
+function CycleMode()
+{
+	Mode = (Mode + 1) % 3;
+	if ( CoopMechPlayer(Owner)!=None )
+		CoopMechPlayer(Owner).RefreshModules();         // its values from the modules, then ApplyMode
+	else
+		ApplyMode();
+	if ( Pawn(Owner)!=None )
+	{
+		Pawn(Owner).ClientMessage( ItemName $ ":" @ ModeNames[Mode] );
+		Owner.PlaySound( Sound'StormMode', SLOT_None,,, 512 );
+	}
+}
+
+// The mode's values over what the modules set (CoopMechPlayer.RefreshModules calls it last),
+// sent to the player's machine (its copy predicts the shots).
+function ApplyMode()
+{
+	ShotTime = default.ShotTime;
+	bAutomatic = true;
+	numInstantProjectiles = 0;
+	recoilStrength = default.recoilStrength;
+	FireSound = Sound'StormShot';
+	if ( Mode==1 )
+	{
+		ShotTime = 0.03;
+		HitDamage = Max( 1, int( HitDamage * 0.6 + 0.5 ) );
+		BaseAccuracy += 0.15;
+		recoilStrength *= 1.5;
+		FireSound = None;                               // the loop (Tick)
+	}
+	else if ( Mode==2 )
+	{
+		ShotTime = 0.6;
+		bAutomatic = false;
+		numInstantProjectiles = 5;
+		HitDamage = Max( 1, int( HitDamage * 0.7 + 0.5 ) );
+		BaseAccuracy += 0.35;
+		recoilStrength *= 2.5;
+		FireSound = Sound'StormBlast';
+	}
+	ClientMode( Mode, numInstantProjectiles );
+	if ( CoopPlayerCore(Owner)!=None )
+		CoopPlayerCore(Owner).ServerWeaponValues( Self );
+}
+
+simulated function ClientMode( byte NewMode, int Slugs )
+{
+	if ( Role==ROLE_Authority )
+		return;
+	Mode = NewMode;
+	numInstantProjectiles = Slugs;
+}
+
+// Spread: a blast spends a round from each barrel (five), not one.
+function Fire( float Value )
+{
+	local int Before, n;
+
+	Before = ClipCount;
+	Super.Fire( Value );
+	if ( Role==ROLE_Authority && Mode==1 && ClipCount>Before )
+		Storm();
+	if ( Role==ROLE_Authority && Mode==2 && ClipCount>Before && AmmoType!=None )
+	{
+		n = Min( 4, Min( AmmoType.AmmoAmount, ReloadCount - ClipCount ) );
+		if ( n>0 )
+		{
+			AmmoType.UseAmmo( n );
+			ClipCount += n;
+		}
+	}
+}
+
+// The rounds after the first of a burst: a client's copy fires them and asks the host for each
+// (ServerGenerateBullet), which spends them here.
+function GenerateBullet()
+{
+	local int Before;
+
+	Before = ClipCount;
+	Super.GenerateBullet();
+	if ( Mode==1 && ClipCount>Before )
+		Storm();
+}
+
+// Storm's BRRRT: a loop on the Mech while it fires (on every machine: CoopSoundLoop), kept going
+// by each round and stopping by itself (its roar dying away) a moment after the last. (By the
+// shots, Fire and GenerateBullet: a remote player's weapon doesn't tick on the host.)
+function Storm()
+{
+	if ( Loop==None || Loop.bDeleteMe )
+	{
+		Loop = Spawn( class'CoopSoundLoop', Owner,, Owner.Location );
+		if ( Loop==None )
+			return;
+		Loop.SetBase( Owner );
+		Loop.AmbientSound = Sound'StormLoop';
+		Loop.Tail = Sound'StormTail';
+	}
+	Loop.Until = Level.TimeSeconds + 0.2;
+}
+
+// Put away: unlocked, its servo back up the arm (the stock weapon has no sound for it).
+simulated function TweenDown()
+{
+	if ( Role==ROLE_Authority && Owner!=None )
+		Owner.PlaySound( Sound'StormDown', SLOT_None,,, 1024 );
+	Super.TweenDown();
+}
+
 simulated function Destroyed()
 {
 	if ( ViewArm!=None )
 		ViewArm.Destroy();
+	if ( Loop!=None )
+		Loop.Destroy();
 	Super.Destroyed();
 }
 
@@ -120,11 +262,16 @@ defaultproperties
 	ProjectileNames(0)=None
 	ProjectileNames(1)=None
 	ProjectileNames(2)=None
-	FireSound=Sound'DeusExSounds.Weapons.AssaultGunFire'
-	CockingSound=Sound'DeusExSounds.Weapons.AssaultGunReload'
+	FireSound=Sound'StormShot'
+	CockingSound=Sound'StormReload'
+	SelectSound=Sound'StormDraw'
+	Misc1Sound=Sound'StormDry'
+	ModeNames(0)="full auto"
+	ModeNames(1)="Storm (a minigun's rate)"
+	ModeNames(2)="Spread (all five barrels)"
 	GoverningSkill=Class'DeusEx.SkillWeaponHeavy'
 	ItemName="Arm Cannon"
 	ItemArticle="the"
 	beltDescription="CANNON"
-	Description="Five barrels of stacked rounds fired electronically, carried behind the shoulder blade: drawn, it slides down the arm and spins over the hand. A brick magazine on its back takes standard 7.62 mm rounds."
+	Description="Five barrels of stacked rounds fired electronically, carried behind the shoulder blade: drawn, it slides down the arm and spins over the hand. A brick magazine on its back takes standard 7.62 mm rounds. The ammo key switches its fire: full auto; Storm, at a minigun's rate; Spread, all five barrels at once."
 }

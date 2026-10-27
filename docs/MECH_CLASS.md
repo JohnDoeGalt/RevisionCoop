@@ -96,7 +96,11 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   flipped revolver; reloading, the left hand pulls the brick magazine off its back and puts a
   new one on. With it `CoopMechViewArm` draws `StormArm`, the Mech's own forearms and hands
   (the body's faces, on the gun's frames: `CoopMechCannon.RenderOverlays`). Without
-  `RevNetMech.u` the cannon uses the wrist-mounted mini-crossbow's view model. The blades use
+  `RevNetMech.u` the cannon uses the wrist-mounted mini-crossbow's view model. The right arm in that
+  view is the forearm and hand (faces from the elbow on, `mech_parts.ARM_FROM`: at 3 units past it
+  only the glove was left and the arm looked cut off at the wrist, which the user saw; within
+  `ARM_RADIUS` of the forearm's axis, so no upper-arm faces cross the view; `mech_art.py order` puts
+  them in the order HCC wrote them so the install-time fills match). The blades use
   the combat knife's, with the military bot's plating as the hand texture
   (`GetWeaponHandTex`). Other weapons the Mech picks up show JC's hands.
 - **No model at the hand for others:** the Mech's weapons have no `ThirdPersonMesh` (others see
@@ -134,8 +138,16 @@ loading a Mech's record doesn't get them.
   behind the right shoulder blade. It sits low, its underside on the back of the hand and a short post
   down to the wrist's pin (less leverage in the recoil: the user's ask); level when aimed, seated on
   the arm as low as it goes and sinking a little into the fist (the arm points up as he shoots). 7.62 mm rounds, the assault rifle's ammo;
-  Heavy Weapons skill; 5 damage and a 40-round magazine at level 1, up to 9 and 80. Fire modes
-  (shotgun, full auto, minigun speed): backlog.
+  Heavy Weapons skill; 5 damage and a 40-round magazine at level 1, up to 9 and 80. Three fire
+  modes on the ammo key (`CoopMechCannon.CycleMode`, `CoopPlayerCore.SwitchAmmo`; kept over travel):
+  full auto (10 rounds a second); Storm, at a minigun's rate (0.03 s a round, 0.6 of the damage,
+  looser, more recoil; its BRRRT a loop on every machine while it fires, `CoopSoundLoop`, kept going
+  by each round the host spends, `Fire` and `GenerateBullet`, and its roar dying away after);
+  Spread, all five barrels at once (5 pellets at 0.7 of the damage, one blast a pull, 5 rounds a
+  blast, wide). Its own sounds, synthesized (`tools/storm_sounds.py`, ours, in RevNet.u so every
+  player hears them): the shot (an electric crack, the report, a thump), the blast, the BRRRT loop
+  and its tail, the draw (servo, slide, spin, lock), putting it away, the brick swap, a dry click
+  and the mode switch's chirp.
 
 ## The trees
 

@@ -214,10 +214,41 @@ def segments(F, tol):
     return sorted(groups.values(), key=len, reverse=True)
 
 
+def arm_order(full, bindings):
+    """The Mech's own arms (StormArm: the body's faces, mech_parts.arm_mesh) in the order HCC wrote them: it sorts
+    a mesh's triangles by skin, not keeping their order within a skin (with two skins, the forearm's and the hand's,
+    it moved one), and both fills write the faces in the bindings' order. After tools/build_mech.sh."""
+    B = json.load(open(bindings))
+    A = B.get("arm")
+    if not A:
+        return
+    body_pkg = ue1mesh.Package(BODY_PACKAGE)
+    bm = body_pkg.read_mesh(B["body"])
+    sv = bm["special_verts"]
+    index = {v: i for i, v in enumerate(A["verts"])}
+    key = {}
+    for fi in A["faces"]:
+        f = bm["faces"][fi]
+        key[tuple(index[bm["wedges"][k][0] + sv] for k in f[:3])] = fi
+    pkg = ue1mesh.Package(full)
+    m = pkg.read_mesh(A["mesh"])
+    order = []
+    for t in range(m["tris_count"]):
+        a, b, c = struct.unpack_from("<3H", pkg.d, m["tris_off"] + t * 20)
+        order.append(key[(a, b, c)])
+    if order != A["faces"]:
+        A["faces"] = order
+        json.dump(B, open(bindings, "w"), indent=1)
+        print("arm faces put in HCC's order")
+
+
 def main():
     cmd = sys.argv[1]
     if cmd == "template":
         template(sys.argv[2], sys.argv[3])
+        return
+    if cmd == "order":
+        arm_order(sys.argv[2], sys.argv[3])
         return
     if cmd == "fill":
         fill(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5] if len(sys.argv) > 5 else None)

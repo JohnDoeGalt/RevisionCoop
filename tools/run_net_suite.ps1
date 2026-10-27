@@ -13,7 +13,7 @@ $out = Join-Path $here "build\suite"
 New-Item -ItemType Directory -Force $out | Out-Null
 $suite = [ordered]@{
 	basic = @("-Seconds", 95); world = @("-Seconds", 120); travel = @("-Seconds", 200, "-ClientAgent", "Mech")
-	AugSave = @("-Seconds", 150); Augs = @("-Seconds", 200); Body = @("-Seconds", 200)
+	AugSave = @("-Seconds", 150); Augs = @("-Seconds", 200); Body = @("-Seconds", 200); Cannon = @("-Seconds", 120, "-ClientAgent", "Mech")
 	Capture = @("-Map", "04_NYC_Hotel", "-Seconds", 220); Carry = @("-Seconds", 180); Death = @("-Seconds", 300)
 	Drones = @("-Seconds", 90, "-ClientAgent", "Mech"); Devices = @("-Seconds", 200); Doors = @("-Seconds", 240); Hazards = @("-Seconds", 240); Heal = @("-Seconds", 200)
 	Items = @("-Seconds", 600); Leave = @("-Seconds", 220); LightMech = @("-Seconds", 200, "-ClientAgent", "LightMech"); Mech = @("-Seconds", 160, "-ClientAgent", "Mech")

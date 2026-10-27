@@ -45,7 +45,7 @@ replication
 	reliable if ( Role==ROLE_Authority )
 		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast;
 	reliable if ( Role<ROLE_Authority )
-		ServerAnswerTravel, ServerWeaponValues, ServerLook, ServerSelectFire;
+		ServerAnswerTravel, ServerWeaponValues, ServerLook, ServerSelectFire, ServerCannonMode;
 }
 
 // ----------------------------------------------------------------------
@@ -207,10 +207,18 @@ simulated function ClientRifleRework( int Damage, float ShotTime, float Recoil )
 
 exec function SwitchAmmo()
 {
-	if ( bRifleRework && inHand!=None && inHand.IsA('WeaponAssaultGun') )
+	if ( CoopMechCannon(inHand)!=None )
+		ServerCannonMode();                         // the Arm Cannon's fire modes
+	else if ( bRifleRework && inHand!=None && inHand.IsA('WeaponAssaultGun') )
 		ServerSelectFire();
 	else
 		Super.SwitchAmmo();
+}
+
+function ServerCannonMode()
+{
+	if ( CoopMechCannon(inHand)!=None )
+		CoopMechCannon(inHand).CycleMode();
 }
 
 function ServerSelectFire()
@@ -731,6 +739,8 @@ exec function Fire( optional float F )
 	W = DeusExWeapon(inHand);
 	if ( bRifleRework && W!=None && W.IsA('WeaponAssaultGun') && W.bInstantHit && !W.bAutomatic )
 		bFire = 0;
+	else if ( CoopMechCannon(W)!=None && !W.bAutomatic )
+		bFire = 0;                                  // the Arm Cannon's Spread: one blast a pull
 }
 
 exec function AltFire( optional float F )

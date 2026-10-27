@@ -468,6 +468,12 @@ def storm_parts(F, L, T, m, texdir):
 
 
 SHOOT = 102         # a Shoot frame: the arms out, aiming
+# The Mech's own arms in its view (arm_mesh): faces from this far along the forearm from the elbow on, and no
+# farther from its axis than ARM_RADIUS. Its sleeve's faces run from the elbow's ring (along 0) to the wrist: 3.0
+# kept the hands alone and the right arm looked cut off at the wrist (the user saw it); the elbow's and upper
+# arm's faces also start at the ring but stand out 5 to 9 from the axis (build/tmp/arm_faces.py), and close to
+# the eye they stood up across the view.
+ARM_FROM, ARM_RADIUS = -0.5, 4.5
 
 
 def arm_mesh(F, L, m, view):
@@ -493,7 +499,10 @@ def arm_mesh(F, L, m, view):
         faces = []
         for fi, f in enumerate(m["faces"]):
             vs = [m["wedges"][k][0] + sv for k in f[:3]]
-            if m["materials"][f[3]][1] < 4 and all(v in Gs for v in vs) and min((S[v] - e) @ ax for v in vs) > 3.0:      # the forearm and hand (not the elbow, the upper arm)
+            D = S[vs] - e
+            along = D @ ax
+            if (m["materials"][f[3]][1] < 4 and all(v in Gs for v in vs) and along.min() > ARM_FROM
+                    and np.linalg.norm(D - np.outer(along, ax), axis=1).max() < ARM_RADIUS):   # the forearm and hand
                 faces.append(fi)
         picked.append(faces)
         # Body (frame SHOOT, game units) -> the gun's frame: this forearm's (the left one's carried to the

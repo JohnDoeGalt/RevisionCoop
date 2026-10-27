@@ -22,6 +22,8 @@ trap 'rm -rf "$REV/RevNet"; rmdir "$LOCK" 2>/dev/null || true' EXIT
 rm -rf "$REV/RevNet"
 mkdir -p "$REV/RevNet/Classes"
 cp "$here/src/RevNet/Classes/"*.uc "$REV/RevNet/Classes/"
+mkdir -p "$REV/RevNet/Sounds"
+cp "$here/src/RevNet/Sounds/"*.wav "$REV/RevNet/Sounds/"   # (CoopMechCannon: tools/storm_sounds.py)
 rm -f "$NET/RevNet.u"
 cd "$NET"
 ./HCC.exe make -log=BuildNet.log >/dev/null 2>&1 || true

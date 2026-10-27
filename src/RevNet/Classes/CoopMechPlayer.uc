@@ -282,7 +282,10 @@ function RefreshModules()
 		W.BaseAccuracy = W.default.BaseAccuracy;
 		if ( ModActive( class'CoopMechAugOptics' ) )
 			W.BaseAccuracy = FMax( 0, W.BaseAccuracy - class'CoopMechAug'.static.ValueOf( Self, class'CoopMechAugOptics', 0 ) );
-		ServerWeaponValues( W );
+		if ( CoopMechCannon(W)!=None )
+			CoopMechCannon(W).ApplyMode();      // its fire mode's on top (and to the player's machine)
+		else
+			ServerWeaponValues( W );
 	}
 	Gen = CoopMechAugGenerator(class'CoopMechAug'.static.Find( Self, class'CoopMechAugGenerator' ));
 	MaxRegenPoint = 0;
@@ -612,6 +615,8 @@ simulated function ClientTest( string Command )
 {
 	local CoopScreenMech Screen;
 	local CoopMechButton B;
+	local DeusExWeapon W;
+	local CoopSoundLoop Loop;
 	local string S;
 	local int i;
 
@@ -621,6 +626,26 @@ simulated function ClientTest( string Command )
 			if ( Modules[i]!=None )
 				S = S @ Modules[i].Name $ "=" $ ModLevel( Modules[i] ) $ "/" $ ModActive( Modules[i] );
 		ServerTestReply( "client's mech: salvage" @ Salvage @ "threat display" @ bTerminatorMode @ "speed" @ int(GetCurrentGroundSpeed()) @ "modules" $ S );
+		return;
+	}
+	if ( Command=="cannonmode" )
+	{
+		SwitchAmmo(); // the ammo key, as its binding does (the Arm Cannon's fire modes)
+		return;
+	}
+	if ( Command=="cannon" )
+	{
+		W = DeusExWeapon(FindInventoryType( class'CoopMechCannon' ));
+		if ( W!=None )
+			ServerTestReply( "client's cannon: mode" @ CoopMechCannon(W).Mode @ "shot" @ W.ShotTime @ "auto" @ W.bAutomatic @ "slugs" @ W.numInstantProjectiles
+				@ "damage" @ W.HitDamage @ "sound" @ W.FireSound );
+		return;
+	}
+	if ( Command=="loops" )
+	{
+		foreach AllActors( class'CoopSoundLoop', Loop )
+			S = S @ Loop.AmbientSound @ "on" @ Loop.Base;
+		ServerTestReply( "client hears loops:" $ S );
 		return;
 	}
 	if ( Left( Command, 7 )=="augkey " && Len( Command )==8 && Mid( Command, 7 )>="0" && Mid( Command, 7 )<="9" )
