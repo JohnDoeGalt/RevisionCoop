@@ -6,6 +6,20 @@
 class CoopMechAugCannon extends CoopMechAug;
 
 var int Magazine[4];
+var localized string RoundText;
+
+// Its damage as fired: with the host's battle rifle (RifleRework) level 1 hits as hard as a rifle
+// round and the rest in step (CoopMechPlayer.RefreshModules); the rifle's class values are the
+// host's on every machine (CoopPlayerCore.ClientRifleRework).
+static function string LevelInfo( int i, CoopMechPlayer P )
+{
+	local int Damage;
+
+	Damage = default.LevelValues[i];
+	if ( P!=None && P.bRifleRework )
+		Damage = (Damage * class'WeaponAssaultGun'.default.HitDamage + 2) / 5;
+	return Fill( default.RoundText, string(Damage), string(default.Magazine[i]) );
+}
 
 defaultproperties
 {
@@ -24,10 +38,7 @@ defaultproperties
 	TreeName="Arsenal"
 	AugmentationName="Arm Cannon"
 	Description="An automatic gun in the forearm, fed with 7.62 mm rounds. Heavy Weapons skill."
-	LevelText(0)="5 damage a round, 40-round magazine."
-	LevelText(1)="6 damage, 50 rounds."
-	LevelText(2)="7 damage, 60 rounds."
-	LevelText(3)="9 damage, 80 rounds."
+	RoundText="%d damage a round, %d-round magazine."
 	Icon=Texture'DeusExUI.UserInterface.SkillIconWeaponHeavy'
 	smallIcon=Texture'DeusExUI.UserInterface.SkillIconWeaponHeavy'
 }

@@ -73,7 +73,11 @@ The Mech
   - Its own upgrades, on its augmentations screen, bought with salvage: every robot
     destroyed near a Mech gives salvage. Three trees:
       Arsenal: Arm Blades (up to killing an unaware target in one cut), Arm Cannon,
-               Shrapnel Burst (F5: a blast all around the Mech).
+               Active Protection (F5 on/off: fires 20 mm charges at rockets and
+               grenades coming in, and at enemies that come close; uses the assault
+               rifle's 20 mm rounds), FPV Drones (F7: explosive drones; first one you
+               fly yourself, then ones that fly to the crosshair, lock on, and at the
+               top a swarm of four sent one per press).
       Chassis: Dermal Plating, Hydraulic Legs (landings that knock enemies back, higher
                jumps, full speed), Bulwark (F6: a shell that takes most of the damage),
                Servo Arms (lifts heavy things, breaks doors).

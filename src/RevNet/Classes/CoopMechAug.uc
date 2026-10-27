@@ -129,6 +129,12 @@ static function string Fill( string F, string A, optional string B )
 	return F;
 }
 
+// What level i (0..3) gives, as the Mech screen shows it (a module may work it out: Arm Cannon).
+static function string LevelInfo( int i, CoopMechPlayer P )
+{
+	return default.LevelText[i];
+}
+
 // The Mech screen's text (CoopScreenMech), for module C at level Lvl (-1: none).
 static function MechInfoFor( class<CoopMechAug> C, int Lvl, PersonaInfoWindow W, CoopMechPlayer P )
 {
@@ -145,7 +151,7 @@ static function MechInfoFor( class<CoopMechAug> C, int Lvl, PersonaInfoWindow W,
 		W.AppendText( W.CR() $ Fill( C.default.KeyLabel, string(C.default.Key) ) );
 	for ( i=0; i<4; i++ )
 	{
-		S = Fill( C.default.LevelLabel, string(i + 1) ) @ C.default.LevelText[i];
+		S = Fill( C.default.LevelLabel, string(i + 1) ) @ C.static.LevelInfo( i, P );
 		if ( i==Lvl )
 			S = S @ "<";
 		W.AppendText( W.CR() $ S );

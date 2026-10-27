@@ -22,7 +22,8 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
 - Built-in weapons: arm blades and an arm cannon that can't be dropped or lost.
 - Tank rules: damage plating, no fall damage, heavier and louder, slower.
 - Its own upgrade trees, bought with salvage from destroyed machines, with active abilities
-  in the Human Revolution spirit (a 360-degree shrapnel burst, a frontal shield).
+  in the Human Revolution spirit (a 360-degree shrapnel burst, a frontal shield; the burst
+  later became a tank's active protection, the user's call 2026-10-26).
 - Works under all five gameplay modes and on clients exactly as on the host.
 
 **Non-goals (for now)**
@@ -140,8 +141,9 @@ canister is worth more to a nano teammate. Not yet: salvage from turrets and cam
 | Tree | Module | Start | Key | Levels (salvage: 4/6/8 for a starter's levels 2-4; 6/6/8/10 to buy and raise the others) |
 |---|---|---|---|---|
 | Arsenal | Arm Blades | L1 | | 16 / 22 / 28 / 34 damage; from L3 an unaware target dies in one cut |
-| Arsenal | Arm Cannon | L1 | | 5 / 6 / 7 / 9 damage; 40 / 50 / 60 / 80 rounds |
-| Arsenal | Shrapnel Burst | needs Arm Blades 2 | F5 | 360-degree blast around the Mech (characters and things, never players): 40-100 damage, 20-32 feet, 25 energy, recharges in 20 / 16 / 12 / 8 s |
+| Arsenal | Arm Cannon | L1 | | 5 / 6 / 7 / 9 damage (with the host's battle rifle setting, on by default: 18 / 22 / 25 / 32, a rifle round at level 1; the Mech screen shows the damage as fired, `CoopMechAugCannon.LevelInfo`); 40 / 50 / 60 / 80 rounds |
+| Arsenal | Active Protection (was Shrapnel Burst; class `CoopMechAugBurst`, so saves keep it) | needs Arm Blades 2 | F5 (on/off) | while on: a 20 mm charge at any rocket or grenade coming in (hostile, explosive, in sight: found as `AugDefense` does) within 30 / 35 / 40 / 45 feet, set off where it is when the Mech is out of reach of its blast, else shredded without it; and a blast in a 30-degree cone at the nearest hostile within 12 / 14 / 16 / 18 feet: 40 / 60 / 80 / 100 damage to hostile characters and things in the cone (never players or non-hostile characters); one 20 mm round (the assault rifle's grenades) a shot, no energy; reloads in 3 / 2.5 / 2 / 1.5 s |
+| Arsenal | FPV Drones (`CoopMechAugDrones`) | needs Arm Cannon 2 | F7 | small explosive drones from the Mech's back, 12 energy each, the next built in 6 / 5 / 4 s. L1: one the player flies and sees through (the Spy Drone's view, the Mech standing still meanwhile; `CoopFPV`): it flies flat out (1100) the way the player looks, is armed after 0.15 s and goes off on a character, a thing or a wall, on the fire button, when shot, or after 25 s; F7 again calls it back; 120 damage within 14 feet. L2 aim and launch: straight to what is under the crosshair (`CoopFPVGuided`), 130. L3 lock and launch: locks on the hostile nearest the crosshair (within 20 degrees and 200 feet) and chases it, 140. L4: a swarm of four (36 energy, the next swarm in 24 s) hovers over the shoulders for 90 s; each F7 sends one at the hostile nearest the crosshair (else where it points), 140 each |
 | Chassis | Dermal Plating | L1 | | damage taken x0.70 / 0.60 / 0.50 / 0.40 |
 | Chassis | Hydraulic Legs | L1 | | no fall damage; L2 a hard landing (falling faster than 600) hurts and throws back everyone within 16 feet; L3 jumps a quarter higher; L4 no speed penalty |
 | Chassis | Bulwark | needs Plating 2 | F6 | damage taken x0.4 / 0.3 / 0.25 / 0.2 on top of the plating, moves at 60%, 60 energy a minute |
@@ -177,7 +179,8 @@ canisters, and the salvage count. Upgrades happen anywhere: bolted on in the fie
   Mech's module levels wait in `PendingLevels`. Its four extra body locations (7-10) lie past
   RevNet's `AugLocs`: left alone.
 - **Tests:** `CoopTestMech` (class, rules, arms, save and rejoin), `CoopTestMechTree` (every
-  module, salvage, the client's screen and keys, rejoin), `travel` with `-ClientAgent Mech` or
+  module, salvage, the client's screen and keys, rejoin), `CoopTestDrones` (FPV Drones at
+  every level, flown and steered from the client), `travel` with `-ClientAgent Mech` or
   `-HostAgent Mech` (class, modules and salvage across a map change), and `CoopTestLook`
   (screenshots: `run_net_live.ps1 -Visible -Renderer OpenGLDrv.OpenGLRenderDevice`; the default
   renderer's shot reads the screen, the lock screen when the PC is locked).

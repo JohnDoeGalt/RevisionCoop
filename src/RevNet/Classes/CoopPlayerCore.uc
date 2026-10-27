@@ -190,7 +190,10 @@ simulated function ClientBlast( vector At, float Size )
 {
 	if ( Level.NetMode!=NM_Client )
 		return;
-	Spawn( class'ExplosionMedium',,, At );
+	if ( Size<1 )
+		Spawn( class'ExplosionSmall',,, At );
+	else
+		Spawn( class'ExplosionMedium',,, At );
 	Spawn( class'SphereEffect',,, At ).Size = Size;
 }
 

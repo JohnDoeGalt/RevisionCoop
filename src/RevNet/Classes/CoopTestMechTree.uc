@@ -13,8 +13,10 @@ class CoopTestMechTree extends CoopTestKit;
 
 var int Stage;
 var CoopMechPlayer Mech;
-var ScriptedPawn Victim;
-var int VictimHealth, SalvageBefore;
+var ScriptedPawn Victim, Side;
+var int VictimHealth, SideHealth, HealthBefore, SalvageBefore;
+var vector From;
+var DeusExProjectile Missile;
 var float EnergyBefore;
 var DeusExWeapon Blade;
 
@@ -92,8 +94,16 @@ function First( int t )
 	}
 	else if ( t==7 )
 	{
-		Victim = SpawnNPC( class'BusinessMan1', Remote.Location + vector(Remote.Rotation) * 150 );
+		// Active protection: two enemies close, one ahead and one 60 degrees off; the cone at the
+		// nearer must miss the other. Five 20 mm rounds.
+		Give( class'Ammo20mm' );
+		Ammo(Remote.FindInventoryType( class'Ammo20mm' )).AmmoAmount = 5;
+		Victim = SpawnNPC( class'Terrorist', Remote.Location + vector(Remote.Rotation) * 150 );
+		Victim.ChangeAlly( 'Player', -1, true );
 		VictimHealth = Victim.Health;
+		Side = SpawnNPC( class'Terrorist', Remote.Location + vector(Remote.Rotation + rot(0,10923,0)) * 190 );
+		Side.ChangeAlly( 'Player', -1, true );
+		SideHealth = Side.Health;
 		EnergyBefore = Remote.Energy;
 		Mod( class'CoopMechAugBurst' ).Activate();
 		// What the client sees of it (MECH-14).
@@ -101,9 +111,11 @@ function First( int t )
 	}
 	else if ( t==8 )
 	{
-		Log( "RevNetTest: tree burst: victim health" @ VictimHealth @ "->" @ Victim.Health @ "energy" @ int(EnergyBefore) @ "->" @ int(Remote.Energy), 'RevNet' );
-		Mod( class'CoopMechAugBurst' ).Activate(); // recharging
-		Log( "RevNetTest: tree burst again: energy" @ int(Remote.Energy) @ "ready in" @ int(CoopMechAugBurst(Mod( class'CoopMechAugBurst' )).ReadyAt - Level.TimeSeconds), 'RevNet' );
+		Log( "RevNetTest: tree protection: on" @ Mod( class'CoopMechAugBurst' ).bIsActive @ "ahead" @ VictimHealth @ "->" @ Victim.Health @ "side" @ SideHealth @ "->" @ Side.Health
+			@ "rounds" @ Ammo(Remote.FindInventoryType( class'Ammo20mm' )).AmmoAmount @ "energy" @ int(EnergyBefore) @ "->" @ int(Remote.Energy)
+			@ "reloads in" @ int(CoopMechAugBurst(Mod( class'CoopMechAugBurst' )).ReadyAt - Level.TimeSeconds + 0.99), 'RevNet' );
+		Victim.Destroy();
+		Side.Destroy();
 		Remote.Energy = Remote.EnergyMax;
 		Buy( class'CoopMechAugBulwark' );
 		Buy( class'CoopMechAugServo' );
@@ -127,6 +139,25 @@ function First( int t )
 		Remote.SetPropertyText( "EnergyDrainTotal", "0" );
 		Remote.Energy = 5;
 		Log( "RevNetTest: tree generator: regen to" @ Mech.MaxRegenPoint @ "at" @ Mech.RegenRate $ "/s", 'RevNet' );
+	}
+	else if ( t==9 )
+	{
+		// A rocket at the Mech from 560 units off: the system sets it off out of reach of its blast.
+		CoopMechAugBurst(Mod( class'CoopMechAugBurst' )).ReadyAt = 0;
+		HealthBefore = Remote.Health;
+		From = Remote.Location + vector(Remote.Rotation + rot(0,-8192,0)) * 560 + vect(0,0,24);
+		Missile = Spawn( class'Rocket',,, From, rotator(Remote.Location - From) );
+		if ( Missile!=None )
+			Missile.Velocity = vector(Missile.Rotation) * Missile.Speed;
+		Log( "RevNetTest: tree protection: rocket from" @ int(VSize(From - Remote.Location)) @ Missile, 'RevNet' );
+	}
+	else if ( t==10 )
+	{
+		// (Set off, a projectile stays a moment in state Exploding while its blast ring spreads.)
+		Log( "RevNetTest: tree protection: rocket gone or exploding" @ (Missile==None || Missile.bDeleteMe || Missile.IsInState( 'Exploding' )) @ "the Mech's health" @ HealthBefore @ "->" @ Remote.Health
+			@ "rounds" @ Ammo(Remote.FindInventoryType( class'Ammo20mm' )).AmmoAmount, 'RevNet' );
+		Mod( class'CoopMechAugBurst' ).Deactivate();
+		Log( "RevNetTest: tree cannon text: level 1" @ class'CoopMechAugCannon'.static.LevelInfo( 0, Mech ) @ "| level 4" @ class'CoopMechAugCannon'.static.LevelInfo( 3, Mech ), 'RevNet' );
 	}
 	else if ( t==11 )
 	{
@@ -215,10 +246,10 @@ function First( int t )
 	{
 		Log( "RevNetTest: tree F4 from the client: optics on" @ Mod( class'CoopMechAugOptics' ).bIsActive, 'RevNet' );
 		Remote.ClientTest( "augkey 1" );
-		Remote.ClientTest( "augkey 2" ); // F5: Shrapnel Burst
+		Remote.ClientTest( "augkey 2" ); // F5: Active Protection
 	}
 	else if ( t==50 )
-		Log( "RevNetTest: tree F4 again: optics on" @ Mod( class'CoopMechAugOptics' ).bIsActive @ "| F5: burst ready in" @ int(CoopMechAugBurst(Mod( class'CoopMechAugBurst' )).ReadyAt - Level.TimeSeconds), 'RevNet' );
+		Log( "RevNetTest: tree F4 again: optics on" @ Mod( class'CoopMechAugOptics' ).bIsActive @ "| F5: active protection on" @ Mod( class'CoopMechAugBurst' ).bIsActive, 'RevNet' );
 	else if ( t==52 )
 	{
 		Mech.Salvage = 17;

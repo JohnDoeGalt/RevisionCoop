@@ -472,6 +472,32 @@ function DoJump( optional float F )
 		Velocity.Z = Before + (Velocity.Z - Before) * 1.25;
 }
 
+// FPV Drones level 1 (CoopMechAugDrones): the drone the player's machine asks for when it sees
+// bSpyDroneActive is the Mech's own, a fast explosive one (CoopFPV), which goes off on the
+// fire button (DroneExplode) and switches the module off however it ends.
+function CreateDrone()
+{
+	local CoopMechAug M;
+	local vector Loc;
+
+	M = class'CoopMechAug'.static.Find( Self, class'CoopMechAugDrones' );
+	if ( M==None || !M.bIsActive )
+	{
+		Super.CreateDrone();
+		return;
+	}
+	Loc = (2.0 + class'CoopFPV'.default.CollisionRadius + CollisionRadius) * vector(ViewRotation);
+	Loc.Z = BaseEyeHeight;
+	aDrone = Spawn( class'CoopFPV', Self,, Location + Loc, ViewRotation );
+	if ( aDrone!=None )
+	{
+		aDrone.Instigator = Self;
+		aDrone.Damage = M.LevelValues[0];
+		aDrone.blastRadius = CoopMechAugDrones(M).Blast;
+		Log( "RevNet:" @ PlayerReplicationInfo.PlayerName @ "FPV launched", 'RevNet' );
+	}
+}
+
 // Hydraulic Legs 2: a hard landing throws back and hurts those around.
 function Landed( vector HitNormal )
 {
@@ -739,14 +765,15 @@ defaultproperties
 	Modules(0)=Class'CoopMechAugBlades'
 	Modules(1)=Class'CoopMechAugCannon'
 	Modules(2)=Class'CoopMechAugBurst'
-	Modules(3)=Class'CoopMechAugPlating'
-	Modules(4)=Class'CoopMechAugLegs'
-	Modules(5)=Class'CoopMechAugBulwark'
-	Modules(6)=Class'CoopMechAugServo'
-	Modules(7)=Class'CoopMechAugOptics'
-	Modules(8)=Class'CoopMechAugGenerator'
-	Modules(9)=Class'CoopMechAugReboot'
-	Modules(10)=Class'CoopMechAugHardening'
+	Modules(3)=Class'CoopMechAugDrones'
+	Modules(4)=Class'CoopMechAugPlating'
+	Modules(5)=Class'CoopMechAugLegs'
+	Modules(6)=Class'CoopMechAugBulwark'
+	Modules(7)=Class'CoopMechAugServo'
+	Modules(8)=Class'CoopMechAugOptics'
+	Modules(9)=Class'CoopMechAugGenerator'
+	Modules(10)=Class'CoopMechAugReboot'
+	Modules(11)=Class'CoopMechAugHardening'
 	ScrapAug=6
 	ScrapUpgrade=4
 	NoNanoText="A mechanical body has no place for nano-augmentation."
