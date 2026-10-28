@@ -5,7 +5,9 @@
 // Mechs' own parts (CoopMechParts) for both Mechs, its own hidden in first person, and the
 // arm cannon and the blades only while held, on the host and on the client. Screenshots
 // (with run_net_live.ps1 -Visible -Renderer OpenGLDrv.OpenGLRenderDevice): the client in
-// front of the host holding nothing, the cannon, the blades.
+// front of the host holding nothing, the cannon, the blades; the host's own view of its
+// cannon (drawn, reloaded) and of its blades (drawn, a cut: its notify lands, put away).
+// With -HostAgent LightMech (no cannon) the host's own view of Jensen's blades.
 //=============================================================================
 class CoopTestMechLook extends CoopTest;
 
@@ -13,6 +15,9 @@ var CoopMechPlayer M;
 var float NextAt;
 var int Step;
 var rotator View;
+var int Cuts;
+var Mesh BladesWere;
+var bool bBladesHidden;
 
 function Run( int t )
 {
@@ -58,12 +63,28 @@ function PartsReport( string When )
 	Remote.ClientTest( "parts" );
 }
 
+// The client's blades on the host's screen sliding out and back in (CoopMechParts.Stages): each step.
+function BladeSteps()
+{
+	local CoopMechParts P;
+
+	foreach AllActors( class'CoopMechParts', P )
+		if ( P.Body==M && P.Stages[1]!=None && (P.Mesh!=BladesWere || P.bHidden!=bBladesHidden) )
+		{
+			Log( "RevNetTest: mechlook: client's blades on the host:" @ P.Mesh.Name @ "hidden" @ P.bHidden @ "out" @ P.Out @ "at" @ Level.TimeSeconds, 'RevNet' );
+			BladesWere = P.Mesh;
+			bBladesHidden = P.bHidden;
+		}
+}
+
 function Tick( float DeltaTime )
 {
 	local vector Eye, Dir;
 	local rotator R;
 
 	Super.Tick( DeltaTime );
+	if ( M!=None )
+		BladeSteps();
 	if ( NextAt==0 || Level.TimeSeconds<NextAt )
 		return;
 	NextAt = Level.TimeSeconds + 2;
@@ -98,9 +119,18 @@ function Tick( float DeltaTime )
 			PartsReport( "client holds the blades" );
 			Host.ConsoleCommand( "shot" );
 			Log( "RevNetTest: mechlook shot 2 blades", 'RevNet' );
-			// The host's own view of its arm cannon (StormView, its arms StormArm): drawn, then reloaded.
-			Host.PutInHand( Host.FindInventoryType( class'CoopMechCannon' ) );
-			NextAt = Level.TimeSeconds + 0.15;
+			if ( Host.FindInventoryType( class'CoopMechCannon' )==None )
+			{
+				Step = 15;                              // (a Light Mech: its blades)
+				Host.PutInHand( None );
+				NextAt = Level.TimeSeconds + 1.0;
+			}
+			else
+			{
+				// The host's own view of its arm cannon (StormView, its arms StormArm): drawn, then reloaded.
+				Host.PutInHand( Host.FindInventoryType( class'CoopMechCannon' ) );
+				NextAt = Level.TimeSeconds + 0.15;
+			}
 			break;
 		case 4: case 5: case 6:
 			Host.ConsoleCommand( "shot" );
@@ -136,6 +166,46 @@ function Tick( float DeltaTime )
 		case 14:
 			Host.ConsoleCommand( "shot" );
 			Log( "RevNetTest: mechlook shot 11 client holds the cannon", 'RevNet' );
+			Host.PutInHand( None );
+			NextAt = Level.TimeSeconds + 1.0;
+			break;
+		case 15:
+			// The host's own view of its blades (tools/blade_view.py): drawn, sliding out.
+			Host.PutInHand( Host.FindInventoryType( class'CoopMechBlade' ) );
+			NextAt = Level.TimeSeconds + 0.15;
+			break;
+		case 16: case 17:
+			Host.ConsoleCommand( "shot" );
+			Log( "RevNetTest: mechlook shot" @ Step - 5 @ "drawing the blades (first person)" @ Host.Weapon.Mesh @ Host.Weapon.AnimSequence @ Host.Weapon.AnimFrame, 'RevNet' );
+			NextAt = Level.TimeSeconds + 0.12;
+			if ( Step==18 )
+				NextAt = Level.TimeSeconds + 1.0;      // (settled)
+			break;
+		case 18:
+			Host.ConsoleCommand( "shot" );
+			Log( "RevNetTest: mechlook shot 14 blades in hand (first person)" @ Host.Weapon.Mesh @ Host.Weapon.AnimSequence, 'RevNet' );
+			if ( CoopMechBlade(Host.Weapon)!=None )
+				Cuts = CoopMechBlade(Host.Weapon).Cuts;
+			Host.Fire( 0 );
+			NextAt = Level.TimeSeconds + 0.1;
+			break;
+		case 19: case 20:
+			Host.ConsoleCommand( "shot" );
+			Log( "RevNetTest: mechlook shot" @ Step - 5 @ "cutting (first person)" @ Host.Weapon.AnimSequence @ Host.Weapon.AnimFrame, 'RevNet' );
+			NextAt = Level.TimeSeconds + 0.12;
+			if ( Step==21 )
+				NextAt = Level.TimeSeconds + 1.0;
+			break;
+		case 21:
+			if ( CoopMechBlade(Host.Weapon)!=None )
+				Log( "RevNetTest: mechlook blades: cuts landed" @ CoopMechBlade(Host.Weapon).Cuts - Cuts, 'RevNet' );
+			Host.PutInHand( None );
+			NextAt = Level.TimeSeconds + 0.15;
+			break;
+		case 22:
+			Host.ConsoleCommand( "shot" );
+			Log( "RevNetTest: mechlook shot 17 putting the blades away (first person)" @ Host.Weapon.AnimSequence @ Host.Weapon.AnimFrame, 'RevNet' );
+			NextAt = Level.TimeSeconds + 0.6;
 			break;
 		default:
 			NextAt = 0;

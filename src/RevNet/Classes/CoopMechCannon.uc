@@ -64,16 +64,24 @@ function bool Facelift( bool bOn )
 }
 
 // The Mech's own view: its model's skins (none put on it but a cloak's), not the crossbow's hand;
-// then its own arms (StormArm), on the gun's spot and frame.
+// then its own arms (StormArm), on the gun's spot and frame. Put on here too, where it is drawn: Facelift
+// runs on the host alone (and RevNetMech, not in the package map, can't reach a client by replication).
 simulated function RenderOverlays( Canvas Canvas )
 {
 	local Texture Cloak;
 	local int i;
 
-	if ( StormView==None || Mesh!=StormView )
+	if ( StormView==None )
+		StormView = Mesh( DynamicLoadObject( "RevNetMech.StormView", class'Mesh', true ) );
+	if ( StormView==None )
 	{
 		Super.RenderOverlays( Canvas );
 		return;
+	}
+	if ( Mesh!=StormView )
+	{
+		PlayerViewMesh = StormView;
+		Mesh = StormView;
 	}
 	Cloak = GetCloakTexture();
 	for ( i=0; i<8; i++ )
@@ -85,22 +93,8 @@ simulated function RenderOverlays( Canvas Canvas )
 		return;
 	if ( ViewArm==None )
 		ViewArm = Spawn( class'CoopMechViewArm', Owner,, Location, Rotation );
-	if ( ViewArm==None )
-		return;
-	ViewArm.Mesh = StormArm;
-	ViewArm.SetLocation( Location );
-	ViewArm.SetRotation( Rotation );
-	ViewArm.DrawScale = DrawScale;
-	ViewArm.AnimSequence = AnimSequence;
-	ViewArm.AnimFrame = AnimFrame;
-	ViewArm.Style = Style;
-	ViewArm.ScaleGlow = ScaleGlow;
-	ViewArm.AmbientGlow = AmbientGlow;
-	for ( i=0; i<8; i++ )
-		ViewArm.MultiSkins[i] = Cloak;
-	ViewArm.bHidden = false;
-	Canvas.DrawActor( ViewArm, false );
-	ViewArm.bHidden = true;
+	if ( ViewArm!=None )
+		ViewArm.DrawWith( Canvas, Self, StormArm, Cloak );
 }
 
 // ----------------------------------------------------------------------

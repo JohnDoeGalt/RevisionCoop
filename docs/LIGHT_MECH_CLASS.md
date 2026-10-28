@@ -90,5 +90,12 @@ ring and the elbow ring are the anchors' candidates), so it follows every animat
 fills its frames from the player's own `GM_Trench` (bindings `also`: a second body for
 `MechParts.cs` and `mech_art.fill`, both still byte-identical to the HCC build).
 
-Still the stand-in: the Light Mech's own first-person view of its blades is the combat knife's in a
-prosthetic hand, as the Mech's is.
+On others' screens the blades slide out of the forearms as they are drawn and back in as they are put
+away (`JensenBlades1`, `JensenBlades2`: a third and two thirds out; `CoopMechParts.Stages`).
+
+Its own view of them (`JensenBladeView`: the blade arms of `tools/blade_arms.py` in Jensen's paint,
+glossy black prosthetics with gold seams and a faint hex, posed by `tools/blade_view.py`): drawn, both
+arms come up and the blades slide out of their housings past the fists; three cuts (a slash from each
+side, a thrust with both), each with the knife's notify where it lands; put away, they slide back in.
+Its sounds are the Mech's blades' (`tools/blade_sounds.py`). (docs/MECH_CLASS.md, First person, the
+blades.)

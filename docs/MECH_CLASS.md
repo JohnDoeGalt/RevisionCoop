@@ -52,7 +52,8 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   black belt with a steel buckle and pouches, gunmetal knee pads on the knees, combat boots,
   plated gloves. His hands show;
   the arm cannon rides behind his right shoulder blade and lies over the right hand only while
-  he holds it; blades come out past both fists only while he holds them.
+  he holds it; blades slide out of both forearms past the fists as he draws them, and back in as
+  he puts them away.
 - **Body:** Gunther Hermann's mesh (`DeusExCharacters.GM_DressShirt_B`, the game's big man) in
   the Mech's own skins (`MechSkin`: slot 0 suit and arms, 1 legs, 3 face and hands; 512x512),
   drawn 6% bigger (`DrawScale` 1.06, raised by `MechRaise`); without `RevNetMech.u`, Gunther's
@@ -100,9 +101,32 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   view is the forearm and hand (faces from the elbow on, `mech_parts.ARM_FROM`: at 3 units past it
   only the glove was left and the arm looked cut off at the wrist, which the user saw; within
   `ARM_RADIUS` of the forearm's axis, so no upper-arm faces cross the view; `mech_art.py order` puts
-  them in the order HCC wrote them so the install-time fills match). The blades use
-  the combat knife's, with the military bot's plating as the hand texture
-  (`GetWeaponHandTex`). Other weapons the Mech picks up show JC's hands.
+  them in the order HCC wrote them so the install-time fills match). Its forearm faces near the
+  elbow are cut at `ARM_RADIUS`, the hand's never (`forearm_faces`: at 4.6 five of a hand's were
+  left out, a gap at the wrist). The arm cannon's view is put on where it is drawn as well
+  (`RenderOverlays`): `Facelift` runs on the host alone, and RevNetMech can't reach a client by
+  replication.
+- **First person, the blades** (`tools/blade_arms.py`, `tools/blade_view.py`, `CoopMechBlade`):
+  blade arms of our own, built to be seen up close (the body's own forearms, tried first, were
+  its far-off low-poly sleeves and mitten hands, and the user called them garbage): a mechanical
+  forearm with segmented curved plates and a blade housing along its top, a wrist joint, a closed
+  fist (knuckle guards, curled fingers, the thumb across them), a diamond-section blade out of the
+  housing's mouth over the fist; painted per class from the 3D surface (the Mech: gunmetal plates,
+  matte black hex, a blue light; the Light Mech: Jensen's glossy black, gold seams), its curved
+  shells lit as curves (flat facets had each caught the gloss whole). `MechBladeView` (ours, kept
+  whole) holds both arms, the left the right's mirror. The right leads from the lower right, its
+  blade toward the middle; the left waits lower in its corner. Drawn, both come up and the blades
+  slide out of the housings, a little past and home (a jolt); three cuts as the knife's code
+  picks them (`Attack`: a slash from the right, `Attack2` from the left, `Attack3` a thrust with
+  both), each lasting as the knife's does with its `HandToHandAttack` notify at the middle, when
+  the cut lands; put away, the blades slide back in and the arms drop. The view is picked by the owner's class (`OwnView`: the Light
+  Mech's is Jensen's) when the blades are brought up and again where they are drawn (they are
+  made without an owner). Without `RevNetMech.u` the combat knife's, in the military bot's
+  plating (`GetWeaponHandTex`). Other weapons the Mech picks up show JC's hands.
+- **The blades on others' screens slide out** (`CoopMechParts.Stages`): `BarrettBlade1` and
+  `BarrettBlade2` are the blades a third and two thirds of the way out past the wrist
+  (`blade_view.STAGES`, built and filled as the parts are); drawn, the part steps through them
+  to `BarrettBlade` in 0.25 s, put away back in 0.2 s.
 - **No model at the hand for others:** the Mech's weapons have no `ThirdPersonMesh` (others see
   them as its parts). The engine draws a pawn's selected item's third-person model at its hand,
   and `InvisibleWeapon` is drawn there too, as pale scraps that float round the hands and
@@ -131,7 +155,10 @@ loading a Mech's record doesn't get them.
 
 - **Arm Blades** (`CoopMechBlade`, a combat knife underneath): 16 damage a cut at level 1, up
   to 34; from level 3 a character that has noticed nobody (`Enemy==None`) dies in one cut;
-  Servo Arms multiply its damage against doors. Low-Tech skill applies.
+  Servo Arms multiply its damage against doors. Low-Tech skill applies. Its own sounds
+  (`tools/blade_sounds.py`, cut from the CC0 recordings in `art/sounds/cc0`, in RevNet.u): the
+  steel drawn out and locked (`BladeOut`, timed to the view: locked at 0.3 s), slid back in and
+  seated (`BladeIn`), a heavy swish for each cut (`BladeSwing`).
 - **Arm Cannon** (`CoopMechCannon`, the mini-crossbow's code switched to automatic instant
   hits), the user's design: a Metal Storm gun, a slender casing over the back of the hand
   with five barrels as a die shows five (10 mm bores), a brick magazine on its back, carried
@@ -144,10 +171,13 @@ loading a Mech's record doesn't get them.
   looser, more recoil; its BRRRT a loop on every machine while it fires, `CoopSoundLoop`, kept going
   by each round the host spends, `Fire` and `GenerateBullet`, and its roar dying away after);
   Spread, all five barrels at once (5 pellets at 0.7 of the damage, one blast a pull, 5 rounds a
-  blast, wide). Its own sounds, synthesized (`tools/storm_sounds.py`, ours, in RevNet.u so every
-  player hears them): the shot (an electric crack, the report, a thump), the blast, the BRRRT loop
-  and its tail, the draw (servo, slide, spin, lock), putting it away, the brick swap, a dry click
-  and the mode switch's chirp.
+  blast, wide). Its own sounds, in RevNet.u so every player hears them: synthesized
+  (`tools/storm_sounds.py`): the shot (an electric crack, the report, a thump), the blast, the
+  BRRRT loop and its tail, putting it away, a dry click and the mode switch's chirp; the draw and
+  the brick swap cut from real CC0 gun and metal foley (`tools/storm_foley.py`, `art/sounds/cc0`:
+  pump strokes, magazine and bolt work, latches, pitched down for weight), as the user wanted them
+  "crunchy and mechanical", "clunky and chunky" (synthesized they were too high tech, then like
+  a bouncing ball).
 
 ## The trees
 
@@ -255,7 +285,7 @@ rows MECH-10 to MECH-19 in `TEST_MATRIX.md`):
 1. **The brute (playable):** class choice, body, base rules, arsenal, save and travel, tests. Done.
 2. **The trees:** salvage, modules, the Mech screen, active abilities. Done.
 3. **Art:** the Barrett-line body: Gunther's body with RevNet's own parts, built at install.
-   Done (third person). Not yet: first-person arm meshes (the cannon still uses the
-   mini-crossbow's view model).
+   Done: third person, and first person (the arm cannon's view with the Mech's own arms; the
+   blades' with its arms, for each class).
 
 Later ideas: the heat model and the killphrase glitch (`COOP_IDEAS.md` C2, C4).

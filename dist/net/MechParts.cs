@@ -197,20 +197,22 @@ public static class MechParts
 			byte[] outData = (byte[])tpl.D.Clone();
 			Mesh bm;
 			double[,,] F;
-			string why0 = FillBody(body, B, tpl, outData, out bm, out F);
-			if (why0 != null) return why0;
+			// The main body's parts, then each other body's ("also": the Light Mech's on JC's trench body); with each,
+			// its arms in their owner's view ("arms").
+			var bodies = new List<Dictionary<string, object>> { B };
 			if (B.ContainsKey("also"))
 				foreach (object o in (object[])B["also"])
-				{
-					Mesh am;
-					double[,,] AF;
-					why0 = FillBody(body, (Dictionary<string, object>)o, tpl, outData, out am, out AF);
-					if (why0 != null) return why0;
-				}
-			if (B.ContainsKey("arm"))
+					bodies.Add((Dictionary<string, object>)o);
+			foreach (var b in bodies)
 			{
-				string why = FillArm((Dictionary<string, object>)B["arm"], bm, F, tpl, outData);
-				if (why != null) return why;
+				string why0 = FillBody(body, b, tpl, outData, out bm, out F);
+				if (why0 != null) return why0;
+				if (b.ContainsKey("arms"))
+					foreach (object a in (object[])b["arms"])
+					{
+						string why = FillArm((Dictionary<string, object>)a, bm, F, tpl, outData);
+						if (why != null) return why;
+					}
 			}
 			File.WriteAllBytes(outPath, outData);
 			return null;
@@ -288,7 +290,7 @@ public static class MechParts
 		return null;
 	}
 
-	// The Mech's own arms in its view (StormArm): its triangles are the body's faces (each corner's vertex
+	// Arms in their owner's view (StormArm; the blades', tools/blade_view.py): its triangles are the body's faces (each corner's vertex
 	// and UV from its wedge, the face's skin), its frames frame A["frame"]'s vertices through each frame's
 	// maps. Same steps as tools/mech_art.py fill_arm (its bytes must match).
 	static string FillArm(Dictionary<string, object> A, Mesh bm, double[,,] F, Package tpl, byte[] outData)

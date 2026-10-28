@@ -6,9 +6,10 @@ each shot), drawn from behind the shoulder down the arm and spun over the hand, 
 
 - StormShot    full auto, one round                 StormBlast  the spread: all five barrels at once
 - StormLoop    the Storm mode, a seamless loop of 66 rounds a second (the BRRRT)   StormTail  its roar dying away
-- StormDraw    servo whine, slide, spin, lock        StormDown   unlock, servo back, clunk
-- StormReload  latch, brick off, brick on, latch, ready chirp      StormDry  an empty electronic click
+- StormDown    unlock, servo back, clunk             StormDry    an empty electronic click
 - StormMode    the mode switch's chirp
+(StormDraw and StormReload: tools/storm_foley.py, from real CC0 recordings; synthesized here they were too
+"high tech", then "like bouncing a bouncy ball", the user said.)
 
   python -I tools/storm_sounds.py [out dir]     (default src/RevNet/Sounds)
 """
@@ -152,33 +153,11 @@ def storm_tail():
     return finish(reverb(drive(x, 2.4), 1.1, 0.4))
 
 
-def storm_draw():
-    L = 0.8
-    whine = sweep(L, 380, 1600, 0.03, 0.42, (1.0, 0.35, 0.15), 0.004) * env(L, 0.04, 0.5, 0.03) * np.where(np.arange(n_(L)) / RATE < 0.5, 1, 0) * 0.35
-    slide = band(noise(L), 1500, 5200) * env(L, 0.05, 0.12, 0.06) * 0.45
-    whoosh = band(noise(L), 300, 1300) * env(L, 0.08, 0.06, 0.36) * 0.7
-    lock = thump(L, 140, 70, 0.02, 0.05, 0.6) * 0.9 + click(L, 0.6, 1.0) + click(L, 0.635, 0.6)
-    return finish(reverb(whine + slide + whoosh + lock, 0.3, 0.18))
-
-
 def storm_down():
     L = 0.6
     whine = sweep(L, 1400, 450, 0.05, 0.32, (1.0, 0.3), 0.004) * env(L, 0.03, 0.35, 0.05) * np.where(np.arange(n_(L)) / RATE < 0.42, 1, 0) * 0.3
     slide = band(noise(L), 1200, 4200) * env(L, 0.04, 0.1, 0.08) * 0.35
     return finish(reverb(click(L, 0.0, 0.8) + whine + slide + thump(L, 120, 65, 0.02, 0.05, 0.44) * 0.8 + click(L, 0.44, 0.5), 0.3, 0.18))
-
-
-def storm_reload():
-    L = 2.0
-    latch = click(L, 0.0, 1.0) + click(L, 0.03, 0.7)
-    pull = band(noise(L), 800, 3200) * env(L, 0.15, 0.12, 0.08) * 0.5
-    off = thump(L, 110, 60, 0.03, 0.06, 0.5) * 0.5 + click(L, 0.5, 0.3, 0.01)
-    on = band(noise(L), 700, 2800) * env(L, 0.12, 0.08, 1.05) * 0.4
-    seat = thump(L, 150, 62, 0.02, 0.07, 1.3) * 1.1 + click(L, 1.3, 0.9, 0.006)
-    lock = click(L, 1.42, 0.9) + click(L, 1.46, 0.7)
-    t = np.arange(n_(L)) / RATE
-    chirp = (np.sin(2 * np.pi * 2200 * t) * ((t > 1.62) & (t < 1.66)) + np.sin(2 * np.pi * 3300 * t) * ((t > 1.69) & (t < 1.74))) * 0.18
-    return finish(reverb(latch + pull + off + on + seat + lock + chirp, 0.35, 0.2))
 
 
 def storm_dry():
@@ -197,8 +176,7 @@ def storm_mode():
 
 
 SOUNDS = {"StormShot": storm_shot, "StormBlast": storm_blast, "StormLoop": storm_loop, "StormTail": storm_tail,
-          "StormDraw": storm_draw, "StormDown": storm_down, "StormReload": storm_reload, "StormDry": storm_dry,
-          "StormMode": storm_mode}
+          "StormDown": storm_down, "StormDry": storm_dry, "StormMode": storm_mode}
 
 
 def write_wav(path, x):

@@ -1,0 +1,97 @@
+"""The Arm Cannon's mechanism sounds from real recordings: its draw (StormDraw) and its reload (StormReload). The user
+wanted them "crunchy and mechanical", then "clunky and chunky": synthesized (tools/storm_sounds.py), they came out high
+tech, then like a bouncing ball. These are cut from CC0 gun and metal foley (art/sounds/cc0, README there), pitched down
+for the weight of a big gun, given more body, laid on the view's timing (tools/mech_storm.py: drawn, it slides down
+the arm, swings over the hand and locks at about 0.6 s; reloading, the brick comes off at 0.2 s and the new one is
+slammed home at about 1.35 s).
+
+  python -I tools/storm_foley.py [out dir]     (default src/RevNet/Sounds; needs ffmpeg for the OGGs)
+"""
+import os, subprocess, sys
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from storm_sounds import RATE, band, drive, env, finish, n_, noise, reverb, write_wav
+
+SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "art", "sounds", "cc0")
+_cache = {}
+
+
+def rec(name):
+    """A recording, mono, at RATE."""
+    if name not in _cache:
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", os.path.join(SRC, name), "-f", "s16le", "-ac", "1", "-ar", str(RATE), "-"],
+                             capture_output=True, check=True).stdout
+        _cache[name] = np.frombuffer(raw, "<i2") / 32768.0
+    return _cache[name]
+
+
+def cut(name, t0, t1, rate=1.0, fade=0.004):
+    """Part of a recording, faded at both ends, played at rate (below 1: lower and slower, heavier)."""
+    x = rec(name)[int(t0 * RATE):int(t1 * RATE)].copy()
+    k = min(n_(fade), len(x) // 2)
+    x[:k] *= np.linspace(0, 1, k)
+    x[-k:] *= np.linspace(1, 0, k)
+    if rate != 1.0:
+        x = np.interp(np.arange(0, len(x) - 1, rate), np.arange(len(x)), x)
+    return x / (np.abs(x).max() + 1e-9)
+
+
+def lay(out, x, at, gain=1.0):
+    i = n_(at)
+    j = min(len(out), i + len(x))
+    out[i:j] += x[:j - i] * gain
+
+
+def body(x, amount=0.9):
+    """More weight (the low mids), a little grit; the clicks kept."""
+    return drive(x + amount * band(x, 90, 700), 1.6)
+
+
+def storm_draw():
+    """Unlatched behind the shoulder; slid down the back of the arm, geared; swung over the hand; locked on (a pump's
+    forward stroke and a bolt slamming home)."""
+    out = np.zeros(n_(0.9))
+    lay(out, cut("metalLatch.ogg", 0.02, 0.22, 0.72), 0.0, 0.55)
+    lay(out, cut("doorClose_4.ogg", 0.08, 0.28, 0.8), 0.01, 0.6)
+    lay(out, cut("gunreload1.wav", 0.04, 0.27, 0.8), 0.07, 0.85)
+    click = cut("metalClick.ogg", 0.07, 0.15, 0.62)
+    t = 0.09
+    while t < 0.34:                                    # its gear's teeth
+        lay(out, click, t, 0.22)
+        t += 1.0 / (22 + 40 * (t - 0.09))
+    lay(out, band(noise(0.9), 120, 900) * env(0.9, 0.06, 0.06, 0.38), 0.0, 0.5)       # the swing
+    lay(out, cut("shotguncock.wav", 0.19, 0.42, 0.85), 0.58, 1.0)
+    lay(out, cut("assaultriflereload1.wav", 1.25, 1.42, 0.8), 0.6, 0.55)
+    return finish(reverb(body(out), 0.25, 0.14))
+
+
+def storm_reload():
+    """The latch thrown back; the brick dragged off; set down; the new one on and slammed home; the latch racked shut."""
+    out = np.zeros(n_(2.0))
+    lay(out, cut("shotguncock.wav", 0.03, 0.18, 0.8), 0.0, 0.9)
+    lay(out, cut("metalLatch.ogg", 0.02, 0.22, 0.75), 0.02, 0.35)
+    lay(out, cut("assaultriflereload1.wav", 0.12, 0.38, 0.85), 0.18, 0.95)
+    lay(out, cut("doorClose_4.ogg", 0.08, 0.3, 0.7), 0.46, 0.4)
+    lay(out, cut("gunreload1.wav", 0.76, 1.08, 0.85), 1.02, 0.75)
+    lay(out, cut("assaultriflereload1.wav", 1.02, 1.16, 0.8), 1.34, 1.0)
+    lay(out, cut("doorClose_3.ogg", 0.23, 0.42, 0.7), 1.35, 0.45)
+    lay(out, cut("gunreload1.wav", 1.24, 1.52, 0.85), 1.6, 1.0)
+    return finish(reverb(body(out), 0.28, 0.15))
+
+
+SOUNDS = {"StormDraw": storm_draw, "StormReload": storm_reload}
+
+
+def main():
+    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join("src", "RevNet", "Sounds")
+    os.makedirs(out, exist_ok=True)
+    for name, make in SOUNDS.items():
+        x = make()
+        write_wav(os.path.join(out, name + ".wav"), x)
+        print("%-12s %.2f s" % (name, len(x) / RATE))
+
+
+if __name__ == "__main__":
+    main()

@@ -88,8 +88,10 @@ BOX = struct.pack("<6fB", -16000, -16000, -1000, 16000, 16000, 27000, 1)
 SPHERE = struct.pack("<4f", 0, 0, 13000, 22000)
 
 
-WHOLE = ("StormView",)      # meshes made here with no game data in them (tools/mech_storm.py): kept whole
-FROM_BODY = ("StormArm",)   # the body's own faces (mech_parts.arm_mesh): their triangles emptied too
+# Meshes made here with no game data in them (tools/mech_storm.py, tools/blade_arms.py): kept whole.
+WHOLE = ("StormView", "MechBladeView", "JensenBladeView")
+# The body's own faces (mech_parts.arm_mesh): their triangles emptied too.
+FROM_BODY = ("StormArm",)
 
 
 def template(full, out):
@@ -133,14 +135,14 @@ def fill(template_path, bindings, out, body_package=None):
             out4 = np.zeros(raw.shape[:2] + (4,), "<i2")
             out4[:, :, :3] = raw
             d[tm["verts_off"]:tm["verts_off"] + out4.nbytes] = out4.tobytes()
-        if b is B and "arm" in B:
-            fill_arm(B["arm"], F, m, t, d)
+        for A in b.get("arms", []):
+            fill_arm(A, F, m, t, d)
     open(out, "wb").write(bytes(d))
     print("filled", out)
 
 
 def fill_arm(A, F, bm, t, d):
-    """The Mech's own arms in its view (StormArm, mech_parts.arm_mesh) from this PC's body: its triangles (the
+    """Arms in their owner's view (StormArm, mech_parts.arm_mesh; the blades', blade_view) from this PC's body: its triangles (the
     body's faces: each corner's vertex and UV from its wedge, the face's skin) and its frames (frame A["frame"]'s
     vertices through each frame's maps, summed in MechParts.cs's order)."""
     import numpy as np
@@ -215,31 +217,36 @@ def segments(F, tol):
 
 
 def arm_order(full, bindings):
-    """The Mech's own arms (StormArm: the body's faces, mech_parts.arm_mesh) in the order HCC wrote them: it sorts
-    a mesh's triangles by skin, not keeping their order within a skin (with two skins, the forearm's and the hand's,
-    it moved one), and both fills write the faces in the bindings' order. After tools/build_mech.sh."""
+    """Arms in their owner's view (the body's faces: StormArm, mech_parts.arm_mesh; the blades', blade_view) in the
+    order HCC wrote them: it sorts a mesh's triangles by skin, not keeping their order within a skin (with two skins,
+    the forearm's and the hand's, it moved one), and both fills write the faces in the bindings' order. After
+    tools/build_mech.sh."""
     B = json.load(open(bindings))
-    A = B.get("arm")
-    if not A:
-        return
     body_pkg = ue1mesh.Package(BODY_PACKAGE)
-    bm = body_pkg.read_mesh(B["body"])
-    sv = bm["special_verts"]
-    index = {v: i for i, v in enumerate(A["verts"])}
-    key = {}
-    for fi in A["faces"]:
-        f = bm["faces"][fi]
-        key[tuple(index[bm["wedges"][k][0] + sv] for k in f[:3])] = fi
     pkg = ue1mesh.Package(full)
-    m = pkg.read_mesh(A["mesh"])
-    order = []
-    for t in range(m["tris_count"]):
-        a, b, c = struct.unpack_from("<3H", pkg.d, m["tris_off"] + t * 20)
-        order.append(key[(a, b, c)])
-    if order != A["faces"]:
-        A["faces"] = order
+    changed = False
+    for b in [B] + B.get("also", []):
+        if not b.get("arms"):
+            continue
+        bm = body_pkg.read_mesh(b["body"])
+        sv = bm["special_verts"]
+        for A in b["arms"]:
+            index = {v: i for i, v in enumerate(A["verts"])}
+            key = {}
+            for fi in A["faces"]:
+                f = bm["faces"][fi]
+                key[tuple(index[bm["wedges"][k][0] + sv] for k in f[:3])] = fi
+            m = pkg.read_mesh(A["mesh"])
+            order = []
+            for t in range(m["tris_count"]):
+                a, c, e = struct.unpack_from("<3H", pkg.d, m["tris_off"] + t * 20)
+                order.append(key[(a, c, e)])
+            if order != A["faces"]:
+                A["faces"] = order
+                changed = True
+                print("%s faces put in HCC's order" % A["mesh"])
+    if changed:
         json.dump(B, open(bindings, "w"), indent=1)
-        print("arm faces put in HCC's order")
 
 
 def main():
