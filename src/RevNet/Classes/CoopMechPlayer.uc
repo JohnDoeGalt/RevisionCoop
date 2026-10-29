@@ -617,6 +617,7 @@ simulated function ClientTest( string Command )
 	local CoopMechButton B;
 	local DeusExWeapon W;
 	local CoopSoundLoop Loop;
+	local ShellCasing Casing;
 	local string S;
 	local int i;
 
@@ -636,9 +637,11 @@ simulated function ClientTest( string Command )
 	if ( Command=="cannon" )
 	{
 		W = DeusExWeapon(FindInventoryType( class'CoopMechCannon' ));
+		foreach AllActors( class'ShellCasing', Casing )
+			i++;
 		if ( W!=None )
 			ServerTestReply( "client's cannon: mode" @ CoopMechCannon(W).Mode @ "shot" @ W.ShotTime @ "auto" @ W.bAutomatic @ "slugs" @ W.numInstantProjectiles
-				@ "damage" @ W.HitDamage @ "sound" @ W.FireSound );
+				@ "damage" @ W.HitDamage @ "recoil" @ W.recoilStrength @ "sound" @ W.FireSound @ "| casings on the client" @ i );
 		return;
 	}
 	if ( Command=="loops" )

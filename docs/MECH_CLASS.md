@@ -98,7 +98,7 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   round counter) with the fist under its muzzle end. Drawn, it slides from behind the shoulder
   down the back of the arm and spins over the hand like a flipped revolver; reloading, the left
   gauntlet comes up from the lower left, pulls the brick magazine off its back and puts a new one
-  on; with the brick off, the five barrels' ends stand out of the block's back, a round's brass base
+  on; with the brick off, the nine barrels' ends stand out of the block's back, a round's brass base
   in each (`BREECH`: the user saw a flat face there, the brick feeding "empty space"). (First it was seen from just behind and above, the brick's back filling the view, over the
   body's own low-poly forearm: the user wanted it "just as good" as the blades.) Without
   `RevNetMech.u` the cannon uses the wrist-mounted mini-crossbow's view model. The view is put on
@@ -159,16 +159,19 @@ loading a Mech's record doesn't get them.
   seated (`BladeIn`), a heavy swish for each cut (`BladeSwing`).
 - **Arm Cannon** (`CoopMechCannon`, the mini-crossbow's code switched to automatic instant
   hits), the user's design: a Metal Storm gun, a slender casing over the back of the hand
-  with five barrels as a die shows five (10 mm bores), a brick magazine on its back, carried
+  with nine barrels, 3 x 3 (10 mm bores; the user's latest, 2026-10-29, after five as a die shows),
+  caseless rounds (nothing thrown out: `Cased`/`Caseless` take away the casings the stock 7.62 mm
+  spawns, on the host and on the player's own machine), a brick magazine on its back, carried
   behind the right shoulder blade. It sits low, its underside on the back of the hand and a short post
   down to the wrist's pin (less leverage in the recoil: the user's ask); level when aimed, seated on
   the arm as low as it goes and sinking a little into the fist (the arm points up as he shoots). 7.62 mm rounds, the assault rifle's ammo;
   Heavy Weapons skill; 5 damage and a 40-round magazine at level 1, up to 9 and 80. Three fire
   modes on the ammo key (`CoopMechCannon.CycleMode`, `CoopPlayerCore.SwitchAmmo`; kept over travel):
-  full auto (10 rounds a second); Storm, at a minigun's rate (0.03 s a round, 0.6 of the damage,
+  full auto (10 rounds a second, a third of the gun's recoil: the user found it kicking hardest of the
+  three); Storm, at a minigun's rate (0.03 s a round, 0.6 of the damage,
   looser, more recoil; its BRRRT a loop on every machine while it fires, `CoopSoundLoop`, kept going
   by each round the host spends, `Fire` and `GenerateBullet`, and its roar dying away after);
-  Spread, all five barrels at once (5 pellets at 0.7 of the damage, one blast a pull, 5 rounds a
+  Spread, all nine barrels at once (9 pellets at 0.7 of the damage, one blast a pull, 9 rounds a
   blast, wide). Its own sounds, in RevNet.u so every player hears them. Its gunfire from real CC0
   recordings (`tools/storm_guns.py`, The Free Firearm Sound Library in `art/sounds/cc0`) in a hard
   room (early reflections off its walls, then a long tail): the round an AK-47's a little lower

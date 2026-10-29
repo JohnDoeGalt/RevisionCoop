@@ -5,7 +5,8 @@
 // fire modes (CoopMechCannon) from the client's own ammo key: each mode's values
 // on the host and on the client; Storm's BRRRT a loop on both machines while the
 // client holds the trigger, gone (its tail played) when it lets go; Spread's blast
-// spending five rounds; back to full auto with its own values; its own sounds.
+// spending nine rounds; back to full auto with its own values; its own sounds. Caseless:
+// no casing on either machine after any mode ("casings", here and in the client's reply).
 //=============================================================================
 class CoopTestCannon extends CoopTest;
 
@@ -16,6 +17,16 @@ function string Values()
 {
 	return "mode" @ CoopMechCannon(W).Mode @ "shot" @ W.ShotTime @ "auto" @ W.bAutomatic @ "slugs" @ W.numInstantProjectiles
 		@ "damage" @ W.HitDamage @ "accuracy" @ W.BaseAccuracy @ "recoil" @ W.recoilStrength @ "sound" @ W.FireSound;
+}
+
+function string Casings()
+{
+	local ShellCasing S;
+	local int n;
+
+	foreach AllActors( class'ShellCasing', S )
+		n++;
+	return " | casings on the host" @ n;
 }
 
 function string Loops()
@@ -57,7 +68,7 @@ function Run( int t )
 	}
 	else if ( t==6 )
 	{
-		Log( "RevNetTest: cannon full auto held 1 s: rounds" @ AmmoBefore - W.AmmoType.AmmoAmount @ "state" @ W.GetStateName(), 'RevNet' );
+		Log( "RevNetTest: cannon full auto held 1 s: rounds" @ AmmoBefore - W.AmmoType.AmmoAmount @ "state" @ W.GetStateName() $ Casings(), 'RevNet' );
 		Remote.ClientTest( "release" );
 		Remote.ClientTest( "cannonmode" );
 	}
@@ -83,7 +94,7 @@ function Run( int t )
 	}
 	else if ( t==10 )
 	{
-		Log( "RevNetTest: cannon Storm let go: loops on the host" $ Loops(), 'RevNet' );
+		Log( "RevNetTest: cannon Storm let go: loops on the host" $ Loops() $ Casings(), 'RevNet' );
 		Remote.ClientTest( "loops" );
 		Remote.ClientTest( "fire" );                    // its brick empty: the client reloads
 	}
@@ -102,7 +113,7 @@ function Run( int t )
 	}
 	else if ( t==17 )
 	{
-		Log( "RevNetTest: cannon Spread blast: rounds spent" @ AmmoBefore - W.AmmoType.AmmoAmount @ "clip +" $ (W.ClipCount - ClipBefore), 'RevNet' );
+		Log( "RevNetTest: cannon Spread blast: rounds spent" @ AmmoBefore - W.AmmoType.AmmoAmount @ "clip +" $ (W.ClipCount - ClipBefore) $ Casings(), 'RevNet' );
 		Remote.ClientTest( "cannonmode" );
 	}
 	else if ( t==18 )

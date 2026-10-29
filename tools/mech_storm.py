@@ -6,7 +6,7 @@ off and sets a new one on.
 
 Our own design, built from boxes and prisms at the Mech's own scale (a game unit is about 2 cm). The gun: a
 slender dark slate barrel block, longer than it is wide (about 5 cm square, 16 cm long), out of the top of
-the wrist and over the back of the hand; five bores as a die shows (NINE: 3 x 3), the brass nose of each
+the wrist and over the back of the hand; nine bores, 3 x 3 (FIVE: as a die shows), the brass nose of each
 bore's next round showing, yellow and black chevrons at the muzzle, a hazard mark, a blue light; the olive
 brick behind it with a handle and a blue round counter; a yoke from the barrel block down to the wrist's
 pin, and the pin's trunnions. (In its view it rides the Mech's own gauntlet: view_mesh, tools/blade_arms.py.) Three
@@ -16,8 +16,8 @@ Frame: x forward along the forearm (the elbow at 0, the wrist at WRIST), y to it
 axis is the x axis. Game units, as on the body's forearm (14.25 long, about 3.2 thick). Built and painted
 deployed; every other pose is a rigid move of groups from there.
 
-  python -I tools/mech_storm.py preview [outdir] [9]     (default build/mech/storm: skins, OBJs, a sheet via
-                                                        Blender; 9: nine barrels, into outdir/nine)
+  python -I tools/mech_storm.py preview [outdir] [5]     (default build/mech/storm: skins, OBJs, a sheet via
+                                                        Blender; 5: five barrels, into outdir/five)
 """
 import math, os, subprocess, sys
 
@@ -36,9 +36,9 @@ CASS = dict(x0=12.6, x1=20.6, h=1.3, c=0.22, z=3.0)
 BRICK = dict(x0=8.8, x1=12.6, y=1.5, z0=1.7, z1=4.3)   # the magazine on the barrel block's back
 RIM, RECESS = 0.22, 0.25                       # the muzzle's rim; how far the bore plate is set in
 GRID, BORE = 3, 0.22                           # the bore plate's 3 x 3 cells; a bore's radius (about 9 mm across)
-NINE = tuple((i, j) for i in range(3) for j in range(3))   # the bored cells: nine, or
-FIVE = ((0, 0), (2, 0), (1, 1), (0, 2), (2, 2))            # five, as a die shows five (the user's latest)
-DICE = FIVE
+NINE = tuple((i, j) for i in range(3) for j in range(3))   # the bored cells: nine (the user's latest, 2026-10-29), or
+FIVE = ((0, 0), (2, 0), (1, 1), (0, 2), (2, 2))            # five, as a die shows five
+DICE = NINE
 BORE_DEPTH, NOSE = 1.0, 0.4                    # a bore's depth; a round's nose
 BREECH, STUB = 0.45, 0.3                       # how far the barrels stand out of the block's back; their outer radius
 GRAB = np.array([10.7, 0.4, BRICK["z1"] + 2.6])  # the left fist's centre, on the brick's handle
@@ -192,7 +192,7 @@ def build():
                 p.add_tri(base[k], base[(k + 1) % 8], tip, "nose")
     # The muzzle as one flat face, the bores painted on (the far-off copies, THIRD and BACK).
     p.add_quad(X(face_x, (-r, zc - r)), X(face_x, (r, zc - r)), X(face_x, (r, zc + r)), X(face_x, (-r, zc + r)), "muzzle")
-    # The breech: the five barrels through the block and out of its back, where the brick feeds them, a round's
+    # The breech: the nine barrels through the block and out of its back, where the brick feeds them, a round's
     # brass base in each (seen when the brick is off to reload: the user, 2026-10-29: the brick should connect
     # "directly to the barrels instead of just to empty space"). Inside the brick while it is on.
     back = x0 - BREECH
@@ -647,9 +647,9 @@ POSES = {"on": dict(), "spin": dict(turn=95.0), "under": dict(turn=180.0, slide=
 def main():
     global DICE
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join("build", "mech", "storm")
-    if len(sys.argv) > 3 and sys.argv[3] == "9":       # nine barrels (the user's other idea)
-        DICE = NINE
-        out = os.path.join(out, "nine")
+    if len(sys.argv) > 3 and sys.argv[3] == "5":       # five barrels, as a die shows (the user's earlier choice)
+        DICE = FIVE
+        out = os.path.join(out, "five")
     os.makedirs(out, exist_ok=True)
     p, d = made()
     print("arm gun: %d faces, %d verts, %d tris; UV units per game unit by skin: %s"

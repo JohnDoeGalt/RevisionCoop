@@ -3,7 +3,7 @@ aggressive and realistic", and "maybe it's the lack of echo"): cut from the CC0 
 (art/sounds/cc0, README there), made heavier, and put in a room: early reflections off its walls, then a long tail.
 
 - StormShot    full auto, one round: an AK-47's, a little lower, a Mosin Nagant's weight under it, the room
-- StormBlast   Spread, all five barrels at once: a 12-gauge doubled a few ms apart, a big rifle's crack, a long echo
+- StormBlast   Spread, all nine barrels at once: a 12-gauge doubled a few ms apart, a big rifle's crack, a long echo
 - StormLoop    Storm, a seamless second of 66 rounds: real rounds' cracks at a minigun's rate, the room ringing
 - StormTail    its last rounds and the room dying away after the trigger is let go
 

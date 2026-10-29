@@ -3,8 +3,8 @@
 //
 // The Mech's arm cannon (CoopMechPlayer), the user's design: a Metal Storm gun
 // that rides behind the shoulder blade, slides down the back of the arm and
-// spins over the hand; a brick of rounds on its back (tools/mech_storm.py). Fed
-// with the same 7.62 mm rounds as the assault rifle. The Mech sees its own model on
+// spins over the hand; nine barrels, 3 x 3; a brick of rounds on its back (tools/mech_storm.py).
+// Fed with the same 7.62 mm rounds as the assault rifle, caseless in it. The Mech sees its own model on
 // its own armoured gauntlets, StormView (RevNetMech, built at install; without it the
 // wrist-mounted mini-crossbow's); the others see it on the body (CoopMechParts:
 // BarrettCannon in hand, BarrettCannonBack otherwise). Part of the body, never left
@@ -32,6 +32,8 @@ var Mesh StormView;
 var travel byte Mode;           // 0 full auto, 1 Storm (a minigun's rate), 2 Spread (CycleMode)
 var localized string ModeNames[3];
 var CoopSoundLoop Loop;         // (host) Storm's BRRRT while it fires
+var ShellCasing Had[32];        // the casings about before a shot (Caseless)
+var int NHad, CasedDepth;
 
 replication
 {
@@ -95,8 +97,9 @@ simulated function RenderOverlays( Canvas Canvas )
 // ----------------------------------------------------------------------
 // Fire modes (the user's design, after Metal Storm: rounds stacked in the barrels, fired
 // electronically, so its rate is chosen, not built in), switched with the ammo key
-// (CoopPlayerCore.SwitchAmmo): full auto; Storm, at a minigun's rate (its BRRRT a loop
-// while it fires: CoopSoundLoop); Spread, all five barrels at once, one blast a pull.
+// (CoopPlayerCore.SwitchAmmo): full auto, its climb light (a third of the gun's recoil:
+// the user's ask, 2026-10-29); Storm, at a minigun's rate (its BRRRT a loop while it
+// fires: CoopSoundLoop); Spread, all nine barrels at once, one blast a pull.
 // ----------------------------------------------------------------------
 
 // The next mode (on the host).
@@ -123,7 +126,9 @@ function ApplyMode()
 	numInstantProjectiles = 0;
 	recoilStrength = default.recoilStrength;
 	FireSound = Sound'StormShot';
-	if ( Mode==1 )
+	if ( Mode==0 )
+		recoilStrength *= 0.3;
+	else if ( Mode==1 )
 	{
 		ShotTime = 0.03;
 		HitDamage = Max( 1, int( HitDamage * 0.6 + 0.5 ) );
@@ -135,7 +140,7 @@ function ApplyMode()
 	{
 		ShotTime = 0.6;
 		bAutomatic = false;
-		numInstantProjectiles = 5;
+		numInstantProjectiles = 9;
 		HitDamage = Max( 1, int( HitDamage * 0.7 + 0.5 ) );
 		BaseAccuracy += 0.35;
 		recoilStrength *= 2.5;
@@ -154,24 +159,26 @@ simulated function ClientMode( byte NewMode, int Slugs )
 	numInstantProjectiles = Slugs;
 }
 
-// Spread: a blast spends a round from each barrel (five), not one.
+// Spread: a blast spends a round from each barrel (nine), not one.
 function Fire( float Value )
 {
 	local int Before, n;
 
 	Before = ClipCount;
+	Cased();
 	Super.Fire( Value );
 	if ( Role==ROLE_Authority && Mode==1 && ClipCount>Before )
 		Storm();
 	if ( Role==ROLE_Authority && Mode==2 && ClipCount>Before && AmmoType!=None )
 	{
-		n = Min( 4, Min( AmmoType.AmmoAmount, ReloadCount - ClipCount ) );
+		n = Min( 8, Min( AmmoType.AmmoAmount, ReloadCount - ClipCount ) );
 		if ( n>0 )
 		{
 			AmmoType.UseAmmo( n );
 			ClipCount += n;
 		}
 	}
+	Caseless();
 }
 
 // The rounds after the first of a burst: a client's copy fires them and asks the host for each
@@ -181,9 +188,82 @@ function GenerateBullet()
 	local int Before;
 
 	Before = ClipCount;
+	Cased();
 	Super.GenerateBullet();
+	Caseless();
 	if ( Mode==1 && ClipCount>Before )
 		Storm();
+}
+
+// The player's own machine's copies of those (casings of its own, SimUseAmmo).
+simulated function bool ClientFire( float Value )
+{
+	local bool b;
+
+	Cased();
+	b = Super.ClientFire( Value );
+	Caseless();
+	return b;
+}
+
+simulated function SimGenerateBullet()
+{
+	Cased();
+	Super.SimGenerateBullet();
+	Caseless();
+}
+
+// A reload with lossy magazines drops the rounds left in the brick, a casing each.
+function ReloadAmmo()
+{
+	Cased();
+	Super.ReloadAmmo();
+	Caseless();
+}
+
+// Caseless rounds (the user's design, 2026-10-29): nothing thrown out. The stock 7.62 mm spawns a
+// casing for each round it spends (Ammo762mm.UseAmmo on the host, SimUseAmmo on the player's own
+// machine): Cased notes the casings already near the Mech, Caseless takes away the new ones, in the
+// same call (a host's never reach a client); the outermost pair alone (ClientFire may fire inside).
+simulated function float CasingReach()
+{
+	return 1.5 * Owner.CollisionRadius + Owner.CollisionHeight + 16;
+}
+
+simulated function Cased()
+{
+	local ShellCasing S;
+
+	if ( ++CasedDepth>1 )
+		return;
+	NHad = 0;
+	if ( Owner==None )
+		return;
+	foreach RadiusActors( class'ShellCasing', S, CasingReach(), Owner.Location )
+		if ( NHad<ArrayCount(Had) )
+			Had[NHad++] = S;
+}
+
+simulated function Caseless()
+{
+	local ShellCasing S;
+	local int i;
+	local bool bHad;
+
+	if ( --CasedDepth>0 )
+		return;
+	CasedDepth = 0;
+	if ( Owner==None )
+		return;
+	foreach RadiusActors( class'ShellCasing', S, CasingReach(), Owner.Location )
+	{
+		bHad = false;
+		for ( i=0; i<NHad && !bHad; i++ )
+			bHad = Had[i]==S;
+		if ( !bHad )
+			S.Destroy();
+	}
+	NHad = 0;
 }
 
 // Storm's BRRRT: a loop on the Mech while it fires (on every machine: CoopSoundLoop), kept going
@@ -256,10 +336,10 @@ defaultproperties
 	Misc1Sound=Sound'StormDry'
 	ModeNames(0)="full auto"
 	ModeNames(1)="Storm (a minigun's rate)"
-	ModeNames(2)="Spread (all five barrels)"
+	ModeNames(2)="Spread (all nine barrels)"
 	GoverningSkill=Class'DeusEx.SkillWeaponHeavy'
 	ItemName="Arm Cannon"
 	ItemArticle="the"
 	beltDescription="CANNON"
-	Description="Five barrels of stacked rounds fired electronically, carried behind the shoulder blade: drawn, it slides down the arm and spins over the hand. A brick magazine on its back takes standard 7.62 mm rounds. The ammo key switches its fire: full auto; Storm, at a minigun's rate; Spread, all five barrels at once."
+	Description="Nine barrels of stacked caseless rounds fired electronically, carried behind the shoulder blade: drawn, it slides down the arm and spins over the hand. A brick magazine on its back takes standard 7.62 mm rounds. The ammo key switches its fire: full auto; Storm, at a minigun's rate; Spread, all nine barrels at once."
 }
