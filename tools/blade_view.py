@@ -142,14 +142,17 @@ def view_mesh(p):
     return np.array(frames), vtris, skins + skins, seqs()
 
 
-def shared(p):
+def shared(p, drop=()):
     """The finalized arm's vertices, each once where position, face and group agree (UVs are per triangle corner in
-    a game mesh), their groups, its triangles and their skins."""
-    tg = [g for (pts, _), g in zip(p.faces, p.groups) for _ in range(len(pts) - 2)]
+    a game mesh), their groups, its triangles and their skins; but not the faces of the regions in drop."""
+    tr = [r for (pts, r) in p.faces for _ in range(len(pts) - 2)]
     ts = [s for (pts, _), s in zip(p.faces, p.sheets) for _ in range(len(pts) - 2)]
     vg = [g for (pts, _), g in zip(p.faces, p.groups) for _ in pts]
-    V, G, index, tris = [], [], {}, []
-    for t in p.tris:
+    V, G, index, tris, skins = [], [], {}, [], []
+    for t, r, s in zip(p.tris, tr, ts):
+        if r in drop:
+            continue
+        skins.append(s)
         P = [np.asarray(p.verts[i]) for i in t[:3]]
         n = np.cross(P[1] - P[0], P[2] - P[0])
         n = tuple(np.round(n / (np.linalg.norm(n) + 1e-12), 2))
@@ -162,7 +165,7 @@ def shared(p):
                 G.append(vg[i])
             ids.append(index[key])
         tris.append((ids[0], ids[1], ids[2], t[3], t[4], t[5]))
-    return np.array(V), G, tris, ts
+    return np.array(V), G, tris, skins
 
 
 def seqs():
@@ -174,7 +177,8 @@ def seqs():
 
 
 def build(cls, art):
-    """A class's view mesh (<cls>BladeView) and its skins (<cls>Arm1, 2) into the art folder; its import lines."""
+    """A class's view mesh (<cls>BladeView) and its skins (<cls>Arm1, 2) into the art folder; their import lines
+    (the textures', imported before any mesh uses them: the arm cannon's view wears the Mech's too; the mesh's)."""
     from mech_bake import save_pcx
     p = blade_arms.made()
     texs = []
@@ -189,7 +193,7 @@ def build(cls, art):
     write_d3d(os.path.join(art, "Models", name + "_d.3d"), frames.shape[1], tris, skins)
     write_a3d(os.path.join(art, "Models", name + "_a.3d"), np.rint(frames * 256).astype(np.int16))
     print("%s: %d verts, %d tris, %d frames" % (name, frames.shape[1], len(tris), frames.shape[0]))
-    return ["#exec TEXTURE IMPORT NAME=%s FILE=Textures\\%s.pcx GROUP=Skins" % (t, t) for t in texs] + uc_lines(name, texs)
+    return ["#exec TEXTURE IMPORT NAME=%s FILE=Textures\\%s.pcx GROUP=Skins" % (t, t) for t in texs], uc_lines(name, texs)
 
 
 def uc_lines(name, texs):

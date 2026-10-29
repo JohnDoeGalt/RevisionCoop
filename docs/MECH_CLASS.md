@@ -87,25 +87,23 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   and shape around them). `Install-RevNet.ps1` fills the frames in from the player's own
   `DeusExCharacters.u` (`MechParts.cs`, 86 ms; byte-identical to `tools/mech_art.py fill`). If
   it can't (a different body), the Mech plays with the body alone. The release builder
-  refuses a template that still has frames. `StormArm` (the first-person arms) is filled the
-  same way, its triangles too (they are the body's own); `StormView` (the gun, RevNet's own
-  model) ships whole.
+  refuses a template that still has frames. The first-person views (`StormView`,
+  `MechBladeView`, `JensenBladeView`: RevNet's own models, arms and all) ship whole.
 - **Collision:** JC's.
-- **First person:** the arm cannon is `StormView` (the gun, `tools/mech_storm.py`; its
-  `preview` renders the poses with `tools/blender_storm.py`): drawn,
-  it slides from behind the shoulder down the back of the arm and spins over the hand like a
-  flipped revolver; reloading, the left hand pulls the brick magazine off its back and puts a
-  new one on. With it `CoopMechViewArm` draws `StormArm`, the Mech's own forearms and hands
-  (the body's faces, on the gun's frames: `CoopMechCannon.RenderOverlays`). Without
-  `RevNetMech.u` the cannon uses the wrist-mounted mini-crossbow's view model. The right arm in that
-  view is the forearm and hand (faces from the elbow on, `mech_parts.ARM_FROM`: at 3 units past it
-  only the glove was left and the arm looked cut off at the wrist, which the user saw; within
-  `ARM_RADIUS` of the forearm's axis, so no upper-arm faces cross the view; `mech_art.py order` puts
-  them in the order HCC wrote them so the install-time fills match). Its forearm faces near the
-  elbow are cut at `ARM_RADIUS`, the hand's never (`forearm_faces`: at 4.6 five of a hand's were
-  left out, a gap at the wrist). The arm cannon's view is put on where it is drawn as well
-  (`RenderOverlays`): `Facelift` runs on the host alone, and RevNetMech can't reach a client by
-  replication.
+- **First person, the arm cannon:** `StormView` (`tools/mech_storm.py`: the gun, and the Mech's
+  own armoured gauntlets from `tools/blade_arms.py` in the Mech's paint, the blades' arms
+  without blade and housing). The gun rides the right gauntlet, its yoke on the wrist joint; the
+  arm is held as a shooter's gun is, low on the right and seen three-quarters from its left
+  (`BASE`), so its side shows (the hazard mark, the chevrons, the light strip, the brick's band and
+  round counter) with the fist under its muzzle end. Drawn, it slides from behind the shoulder
+  down the back of the arm and spins over the hand like a flipped revolver; reloading, the left
+  gauntlet comes up from the lower left, pulls the brick magazine off its back and puts a new one
+  on; with the brick off, the five barrels' ends stand out of the block's back, a round's brass base
+  in each (`BREECH`: the user saw a flat face there, the brick feeding "empty space"). (First it was seen from just behind and above, the brick's back filling the view, over the
+  body's own low-poly forearm: the user wanted it "just as good" as the blades.) Without
+  `RevNetMech.u` the cannon uses the wrist-mounted mini-crossbow's view model. The view is put on
+  where it is drawn as well (`RenderOverlays`): `Facelift` runs on the host alone, and RevNetMech
+  can't reach a client by replication.
 - **First person, the blades** (`tools/blade_arms.py`, `tools/blade_view.py`, `CoopMechBlade`):
   blade arms of our own, built to be seen up close (the body's own forearms, tried first, were
   its far-off low-poly sleeves and mitten hands, and the user called them garbage): a mechanical
@@ -171,13 +169,18 @@ loading a Mech's record doesn't get them.
   looser, more recoil; its BRRRT a loop on every machine while it fires, `CoopSoundLoop`, kept going
   by each round the host spends, `Fire` and `GenerateBullet`, and its roar dying away after);
   Spread, all five barrels at once (5 pellets at 0.7 of the damage, one blast a pull, 5 rounds a
-  blast, wide). Its own sounds, in RevNet.u so every player hears them: synthesized
-  (`tools/storm_sounds.py`): the shot (an electric crack, the report, a thump), the blast, the
-  BRRRT loop and its tail, putting it away, a dry click and the mode switch's chirp; the draw and
-  the brick swap cut from real CC0 gun and metal foley (`tools/storm_foley.py`, `art/sounds/cc0`:
-  pump strokes, magazine and bolt work, latches, pitched down for weight), as the user wanted them
-  "crunchy and mechanical", "clunky and chunky" (synthesized they were too high tech, then like
-  a bouncing ball).
+  blast, wide). Its own sounds, in RevNet.u so every player hears them. Its gunfire from real CC0
+  recordings (`tools/storm_guns.py`, The Free Firearm Sound Library in `art/sounds/cc0`) in a hard
+  room (early reflections off its walls, then a long tail): the round an AK-47's a little lower
+  with a Mosin Nagant's weight under it, the blast a 12-gauge doubled, the BRRRT real rounds' cracks
+  at 66 a second, its tail the last rounds and the room ringing on (synthesized, the user found
+  them "very dated", "maybe it's the lack of echo"). The draw and the brick swap cut from real CC0
+  gun and metal foley (`tools/storm_foley.py`: pump strokes, magazine and bolt work, latches,
+  pitched down for weight; "crunchy and mechanical", "clunky and chunky"); the swap in two halves
+  on its animation, the brick dragged off with ReloadBegin (`CockingSound`) and the new one slammed
+  home with ReloadEnd (`AltFireSound`), 2 s apart (one sound for the whole reload ran ahead of the
+  hand). Putting it away, a dry click and the mode switch's chirp are synthesized
+  (`tools/storm_sounds.py`).
 
 ## The trees
 

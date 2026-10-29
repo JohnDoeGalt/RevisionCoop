@@ -345,7 +345,7 @@ def main():
     for p in parts:
         p.finalize()
     print("atlas: %.2f UV units per game unit" % dens)
-    gun, view, arms = storm_parts(F, L, mech_art.triangles(m, R), m, os.path.join(out, "Textures"))
+    gun, view = storm_parts(F, L, mech_art.triangles(m, R), m, os.path.join(out, "Textures"))
     # The blades in steps out of the forearms, for others' screens (CoopMechParts.Stages): BarrettBlade1, 2.
     import blade_view
     steps = []
@@ -392,19 +392,17 @@ def main():
     write_d3d(os.path.join(out, "Models", "StormView_d.3d"), frames.shape[1], tris, skins)
     write_a3d(os.path.join(out, "Models", "StormView_a.3d"), np.rint(frames * 256).astype(np.int16))
     print("StormView: %d verts, %d tris, %d frames" % (frames.shape[1], len(tris), frames.shape[0]))
-    # The Mech's own arms in its view: the body's (filled in at install from each PC's own body).
-    out_bind["arms"] = []
-    for name, (frames, tris, skins, bind) in (("StormArm", arms),):
-        write_d3d(os.path.join(out, "Models", name + "_d.3d"), frames.shape[1], tris, skins)
-        write_a3d(os.path.join(out, "Models", name + "_a.3d"), np.rint(frames * 256).astype(np.int16))
-        out_bind["arms"].append(bind)
-        print("%s: %d verts, %d tris (body faces), skins %s" % (name, frames.shape[1], len(tris), sorted(set(skins))))
-    # Each class's own view of its blades (ours, kept whole, as StormView: tools/blade_arms.py, tools/blade_view.py).
+    # Each class's own view of its blades (ours, kept whole, as StormView: tools/blade_arms.py, tools/blade_view.py);
+    # the Mech's arm skins are its gauntlets' in StormView too.
     import blade_view
-    blade_lines = blade_view.build("Mech", out) + blade_view.build("Jensen", out)
+    blade_tex, blade_meshes = [], []
+    for cls in ("Mech", "Jensen"):
+        t, b = blade_view.build(cls, out)
+        blade_tex += t
+        blade_meshes += b
     for f, pose in previews:
         mech_art.write_obj(os.path.join(out, "body_%s.obj" % pose), m, pkg.frames(m)[f])
-    write_uc(os.path.join(out, "Classes", "MechArt.uc"), m, list(meshes), seqs, blade_lines)
+    write_uc(os.path.join(out, "Classes", "MechArt.uc"), m, list(meshes), seqs, blade_tex, blade_meshes)
     os.makedirs(os.path.join(out, "Textures"), exist_ok=True)
     bake_atlas([p for p in parts if p.mesh == "BarrettParts"] + [p for p in parts if p.mesh != "BarrettParts"],
                mech_art.triangles(m, R), os.path.join(out, "Textures", "BarrettParts.pcx"))
@@ -416,15 +414,15 @@ def storm_parts(F, L, T, m, texdir):
     """The arm cannon (tools/mech_storm.py, the user's design): its three skins into texdir; the parts
     BarrettCannon (on top of the right hand, while it is held) and BarrettCannonBack (behind the right
     shoulder blade, muzzle down, otherwise); the Mech's own view of it, StormView (frames, triangles,
-    skins, sequences); and of its own arms, StormArm (arm_mesh). Placed through a mirror (the game's frame
-    is left-handed), so wound back."""
+    skins, sequences: the gun on the Mech's own gauntlets). Placed through a mirror (the game's frame is
+    left-handed), so wound back."""
     import mech_storm
     p, _ = mech_storm.made()
     os.makedirs(texdir, exist_ok=True)
     for s in range(3):
         im = mech_storm.bake(p, s, os.path.join(texdir, "StormGun%d.png" % (s + 1)))
         mech_bake.save_pcx(np.asarray(im, float), os.path.join(texdir, "StormGun%d.pcx" % (s + 1)))
-    detail = ("face", "bore", "cap", "nose")
+    detail = ("face", "bore", "cap", "nose", "barrel")
     out = []
 
     def placed(name, mesh, groups, o, ax, up, anchor, shape=None):
@@ -478,116 +476,10 @@ def storm_parts(F, L, T, m, texdir):
     gx, gz = (mech_storm.BRICK["x0"] + mech_storm.CASS["x1"]) / 2, mech_storm.CASS["z"] - mech_storm.CASS["h"]
     placed("cannon_back", "BarrettCannonBack", mech_storm.BACK, centre - gx * down - gz * out_, down, out_,
            dict(group="torso", zmin=8, zmax=24))
-    return out, mech_storm.view_mesh(p), arm_mesh(F, L, m, mech_storm.frames_of)
+    return out, mech_storm.view_mesh(p)
 
 
 SHOOT = 102         # a Shoot frame: the arms out, aiming
-# The Mech's own arms in its view (arm_mesh): faces from this far along the forearm from the elbow on, and no
-# farther from its axis than ARM_RADIUS. Its sleeve's faces run from the elbow's ring (along 0) to the wrist: 3.0
-# kept the hands alone and the right arm looked cut off at the wrist (the user saw it); the elbow's and upper
-# arm's faces also start at the ring but stand out 5 to 9 from the axis (build/tmp/arm_faces.py), and close to
-# the eye they stood up across the view.
-ARM_FROM, ARM_RADIUS = -0.5, 4.5
-
-
-def forearm_faces(m, G, P, e, w):
-    """The body's faces of a forearm and its hand (G: the arm's vertices, P: one frame's, e the elbow, w the wrist):
-    from ARM_FROM along it, the body's skins (not its specials); those that start in its first half within
-    ARM_RADIUS of its axis (the elbow's and upper arm's stand out farther; the hand's fingers, a little: at 4.6, five
-    of the right hand's were left out and the glove showed a notch)."""
-    sv = m["special_verts"]
-    Gs = set(G)
-    ax = norm(w - e)
-    half = np.linalg.norm(w - e) / 2
-    faces = []
-    for fi, f in enumerate(m["faces"]):
-        vs = [m["wedges"][k][0] + sv for k in f[:3]]
-        D = P[vs] - e
-        along = D @ ax
-        if (m["materials"][f[3]][1] < 4 and all(v in Gs for v in vs) and along.min() > ARM_FROM
-                and (along.min() > half or np.linalg.norm(D - np.outer(along, ax), axis=1).max() < ARM_RADIUS)):
-            faces.append(fi)
-    return faces
-
-
-def arm_mesh(F, L, m, view):
-    """StormArm, the Mech's own forearms and hands as it sees them (the user's ask: his own arm, not a
-    model of one): the body's faces (the right forearm and hand; the left, for the reload), with the body's
-    UVs and skins, its vertices in frame SHOOT carried into the view frame by frame (mech_storm.in_view:
-    the right arm with the gun's arm, the left as the left hand). Built from each PC's own body at install
-    (mech_art.fill, MechParts.cs): the release carries only the face numbers and each frame's transforms.
-    Returns (frames, tris, skins, binding)."""
-    import mech_storm
-    R, S = F[REST], F[SHOOT]
-    sv = m["special_verts"]
-    up = np.array([0.0, 0.0, 1.0])
-    picked, groups, xforms = [], [], []
-    for name, gname in (("rarm", "arm"), ("larm", "lhand")):
-        G = L[name]
-        e = S[[i for i in G if 3 < R[i, 2] < 9]].mean(axis=0)            # as landmarks(), in frame SHOOT
-        w = S[[i for i in G if -7 < R[i, 2] < -3]].mean(axis=0)
-        ax = norm(w - e)
-        u = norm(up - (up @ ax) * ax)                                      # it faces up as it shoots
-        left = -np.cross(u, ax)
-        picked.append(forearm_faces(m, G, S, e, w))
-        # Body (frame SHOOT, game units) -> the gun's frame: this forearm's (the left one's carried to the
-        # brick's handle as mech_storm's left hand), then the view, frame by frame: an affine map each.
-        def to_gun(P, e=e, ax=ax, left=left, u=u, name=name, w=w):
-            d = np.stack([(P - e) @ ax, (P - e) @ left, (P - e) @ u], -1)
-            if name == "rarm":
-                return d
-            g = mech_storm.GRAB
-            uu = norm(g - np.array([-2.0, 15.0, -7.0]))
-            vv = norm(np.cross(np.array([0.0, 0.0, 1.0]), uu))
-            ww = np.cross(uu, vv)
-            held = np.array([np.linalg.norm(w - e) + 2.3, 0.0, -0.3])
-            return g + (d - held) @ np.array([uu, vv, ww])
-        basis = np.vstack([np.zeros(3), np.eye(3)])
-        xf = []
-        for P in view(to_gun(basis), gname):
-            b = P[0]
-            xf.append(np.hstack([(P[1:] - b).T, b[:, None]]))                # 3 x 4: [A | b]
-        xforms.append(np.array(xf))
-        groups.append(gname)
-    # The vertices (each once), the triangles (the body's winding: through two mirrors, still facing out).
-    order, index, tris, skins = [], {}, [], []
-    for gi, faces in enumerate(picked):
-        for fi in faces:
-            f = m["faces"][fi]
-            ids = []
-            for k in f[:3]:
-                v = m["wedges"][k][0] + sv
-                if v not in index:
-                    index[v] = len(order)
-                    order.append((v, gi))
-                ids.append(index[v])
-            uv = [(m["wedges"][k][1], m["wedges"][k][2]) for k in f[:3]]
-            tris.append((ids[0], ids[1], ids[2], uv[0], uv[1], uv[2]))
-            skins.append(m["materials"][f[3]][1])
-    # In skin order (the importer sorts a mesh's triangles so, keeping their order within a skin).
-    sort = sorted(range(len(tris)), key=lambda i: skins[i])
-    faces = [fi for faces in picked for fi in faces]
-    tris, skins, faces = [tris[i] for i in sort], [skins[i] for i in sort], [faces[i] for i in sort]
-    frames = arm_frames(S, order, np.stack(xforms, 1))
-    binding = dict(mesh="StormArm", frame=SHOOT, verts=[v for v, _ in order], groups=[g for _, g in order],
-                   faces=faces,
-                   xforms=[[[float(x) for x in M.ravel()] for M in per] for per in np.stack(xforms, 1)])
-    return frames, tris, skins, binding
-
-
-def arm_frames(S, order, xforms):
-    """The arm's frames (view units) from the body's frame-SHOOT vertices and each frame's maps (frames,
-    groups, 3, 4); the sums in the order MechParts.cs does them (its bytes must match)."""
-    P = S[[v for v, _ in order]]
-    g = np.array([gi for _, gi in order])
-    out = np.zeros((len(xforms), len(order), 3))
-    for f, per in enumerate(xforms):
-        M = per[g]                                                         # each vertex's map
-        for a in range(3):
-            out[f, :, a] = ((M[:, a, 0] * P[:, 0] + M[:, a, 1] * P[:, 1]) + M[:, a, 2] * P[:, 2]) + M[:, a, 3]
-    return out
-
-
 def forearm_frame(F, L):
     """The right forearm in the rest frame: elbow, wrist, its axis, and the side of it that faces up when
     the Mech shoots (frame SHOOT: the forearm's turn from the rest pose, by its vertices)."""
@@ -620,7 +512,7 @@ def write_a3d(path, raw):
         f.write(np.concatenate([raw, pad], axis=2).astype("<i2").tobytes())
 
 
-def write_uc(path, m, names, view_seqs, blade_lines):
+def write_uc(path, m, names, view_seqs, blade_tex, blade_meshes):
     pkg, _ = mech_art.load_body()
     seqs = pkg.read_mesh(mech_art.BODY)["seqs"]
     s, o, rot = m["scale"], m["origin"], m["rot_origin"]
@@ -639,8 +531,9 @@ def write_uc(path, m, names, view_seqs, blade_lines):
              "#exec TEXTURE IMPORT NAME=StormGun2 FILE=Textures\\StormGun2.pcx GROUP=Skins",
              "#exec TEXTURE IMPORT NAME=StormGun3 FILE=Textures\\StormGun3.pcx GROUP=Skins",
              "// (The Light Mech's skins, Adam Jensen's look: JensenArt.uc, parsed before this.)",
+             "// The blade arms' skins (tools/blade_arms.py: the Mech's are its gauntlets' in StormView too)."] + blade_tex + [
              "",
-             "// The Mech's own view of its arm cannon (CoopMechCannon): the eye at the origin, X ahead.",
+             "// The Mech's own view of its arm cannon, on its own gauntlets (CoopMechCannon): the eye at the origin, X ahead.",
              "#exec MESH IMPORT MESH=StormView ANIVFILE=Models\\StormView_a.3d DATAFILE=Models\\StormView_d.3d X=0 Y=0 Z=0 MLOD=0",
              "#exec MESH ORIGIN MESH=StormView X=0 Y=0 Z=0 PITCH=0 YAW=0 ROLL=0"]
     total = sum(q[2] for q in view_seqs)
@@ -648,18 +541,10 @@ def write_uc(path, m, names, view_seqs, blade_lines):
     for name, start, count, rate in view_seqs:
         lines.append("#exec MESH SEQUENCE MESH=StormView SEQ=%s STARTFRAME=%d NUMFRAMES=%d RATE=%g" % (name, start, count, rate))
     lines.append("#exec MESHMAP SCALE MESHMAP=StormView X=0.00390625 Y=0.00390625 Z=0.00390625")
-    lines += ["#exec MESHMAP SETTEXTURE MESHMAP=StormView NUM=%d TEXTURE=StormGun%d" % (k, k + 1) for k in range(3)]
-    lines += ["", "// Its own arms in that view (the body's, in its skins: CoopMechPlayer.MechSkin; drawn with it).",
-              "#exec MESH IMPORT MESH=StormArm ANIVFILE=Models\\StormArm_a.3d DATAFILE=Models\\StormArm_d.3d X=0 Y=0 Z=0 MLOD=0",
-              "#exec MESH ORIGIN MESH=StormArm X=0 Y=0 Z=0 PITCH=0 YAW=0 ROLL=0",
-              "#exec MESH SEQUENCE MESH=StormArm SEQ=All STARTFRAME=0 NUMFRAMES=%d RATE=30" % total]
-    for name, start, count, rate in view_seqs:
-        lines.append("#exec MESH SEQUENCE MESH=StormArm SEQ=%s STARTFRAME=%d NUMFRAMES=%d RATE=%g" % (name, start, count, rate))
-    lines.append("#exec MESHMAP SCALE MESHMAP=StormArm X=0.00390625 Y=0.00390625 Z=0.00390625")
-    lines += ["#exec MESHMAP SETTEXTURE MESHMAP=StormArm NUM=%d TEXTURE=%s" % (k, t)
-              for k, t in enumerate(("BarrettSuit", "BarrettLegs", "BarrettFace", "BarrettFace"))]
+    lines += ["#exec MESHMAP SETTEXTURE MESHMAP=StormView NUM=%d TEXTURE=%s" % (k, t)
+              for k, t in enumerate(("StormGun1", "StormGun2", "StormGun3", "MechArm1", "MechArm2"))]
     lines += ["", "// Each class's own view of its arm blades: its blade arms (tools/blade_arms.py, tools/blade_view.py; CoopMechBlade)."]
-    lines += blade_lines
+    lines += blade_meshes
     for n in names:
         lines += ["",
                   "#exec MESH IMPORT MESH=%s ANIVFILE=Models\\%s_a.3d DATAFILE=Models\\%s_d.3d X=0 Y=0 Z=0 MLOD=0" % (n, n, n),

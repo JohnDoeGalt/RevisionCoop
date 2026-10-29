@@ -197,8 +197,7 @@ public static class MechParts
 			byte[] outData = (byte[])tpl.D.Clone();
 			Mesh bm;
 			double[,,] F;
-			// The main body's parts, then each other body's ("also": the Light Mech's on JC's trench body); with each,
-			// its arms in their owner's view ("arms").
+			// The main body's parts, then each other body's ("also": the Light Mech's on JC's trench body).
 			var bodies = new List<Dictionary<string, object>> { B };
 			if (B.ContainsKey("also"))
 				foreach (object o in (object[])B["also"])
@@ -207,12 +206,6 @@ public static class MechParts
 			{
 				string why0 = FillBody(body, b, tpl, outData, out bm, out F);
 				if (why0 != null) return why0;
-				if (b.ContainsKey("arms"))
-					foreach (object a in (object[])b["arms"])
-					{
-						string why = FillArm((Dictionary<string, object>)a, bm, F, tpl, outData);
-						if (why != null) return why;
-					}
 			}
 			File.WriteAllBytes(outPath, outData);
 			return null;
@@ -285,62 +278,6 @@ public static class MechParts
 						outData[at + 7] = 0;
 					}
 				}
-			}
-		}
-		return null;
-	}
-
-	// Arms in their owner's view (StormArm; the blades', tools/blade_view.py): its triangles are the body's faces (each corner's vertex
-	// and UV from its wedge, the face's skin), its frames frame A["frame"]'s vertices through each frame's
-	// maps. Same steps as tools/mech_art.py fill_arm (its bytes must match).
-	static string FillArm(Dictionary<string, object> A, Mesh bm, double[,,] F, Package tpl, byte[] outData)
-	{
-		string name = (string)A["mesh"];
-		Mesh tm = tpl.ReadMesh(name);
-		var verts = (object[])A["verts"];
-		var groups = (object[])A["groups"];
-		var faces = (object[])A["faces"];
-		var xforms = (object[])A["xforms"];
-		int nv = verts.Length, nf = xforms.Length, frame = Convert.ToInt32(A["frame"]);
-		if (tm.TrisCount != faces.Length || tm.VertsCount != nf * nv)
-			return "the template's " + name + " doesn't match its bindings";
-		var index = new Dictionary<int, int>();
-		for (int i = 0; i < nv; i++) index[Convert.ToInt32(verts[i])] = i;
-		for (int t = 0; t < faces.Length; t++)
-		{
-			int fi = Convert.ToInt32(faces[t]);
-			int at = tm.TrisOffset + t * 20;
-			for (int c = 0; c < 3; c++)
-			{
-				int w = bm.Faces[fi, c];
-				int v = index[bm.Wedges[w, 0] + bm.SpecialVerts];
-				outData[at + c * 2] = (byte)(v & 0xFF);
-				outData[at + c * 2 + 1] = (byte)((v >> 8) & 0xFF);
-				outData[at + 6 + c * 2] = (byte)bm.Wedges[w, 1];
-				outData[at + 7 + c * 2] = (byte)bm.Wedges[w, 2];
-			}
-			for (int b = 12; b < 16; b++) outData[at + b] = 0;     // PolyFlags
-			Array.Copy(BitConverter.GetBytes(bm.MatTex[bm.Faces[fi, 3]]), 0, outData, at + 16, 4);
-		}
-		for (int f = 0; f < nf; f++)
-		{
-			var per = (object[])xforms[f];
-			for (int q = 0; q < nv; q++)
-			{
-				var M = (object[])per[Convert.ToInt32(groups[q])];
-				int v = Convert.ToInt32(verts[q]);
-				double x = F[frame, v, 0], y = F[frame, v, 1], z = F[frame, v, 2];
-				int at = tm.VertsOffset + (f * nv + q) * 8;
-				for (int a = 0; a < 3; a++)
-				{
-					double pos = ((D(M[4 * a]) * x + D(M[4 * a + 1]) * y) + D(M[4 * a + 2]) * z) + D(M[4 * a + 3]);
-					double r = Math.Round(pos * 256);
-					short s = (short)Math.Max(-32768, Math.Min(32767, r));
-					outData[at + a * 2] = (byte)(s & 0xFF);
-					outData[at + a * 2 + 1] = (byte)((s >> 8) & 0xFF);
-				}
-				outData[at + 6] = 0;
-				outData[at + 7] = 0;
 			}
 		}
 		return null;

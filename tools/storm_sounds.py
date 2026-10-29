@@ -4,12 +4,11 @@ are ours to ship (src/RevNet/Sounds, imported into RevNet.u by CoopMechCannon: R
 player hears them). The gun's story: a Metal Storm gun, its stacked rounds fired electronically (an electric crack in
 each shot), drawn from behind the shoulder down the arm and spun over the hand, a brick magazine swapped by hand.
 
-- StormShot    full auto, one round                 StormBlast  the spread: all five barrels at once
-- StormLoop    the Storm mode, a seamless loop of 66 rounds a second (the BRRRT)   StormTail  its roar dying away
 - StormDown    unlock, servo back, clunk             StormDry    an empty electronic click
 - StormMode    the mode switch's chirp
-(StormDraw and StormReload: tools/storm_foley.py, from real CC0 recordings; synthesized here they were too
-"high tech", then "like bouncing a bouncy ball", the user said.)
+(Its gunfire, StormShot, StormBlast, StormLoop and StormTail: tools/storm_guns.py; its draw and reload:
+tools/storm_foley.py; both from real CC0 recordings. Synthesized here, the user found the gunfire "very dated", the
+draw and reload too "high tech", then "like bouncing a bouncy ball".)
 
   python -I tools/storm_sounds.py [out dir]     (default src/RevNet/Sounds)
 """
@@ -102,57 +101,6 @@ def finish(x, peak=0.93, fade=0.004):
     return x
 
 
-def shot(length, at=0.0, size=1.0, tight=1.0):
-    """One electronically fired round: the ignition's zap, the crack, the report's body, a thump."""
-    t = np.arange(n_(length)) / RATE - at
-    zap = np.sign(np.sin(2 * np.pi * 1850 * t)) * np.where((t >= 0) & (t < 0.006 * tight), 1.0, 0.0) * 0.25
-    crack = band(noise(length), 2600, 10000) * env(length, 0.0003, 0.006 * tight, at) * 1.9
-    body = band(noise(length), 180, 2600) * env(length, 0.0008, 0.04 * tight * size, at) * 1.5
-    low = thump(length, 105 * size ** -0.3, 50, 0.02, 0.028 * tight * size, at) * 0.65 * size
-    return zap + crack + body + low
-
-
-def storm_shot():
-    L = 0.5
-    x = drive(shot(L) + 0.25 * click(L, 0.012, 0.6), 2.2)
-    return finish(reverb(x, 0.38, 0.22))
-
-
-def storm_blast():
-    L = 1.3
-    x = sum(shot(L, at, size=1.25) * (1.0 - 0.08 * i) for i, at in enumerate((0.0, 0.0016, 0.0031, 0.0045, 0.006)))
-    x = x + thump(L, 80, 34, 0.08, 0.16) * 2.2 + band(noise(L), 60, 700) * env(L, 0.002, 0.11) * 1.6
-    return finish(reverb(drive(x, 3.0), 0.85, 0.32))
-
-
-def storm_loop(rate=66.0, seconds=1.0):
-    """The BRRRT: rounds at rate a second over seconds (whole periods: it loops), each a tight shot, over a
-    pulsing roar, saturated hard; built round the loop's edge so its end runs into its start."""
-    L = seconds
-    N = n_(L)
-    x = np.zeros(N)
-    k = int(round(rate * seconds))
-    for i in range(k):
-        at = i / rate + rng.uniform(-0.0012, 0.0012)
-        s = shot(0.06, 0.0, size=0.85, tight=0.55) * rng.uniform(0.85, 1.12)
-        j = n_(at) % N
-        idx = (np.arange(len(s)) + j) % N
-        x[idx] += s
-    t = np.arange(N) / RATE
-    pulse = 0.55 + 0.45 * np.abs(np.sin(np.pi * rate * t)) ** 3
-    roar = band(noise(L), 55, 850, circular=True) * pulse * 0.9
-    rattle = band(noise(L), 3200, 7000, circular=True) * pulse * 0.12
-    x = drive(x + roar + rattle, 3.2)
-    return finish(reverb(x, 0.45, 0.25, circular=True), fade=0)
-
-
-def storm_tail():
-    L = 1.4
-    x = sum(shot(L, i / 66.0, size=0.85, tight=0.55) * (1 - i / 6) for i in range(5))
-    x = x + band(noise(L), 40, 320) * env(L, 0.01, 0.38) * 1.6 + thump(L, 70, 30, 0.12, 0.3) * 1.2
-    return finish(reverb(drive(x, 2.4), 1.1, 0.4))
-
-
 def storm_down():
     L = 0.6
     whine = sweep(L, 1400, 450, 0.05, 0.32, (1.0, 0.3), 0.004) * env(L, 0.03, 0.35, 0.05) * np.where(np.arange(n_(L)) / RATE < 0.42, 1, 0) * 0.3
@@ -175,8 +123,7 @@ def storm_mode():
     return finish((a + b) * 0.3 + click(L, 0.0, 0.4), peak=0.55)
 
 
-SOUNDS = {"StormShot": storm_shot, "StormBlast": storm_blast, "StormLoop": storm_loop, "StormTail": storm_tail,
-          "StormDown": storm_down, "StormDry": storm_dry, "StormMode": storm_mode}
+SOUNDS = {"StormDown": storm_down, "StormDry": storm_dry, "StormMode": storm_mode}
 
 
 def write_wav(path, x):

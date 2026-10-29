@@ -90,8 +90,7 @@ SPHERE = struct.pack("<4f", 0, 0, 13000, 22000)
 
 # Meshes made here with no game data in them (tools/mech_storm.py, tools/blade_arms.py): kept whole.
 WHOLE = ("StormView", "MechBladeView", "JensenBladeView")
-# The body's own faces (mech_parts.arm_mesh): their triangles emptied too.
-FROM_BODY = ("StormArm",)
+FROM_BODY = ()   # meshes of the body's own faces, their triangles emptied too (none now: the views carry their own arms)
 
 
 def template(full, out):
@@ -135,38 +134,8 @@ def fill(template_path, bindings, out, body_package=None):
             out4 = np.zeros(raw.shape[:2] + (4,), "<i2")
             out4[:, :, :3] = raw
             d[tm["verts_off"]:tm["verts_off"] + out4.nbytes] = out4.tobytes()
-        for A in b.get("arms", []):
-            fill_arm(A, F, m, t, d)
     open(out, "wb").write(bytes(d))
     print("filled", out)
-
-
-def fill_arm(A, F, bm, t, d):
-    """Arms in their owner's view (StormArm, mech_parts.arm_mesh; the blades', blade_view) from this PC's body: its triangles (the
-    body's faces: each corner's vertex and UV from its wedge, the face's skin) and its frames (frame A["frame"]'s
-    vertices through each frame's maps, summed in MechParts.cs's order)."""
-    import numpy as np
-    tm = t.read_mesh(A["mesh"])
-    sv = bm["special_verts"]
-    index = {v: i for i, v in enumerate(A["verts"])}
-    tris = bytearray()
-    for fi in A["faces"]:
-        f = bm["faces"][fi]
-        w = [bm["wedges"][k] for k in f[:3]]
-        tris += struct.pack("<3H6BIi", index[w[0][0] + sv], index[w[1][0] + sv], index[w[2][0] + sv],
-                            w[0][1], w[0][2], w[1][1], w[1][2], w[2][1], w[2][2], 0, bm["materials"][f[3]][1])
-    if len(tris) != tm["tris_count"] * 20 or tm["verts_count"] != len(A["xforms"]) * len(A["verts"]):
-        raise ValueError("template mesh %s doesn't match its bindings" % A["mesh"])
-    d[tm["tris_off"]:tm["tris_off"] + len(tris)] = tris
-    P = F[A["frame"]][A["verts"]]
-    g = np.array(A["groups"])
-    out = np.zeros((len(A["xforms"]), len(P), 4), "<i2")
-    for f, per in enumerate(A["xforms"]):
-        M = np.array(per)[g]
-        for a in range(3):
-            pos = ((M[:, 4 * a] * P[:, 0] + M[:, 4 * a + 1] * P[:, 1]) + M[:, 4 * a + 2] * P[:, 2]) + M[:, 4 * a + 3]
-            out[f, :, a] = np.rint(pos * 256)
-    d[tm["verts_off"]:tm["verts_off"] + out.nbytes] = out.tobytes()
 
 
 def triangles(m, V):
@@ -216,46 +185,10 @@ def segments(F, tol):
     return sorted(groups.values(), key=len, reverse=True)
 
 
-def arm_order(full, bindings):
-    """Arms in their owner's view (the body's faces: StormArm, mech_parts.arm_mesh; the blades', blade_view) in the
-    order HCC wrote them: it sorts a mesh's triangles by skin, not keeping their order within a skin (with two skins,
-    the forearm's and the hand's, it moved one), and both fills write the faces in the bindings' order. After
-    tools/build_mech.sh."""
-    B = json.load(open(bindings))
-    body_pkg = ue1mesh.Package(BODY_PACKAGE)
-    pkg = ue1mesh.Package(full)
-    changed = False
-    for b in [B] + B.get("also", []):
-        if not b.get("arms"):
-            continue
-        bm = body_pkg.read_mesh(b["body"])
-        sv = bm["special_verts"]
-        for A in b["arms"]:
-            index = {v: i for i, v in enumerate(A["verts"])}
-            key = {}
-            for fi in A["faces"]:
-                f = bm["faces"][fi]
-                key[tuple(index[bm["wedges"][k][0] + sv] for k in f[:3])] = fi
-            m = pkg.read_mesh(A["mesh"])
-            order = []
-            for t in range(m["tris_count"]):
-                a, c, e = struct.unpack_from("<3H", pkg.d, m["tris_off"] + t * 20)
-                order.append(key[(a, c, e)])
-            if order != A["faces"]:
-                A["faces"] = order
-                changed = True
-                print("%s faces put in HCC's order" % A["mesh"])
-    if changed:
-        json.dump(B, open(bindings, "w"), indent=1)
-
-
 def main():
     cmd = sys.argv[1]
     if cmd == "template":
         template(sys.argv[2], sys.argv[3])
-        return
-    if cmd == "order":
-        arm_order(sys.argv[2], sys.argv[3])
         return
     if cmd == "fill":
         fill(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5] if len(sys.argv) > 5 else None)

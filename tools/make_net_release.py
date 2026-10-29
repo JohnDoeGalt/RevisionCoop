@@ -3,7 +3,7 @@
 Usage: python -I make_net_release.py <version>
 Needs: build/net/RevNet.u (tools/build_net.sh), src/relay/RevCoop.exe (src/relay/build.bat),
 build/mech/RevNetMech.template and build/mech/art/bindings.json (tools/mech_parts.py build,
-tools/build_mech.sh, which also runs tools/mech_art.py order, then tools/mech_art.py template),
+tools/build_mech.sh, tools/mech_art.py template),
 ~/RevisionCoop/downloads/coop/HXCoop/steam_api.dll (Valve's Steamworks redistributable).
 The zip holds no Revision or Deus Ex files: the installer copies Revision's own engine files
 on the player's PC (dist/net/Install-RevNet.ps1).

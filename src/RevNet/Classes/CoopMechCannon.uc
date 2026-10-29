@@ -4,28 +4,31 @@
 // The Mech's arm cannon (CoopMechPlayer), the user's design: a Metal Storm gun
 // that rides behind the shoulder blade, slides down the back of the arm and
 // spins over the hand; a brick of rounds on its back (tools/mech_storm.py). Fed
-// with the same 7.62 mm rounds as the assault rifle. The Mech sees its own model,
-// StormView (RevNetMech, built at install; without it the wrist-mounted mini-
-// crossbow's); the others see it on the body (CoopMechParts: BarrettCannon in
-// hand, BarrettCannonBack otherwise). Part of the body, never left lying about.
+// with the same 7.62 mm rounds as the assault rifle. The Mech sees its own model on
+// its own armoured gauntlets, StormView (RevNetMech, built at install; without it the
+// wrist-mounted mini-crossbow's); the others see it on the body (CoopMechParts:
+// BarrettCannon in hand, BarrettCannonBack otherwise). Part of the body, never left
+// lying about.
 //=============================================================================
 class CoopMechCannon extends WeaponMiniCrossbow;
 
-// Its own sounds (tools/storm_sounds.py: synthesized, ours; in RevNet, which every player has, so
-// each hears them).
+// Its own sounds, in RevNet (which every player has, so each hears them): its gunfire from real CC0
+// recordings in a room (tools/storm_guns.py), its draw and its reload's two halves too (tools/storm_foley.py:
+// the brick off with ReloadBegin, CockingSound; the new one slammed home with ReloadEnd, AltFireSound),
+// putting it away, the dry click, the mode chirp synthesized (tools/storm_sounds.py).
 #exec AUDIO IMPORT FILE="Sounds\StormShot.wav" NAME="StormShot" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormBlast.wav" NAME="StormBlast" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormLoop.wav" NAME="StormLoop" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormTail.wav" NAME="StormTail" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormDraw.wav" NAME="StormDraw" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormDown.wav" NAME="StormDown" GROUP="MechCannon"
-#exec AUDIO IMPORT FILE="Sounds\StormReload.wav" NAME="StormReload" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormReloadOut.wav" NAME="StormReloadOut" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormReloadIn.wav" NAME="StormReloadIn" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormDry.wav" NAME="StormDry" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormMode.wav" NAME="StormMode" GROUP="MechCannon"
 
 var Texture MechHandTex;
-var Mesh StormView, StormArm;
-var CoopMechViewArm ViewArm;    // the Mech's own arms, drawn with the gun in its view
+var Mesh StormView;
 var travel byte Mode;           // 0 full auto, 1 Storm (a minigun's rate), 2 Spread (CycleMode)
 var localized string ModeNames[3];
 var CoopSoundLoop Loop;         // (host) Storm's BRRRT while it fires
@@ -63,9 +66,9 @@ function bool Facelift( bool bOn )
 	return ret;
 }
 
-// The Mech's own view: its model's skins (none put on it but a cloak's), not the crossbow's hand;
-// then its own arms (StormArm), on the gun's spot and frame. Put on here too, where it is drawn: Facelift
-// runs on the host alone (and RevNetMech, not in the package map, can't reach a client by replication).
+// The Mech's own view: its model's skins (none put on it but a cloak's), not the crossbow's hand.
+// Put on here too, where it is drawn: Facelift runs on the host alone (and RevNetMech, not in the
+// package map, can't reach a client by replication).
 simulated function RenderOverlays( Canvas Canvas )
 {
 	local Texture Cloak;
@@ -87,14 +90,6 @@ simulated function RenderOverlays( Canvas Canvas )
 	for ( i=0; i<8; i++ )
 		MultiSkins[i] = Cloak;
 	Super(DeusExWeapon).RenderOverlays( Canvas );
-	if ( StormArm==None )
-		StormArm = Mesh( DynamicLoadObject( "RevNetMech.StormArm", class'Mesh', true ) );
-	if ( StormArm==None )
-		return;
-	if ( ViewArm==None )
-		ViewArm = Spawn( class'CoopMechViewArm', Owner,, Location, Rotation );
-	if ( ViewArm!=None )
-		ViewArm.DrawWith( Canvas, Self, StormArm, Cloak );
 }
 
 // ----------------------------------------------------------------------
@@ -218,8 +213,6 @@ simulated function TweenDown()
 
 simulated function Destroyed()
 {
-	if ( ViewArm!=None )
-		ViewArm.Destroy();
 	if ( Loop!=None )
 		Loop.Destroy();
 	Super.Destroyed();
@@ -257,7 +250,8 @@ defaultproperties
 	ProjectileNames(1)=None
 	ProjectileNames(2)=None
 	FireSound=Sound'StormShot'
-	CockingSound=Sound'StormReload'
+	CockingSound=Sound'StormReloadOut'
+	AltFireSound=Sound'StormReloadIn'
 	SelectSound=Sound'StormDraw'
 	Misc1Sound=Sound'StormDry'
 	ModeNames(0)="full auto"

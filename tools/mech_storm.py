@@ -9,7 +9,7 @@ slender dark slate barrel block, longer than it is wide (about 5 cm square, 16 c
 the wrist and over the back of the hand; five bores as a die shows (NINE: 3 x 3), the brass nose of each
 bore's next round showing, yellow and black chevrons at the muzzle, a hazard mark, a blue light; the olive
 brick behind it with a handle and a blue round counter; a yoke from the barrel block down to the wrist's
-pin, and the pin's trunnions. (The Mech's arms in its view are the body's own: mech_parts.arm_mesh.) Three
+pin, and the pin's trunnions. (In its view it rides the Mech's own gauntlet: view_mesh, tools/blade_arms.py.) Three
 512 skins, painted from the 3D surface.
 
 Frame: x forward along the forearm (the elbow at 0, the wrist at WRIST), y to its left, z up; the forearm's
@@ -40,11 +40,12 @@ NINE = tuple((i, j) for i in range(3) for j in range(3))   # the bored cells: ni
 FIVE = ((0, 0), (2, 0), (1, 1), (0, 2), (2, 2))            # five, as a die shows five (the user's latest)
 DICE = FIVE
 BORE_DEPTH, NOSE = 1.0, 0.4                    # a bore's depth; a round's nose
+BREECH, STUB = 0.45, 0.3                       # how far the barrels stand out of the block's back; their outer radius
 GRAB = np.array([10.7, 0.4, BRICK["z1"] + 2.6])  # the left fist's centre, on the brick's handle
 SHARED = ("bore", "cap", "nose")               # regions sharing one texture cell each
 SHEET = {"casing": 0, "chevron": 0, "brick": 1}   # three skins (else 2): byte UVs, so each skin's
                                                  # 256 steps go further
-FIRST = ("gun", "brick", "mount")              # what the Mech sees (StormView; its arms: StormArm)
+FIRST = ("gun", "brick", "mount")              # what the Mech sees (StormView, with its gauntlets: view_mesh)
 THIRD = ("gun", "brick", "mount")              # on the body's own forearm while held (BarrettCannon)
 BACK = ("gun", "brick")                        # behind the shoulder blade otherwise
 
@@ -88,6 +89,15 @@ def block(p, lo, hi, region, ends=None):
 
 def chamfered(y, z0, z1, c):
     return [(y - c, z0), (y, z0 + c), (y, z1 - c), (y - c, z1), (-y + c, z1), (-y, z1 - c), (-y, z0 + c), (-y + c, z0)]
+
+
+def face(p, pts, out, region):
+    """A face whose normal points along out (its corners reordered if not)."""
+    P = [np.asarray(x, float) for x in pts]
+    n = np.cross(P[1] - P[0], P[2] - P[0]) if len(P) == 3 else np.cross(P[2] - P[0], P[3] - P[1])
+    if n @ np.asarray(out, float) < 0:
+        P = P[::-1]
+    (p.add_quad if len(P) == 4 else p.add_tri)(*P, region)
 
 
 def tag(p, group):
@@ -136,7 +146,7 @@ def pose(P, groups, turn=0.0, slide=0.0, brick=(0, 0, 0), lhand=None, kick=0.0):
 
 def build():
     """The gun on top of the hand and the wrist's trunnions; the faces' groups in p.groups. (The Mech's
-    arms in its view are the body's own: mech_parts.arm_mesh, StormArm.)"""
+    gauntlets in its view: gauntlets.)"""
     p = Part("storm", mesh="StormGun")
     p.groups = []
     X = lambda x, yz: np.array([x, yz[0], yz[1]])
@@ -182,6 +192,23 @@ def build():
                 p.add_tri(base[k], base[(k + 1) % 8], tip, "nose")
     # The muzzle as one flat face, the bores painted on (the far-off copies, THIRD and BACK).
     p.add_quad(X(face_x, (-r, zc - r)), X(face_x, (r, zc - r)), X(face_x, (r, zc + r)), X(face_x, (-r, zc + r)), "muzzle")
+    # The breech: the five barrels through the block and out of its back, where the brick feeds them, a round's
+    # brass base in each (seen when the brick is off to reload: the user, 2026-10-29: the brick should connect
+    # "directly to the barrels instead of just to empty space"). Inside the brick while it is on.
+    back = x0 - BREECH
+    for cy, cz in bores()[0]:
+        outer = [(cy + STUB * math.cos(a), cz + STUB * math.sin(a)) for a in ang]
+        inner = [(cy + BORE * math.cos(a), cz + BORE * math.sin(a)) for a in ang]
+        base = [(cy + 0.86 * BORE * math.cos(a), cz + 0.86 * BORE * math.sin(a)) for a in ang]
+        axis = np.array([back, cy, cz])
+        for k in range(8):
+            q = (k + 1) % 8
+            mid = X(back, ((outer[k][0] + outer[q][0]) / 2, (outer[k][1] + outer[q][1]) / 2))
+            face(p, [X(back, outer[k]), X(x0, outer[k]), X(x0, outer[q]), X(back, outer[q])], mid - axis, "barrel")
+            face(p, [X(back, inner[k]), X(back, inner[q]), X(back, outer[q]), X(back, outer[k])], np.array([-1.0, 0, 0]), "barrel")
+            face(p, [X(back, inner[k]), X(back + BORE_DEPTH, inner[k]), X(back + BORE_DEPTH, inner[q]), X(back, inner[q])],
+                 axis - mid, "bore")
+            face(p, [X(back + 0.3, (cy, cz)), X(back + 0.3, base[k]), X(back + 0.3, base[q])], np.array([-1.0, 0, 0]), "nose")
     # Under it: a spine, and the yoke down to the wrist's pin (outside the trunnions): a short post.
     zb = zc - h
     block(p, (12.2, -1.1, zb - 0.4), (14.8, 1.1, zb), "frame")
@@ -339,6 +366,11 @@ def paint(region, pos, n, a3, sx, ty, w, h, mats):
     if region in ("frame", "recess"):
         g = mech_bake.triplanar(mats["gunmetal"], pos, nb, 32).mean(-1, keepdims=True)
         return g * (0.5 if region == "frame" else 0.3) * np.array([0.95, 0.98, 1.02])
+    if region == "barrel":                      # the barrels' ends out of the breech: worn steel, bright at the lip
+        grain = mech_bake.triplanar(mats["steel"], pos, nb, 24).mean(-1, keepdims=True) / 128.0
+        col = STEEL * (0.5 + 0.12 * grain)
+        lip = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))[..., None] < 0.04
+        return np.where(lip & (float(n[0]) < -0.9), STEEL * 0.95, col)
     if region in ("face", "muzzle"):
         col = FACEPLATE * flat
         centres, _ = bores()
@@ -454,8 +486,26 @@ def mirrored(tris):
 
 
 # ---- the Mech's own view (StormView): its vertices in the view's frame (the eye at the origin, X ahead,
-# Y right, Z up; 256 raw units to one), every frame a pose of the gun and a move of the whole arm.
-EYE, K = np.array([-1.0, 6.0, 5.5]), 2.0      # where the eye is, in the gun's frame (back, left and above it: its side and the arm show); the view's scale
+# Y right, Z up; 256 raw units to one), every frame a pose of the gun and a move of the whole arm. The gun on the
+# Mech's own gauntlet (tools/blade_arms.py, its paint), the arm placed as a gun is held in a shooter's view: low on
+# the right, seen three-quarters from its left, the muzzle ahead. (Seen from just behind and above, as first built,
+# the brick's back filled the view and the body's own forearm under it looked crude: the user wanted it "just as
+# good" as the blades.)
+K = 2.0                                        # the view's scale
+BASE = (4.0, 9.5, -8.5, 8.0, 10.0, -12.0)      # the elbow ahead, out to the right, below; pitch, yaw in, roll its top in
+
+
+def base_frame():
+    """The arm's frame in the eye's (x ahead, y left, z up): its axes as columns, the elbow (as blade_view.placed)."""
+    x, lat, z, pitch, yaw, roll = BASE
+    a, b, r = (math.radians(v) for v in (pitch, yaw, roll))
+    d = np.array([math.cos(a) * math.cos(b), math.cos(a) * math.sin(b), math.sin(a)])
+    up = np.array([0.0, 0, 1]) - d[2] * d
+    up /= np.linalg.norm(up)
+    inward = np.cross(up, d)
+    inward /= np.linalg.norm(inward)
+    zz = math.cos(r) * up + math.sin(r) * inward
+    return np.stack([d, np.cross(zz, d), zz], 1), np.array([x, -lat, z])
 
 
 def turned(P, about, pitch=0.0, yaw=0.0, roll=0.0):
@@ -474,7 +524,8 @@ def in_view(V, G, arm=(0, 0, 0, 0, 0, 0), **kw):
     the gun's frame, then pitch, yaw, roll about the elbow), into the view's frame."""
     P = pose(V, G, **kw)
     P = turned(P, np.zeros(3), *arm[3:]) + np.asarray(arm[:3], float)
-    D = (P - EYE) * K
+    R, E = base_frame()
+    D = (P @ R.T + E) * K
     D[:, 1] = -D[:, 1]
     return D
 
@@ -526,16 +577,41 @@ SEQS = [("Still", 1, 1, lambda t: {}),
         ("ReloadEnd", 10, 16, reload_end)]
 
 
-def frames_of(P, group):
-    """Points of one group (in the gun's frame, as deployed: "arm" moves with the arm, "lhand" as the left
-    hand) in the view, frame by frame (SEQS): mech_parts.arm_mesh carries the body's own arms so."""
-    G = [group] * len(P)
-    return [in_view(P, G, **f(k / max(1, n - 1))) for _, n, _, f in SEQS for k in range(n)]
+GAUNTLET_X = 0.85                     # the gauntlet's wrist joint (blade_arms: 12.6-13.9) onto the gun's pin (PIVOT)
+HANDLE = np.array([10.7, 0.0, BRICK["z1"] + 0.88])     # the brick's handle, its middle
+IN_FIST = np.array([17.2, 0.0, -1.3])                    # where a handle goes through the gauntlet's curled fingers
+REACH = np.array([0.35, -0.8, 0.5])                      # the left forearm's way to the handle: up from the lower left
+
+
+def gauntlets():
+    """The Mech's own forearms and hands as it holds the gun (blade_arms' blade arm without its blade and housing,
+    the Mech's paint, skins 3 and 4): the right under the gun, its wrist on the pin; the left on the brick's handle
+    (group lhand: out of sight but for the reload). (vertices, groups, triangles, skins), wound as built."""
+    import blade_arms, blade_view
+    a = blade_arms.made()
+    A, _, tris, skins = blade_view.shared(a, drop=("blade", "housing"))
+    right = A + np.array([GAUNTLET_X, 0.0, 0.0])
+    u = REACH / np.linalg.norm(REACH)
+    w = np.array([0.0, 0, 1]) - u[2] * u
+    w /= np.linalg.norm(w)
+    left = HANDLE + (A * np.array([1.0, -1, 1]) - IN_FIST) @ np.stack([u, np.cross(w, u), w], 1).T
+    n = len(A)
+    V = np.concatenate([right, left])
+    G = ["arm"] * n + ["lhand"] * n
+    T = tris + [(i + n, k + n, j + n, ui, uk, uj) for i, j, k, ui, uj, uk in tris]     # the left a mirror: wound back
+    return V, G, T, [s + 3 for s in skins] * 2
 
 
 def view_mesh(p):
-    """StormView: (frames (n, verts, 3) in the view's frame, triangles, skins, sequences (name, start, count, rate))."""
+    """StormView: (frames (n, verts, 3) in the view's frame, triangles, skins, sequences (name, start, count, rate)):
+    the gun and the Mech's own gauntlets."""
     V, G, tris, skins = mesh_of(p, FIRST, ("muzzle",))
+    AV, AG, atris, askins = gauntlets()
+    n = len(V)
+    V = np.concatenate([V, AV])
+    G = list(G) + AG
+    tris = tris + [(i + n, j + n, k + n, ui, uj, uk) for i, j, k, ui, uj, uk in atris]
+    skins = list(skins) + askins
     frames, seqs = [], []
     for name, n, rate, f in SEQS:
         seqs.append((name, len(frames), n, rate))

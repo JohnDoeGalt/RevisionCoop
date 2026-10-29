@@ -28,7 +28,4 @@ fi
 grep -E "Warning|mesh|Mesh" BuildMech.log | grep -v "RevNet.u" | head -10 || true
 mkdir -p "$here/build/mech"
 cp RevNetMech.u "$here/build/mech/"
-# HCC sorts a mesh's triangles by skin, not keeping their order within one: the Mech's own arms
-# (StormArm, the body's faces) are written in its order so the install-time fills match it.
-python -I "$here/tools/mech_art.py" order "$here/build/mech/RevNetMech.u" "$ART/bindings.json"
 echo "built $here/build/mech/RevNetMech.u"

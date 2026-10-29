@@ -1,9 +1,10 @@
-"""The Arm Cannon's mechanism sounds from real recordings: its draw (StormDraw) and its reload (StormReload). The user
-wanted them "crunchy and mechanical", then "clunky and chunky": synthesized (tools/storm_sounds.py), they came out high
-tech, then like a bouncing ball. These are cut from CC0 gun and metal foley (art/sounds/cc0, README there), pitched down
-for the weight of a big gun, given more body, laid on the view's timing (tools/mech_storm.py: drawn, it slides down
-the arm, swings over the hand and locks at about 0.6 s; reloading, the brick comes off at 0.2 s and the new one is
-slammed home at about 1.35 s).
+"""The Arm Cannon's mechanism sounds from real recordings: its draw (StormDraw) and its reload, in two (StormReloadOut,
+StormReloadIn). The user wanted them "crunchy and mechanical", then "clunky and chunky": synthesized
+(tools/storm_sounds.py), they came out high tech, then like a bouncing ball. These are cut from CC0 gun and metal foley
+(art/sounds/cc0, README there), pitched down for the weight of a big gun, given more body, laid on the view's timing
+(tools/mech_storm.py: drawn, it slides down the arm, swings over the hand and locks at about 0.6 s; reloading, the brick
+comes off at 0.22-0.38 s into ReloadBegin, and the new one is slammed home 0.34 s into ReloadEnd, 2 s later). (Its
+gunfire: tools/storm_guns.py.)
 
   python -I tools/storm_foley.py [out dir]     (default src/RevNet/Sounds; needs ffmpeg for the OGGs)
 """
@@ -67,21 +68,31 @@ def storm_draw():
     return finish(reverb(body(out), 0.25, 0.14))
 
 
-def storm_reload():
-    """The latch thrown back; the brick dragged off; set down; the new one on and slammed home; the latch racked shut."""
-    out = np.zeros(n_(2.0))
+def storm_reload_out():
+    """The reload's start (CockingSound, with ReloadBegin: the left hand pulls the brick off at 0.22-0.38 s): the latch
+    thrown back, the brick dragged off its rails, set aside. (One sound for the whole reload ran ahead of the hand: the
+    reload holds 2 s between the brick coming off and the new one going on.)"""
+    out = np.zeros(n_(0.8))
     lay(out, cut("shotguncock.wav", 0.03, 0.18, 0.8), 0.0, 0.9)
     lay(out, cut("metalLatch.ogg", 0.02, 0.22, 0.75), 0.02, 0.35)
-    lay(out, cut("assaultriflereload1.wav", 0.12, 0.38, 0.85), 0.18, 0.95)
-    lay(out, cut("doorClose_4.ogg", 0.08, 0.3, 0.7), 0.46, 0.4)
-    lay(out, cut("gunreload1.wav", 0.76, 1.08, 0.85), 1.02, 0.75)
-    lay(out, cut("assaultriflereload1.wav", 1.02, 1.16, 0.8), 1.34, 1.0)
-    lay(out, cut("doorClose_3.ogg", 0.23, 0.42, 0.7), 1.35, 0.45)
-    lay(out, cut("gunreload1.wav", 1.24, 1.52, 0.85), 1.6, 1.0)
+    lay(out, cut("assaultriflereload1.wav", 0.12, 0.38, 0.85), 0.2, 0.95)
+    lay(out, cut("doorClose_4.ogg", 0.08, 0.3, 0.7), 0.58, 0.35)
     return finish(reverb(body(out), 0.28, 0.15))
 
 
-SOUNDS = {"StormDraw": storm_draw, "StormReload": storm_reload}
+def storm_reload_in():
+    """The reload's end (AltFireSound, with ReloadEnd: the new brick set on its seat at 0.34 s, the jolt): slid on,
+    slammed home, the latch racked shut, the feed taking up the first round."""
+    out = np.zeros(n_(1.0))
+    lay(out, cut("gunreload1.wav", 0.76, 1.0, 0.85), 0.04, 0.7)
+    lay(out, cut("assaultriflereload1.wav", 1.02, 1.16, 0.8), 0.33, 1.0)
+    lay(out, cut("doorClose_3.ogg", 0.23, 0.42, 0.7), 0.34, 0.45)
+    lay(out, cut("gunreload1.wav", 1.24, 1.52, 0.85), 0.5, 0.9)
+    lay(out, cut("metalClick.ogg", 0.07, 0.15, 0.7), 0.78, 0.4)
+    return finish(reverb(body(out), 0.28, 0.15))
+
+
+SOUNDS = {"StormDraw": storm_draw, "StormReloadOut": storm_reload_out, "StormReloadIn": storm_reload_in}
 
 
 def main():
