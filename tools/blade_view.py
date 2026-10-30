@@ -1,9 +1,8 @@
 """The arm blades as their owner sees them (CoopMechBlade), for each class: its blade arms (tools/blade_arms.py: ours,
 built to be seen up close, painted for the class), posed in the view. The right arm leads from the lower right, its
 blade toward the middle; the left waits lower in its corner. Drawn (0.7 s), both come up with their housings
-collapsed into the forearms behind the wrists, the housings' fronts pop up on a hinge at their backs, they roll
-forward over the hands and the blades slide out past the fists (the user's design, 2026-10-29: housing_move,
-blade_in); three cuts (Attack: a slash from the right; Attack2: from the left; Attack3: a thrust with
+hidden in the forearms; each rises onto its line, runs out of its port near the wrist over the hand, and the
+blade slides out past the fist (the user's design, 2026-10-29: housing_move, blade_in); three cuts (Attack: a slash from the right; Attack2: from the left; Attack3: a thrust with
 both), each lasting as the combat knife's does with its HandToHandAttack notify at its middle, when it lands; put away,
 the blades slide back in and the arms drop. The same blades others see on it slide out in steps (STAGES, staged).
 
@@ -22,32 +21,46 @@ K = mech_storm.K
 
 # An arm's place and turn in the eye's frame, as seen from its own side: the elbow ahead, out to its side (lateral),
 # up; pitch lifts the forearm, yaw turns it in towards the middle, roll turns its top (the blade's side) from up in
-# towards the middle (degrees); ext: how far the blade is out (0 in its housing, 1 out); out: where the housing is (0
-# collapsed behind the wrist, 1 run forward over the hand); pop: its front tipped up about its hinge (degrees).
-GUARD = np.array([4.0, 9.0, -9.0, 22.0, 15.0, 18.0, 1.0, 1.0, 0.0])      # the right: the fist low right, the blade in
-REST_L = np.array([4.0, 11.0, -12.0, 18.0, 12.0, 22.0, 1.0, 1.0, 0.0])     # the left: lower, out in its corner
+# towards the middle (degrees); ext: how far the blade is out (0 in its housing, 1 out); out: how far the housing is
+# run out of its port (0 inside the forearm, 1 out over the hand); lift: risen from where it lies sunk at rest onto
+# its line through the port (0, 1).
+GUARD = np.array([4.0, 9.0, -9.0, 22.0, 15.0, 18.0, 1.0, 1.0, 1.0])      # the right: the fist low right, the blade in
+REST_L = np.array([4.0, 11.0, -12.0, 18.0, 12.0, 22.0, 1.0, 1.0, 1.0])     # the left: lower, out in its corner
 LOW = np.array([2.0, 11.0, -22.0, -25.0, 8.0, 0.0, 0.0, 0.0, 0.0])
 
-# The housing (the user, 2026-10-29): at rest collapsed into the forearm, sunk between its rails (blade_arms.RAIL), its
-# front just behind the wrist's joint, the blade hidden in it; drawn, its front lifts a little on a hinge at its back,
-# it rolls forward along the rails over the wrist, and the blade slides out. Run forward it rides 3 units further out
-# than built, on the back of the hand (the user: "about 25% more forward... the reach of the blade"), its tail still
-# between the rails ("the back remains attached"), tipped a touch nose down to lie on the hand.
-COLLAPSED = np.array([-1.3, 0.0, -0.18])
-DEPLOYED = np.array([3.0, 0.0, -0.3])
-DEPLOY_TILT = -0.6                                              # degrees, run forward
-POP = 3.0
+# The housing (the user, 2026-10-29): at rest hidden in the forearm under a hatch in the armour that lies flush with
+# the plates beside it (blade_arms.HATCH), the blade hidden in it; drawn, the hatch's front lifts on its hinge behind
+# (the opening: the port, blade_arms.HOLE) as the housing rises onto its line, it runs out from under it over the wrist
+# and the hand along that line, its back never leaving the port ("coming from the same like hole"), and the blade
+# slides out of it. Run out its mouth is 3 units past where it used to be (the user: "about 25% more forward... the
+# reach of the blade").
+LINE = blade_arms.unit(np.array([1.0, 0.0, blade_arms.SLOPE]))
+TRAVEL = blade_arms.MOUTH - (blade_arms.HOLE - 0.4)             # run in, its mouth just inside the port
+SINK = 0.55                                                     # how far below its line it lies at rest
+POP = 0.8                                                       # its front tipped up while it rises (degrees: more shows through)
+HATCH_LIFT = 7.5                                                # the hatch open (degrees: its front up about 0.85, over the housing)
 SLIDE = blade_arms.BLADE["x1"] - (blade_arms.MOUTH - 0.6)       # how far the blade runs back to hide in the housing
 
 
-def housing_move(P, out, pop):
-    """Points of the housing (and the blade in it), as built, moved to where it is: along its rails from collapsed to
-    run forward, its front tipped up pop degrees about its hinge (its back end, which moves with it), and run
-    forward settled nose down onto the hand."""
-    off = COLLAPSED + (DEPLOYED - COLLAPSED) * out
+def hatch_move(P, lift):
+    """The hatch's points (built shut, flush), its front lifted about its hinge behind as far as lift (0 shut, 1 open)."""
+    h = blade_arms.hatch_hinge()
+    a = math.radians(HATCH_LIFT * lift)
+    Q = P.copy()
+    dx, dz = Q[:, 0] - h[0], Q[:, 2] - h[2]
+    Q[:, 0] = h[0] + dx * math.cos(a) - dz * math.sin(a)
+    Q[:, 2] = h[2] + dx * math.sin(a) + dz * math.cos(a)
+    return Q
+
+
+def housing_move(P, out, lift):
+    """Points of the housing (and the blade in it), as built (run out), moved to where it is: run in along its line by
+    the rest of the way, lowered by what it has not yet risen, its front tipped up while it rises (about its hinge,
+    its back end, which moves with it)."""
+    off = -LINE * TRAVEL * (1 - out) + np.array([0.0, 0.0, -SINK * (1 - lift)])
     h = blade_arms.hinge() + off
     Q = P + off
-    a = math.radians(pop + DEPLOY_TILT * out)
+    a = math.radians(POP * math.sin(math.pi * lift) * (1 - out))
     dx, dz = Q[:, 0] - h[0], Q[:, 2] - h[2]
     Q[:, 0] = h[0] + dx * math.cos(a) - dz * math.sin(a)
     Q[:, 2] = h[2] + dx * math.sin(a) + dz * math.cos(a)
@@ -55,11 +68,11 @@ def housing_move(P, out, pop):
 
 
 def blade_in(P, ext):
-    """The blade's points slid back into the housing (ext 1: out as built, 0: all of it inside): it runs back along
-    the housing, and what would pass its mouth's inside stays there (folded into the housing, out of sight)."""
-    Q = P.copy()
-    Q[:, 0] = np.maximum(Q[:, 0] - (1 - ext) * SLIDE, blade_arms.MOUTH - 0.3)
-    return Q
+    """The blade's points slid back into the housing along its line (ext 1: out as built, 0: all of it inside); what
+    would pass its mouth's inside stays there (folded into the housing, out of sight)."""
+    mouth = np.array([blade_arms.MOUTH, 0.0, blade_arms.axis_z(blade_arms.MOUTH)])
+    along = (P - mouth) @ LINE
+    return P + np.outer(np.maximum(along - (1 - ext) * SLIDE, -0.3) - along, LINE)
 
 
 def ease(t):
@@ -88,10 +101,10 @@ def pose(base=GUARD, **kw):
 
 
 def drawn(t, base):
-    """Up from below with the housing collapsed; its front pops up, it rolls forward over the wrist and settles; the
-    blade slides out (a little past, then home: a jolt as it locks)."""
+    """Up from below with the housing hidden; it rises onto its line (its front tipping up), runs out of the port over
+    the wrist and the hand; the blade slides out (a little past, then home: a jolt as it locks)."""
     p = LOW + (base - LOW) * span(t, 0.0, 0.4)
-    p[8] = POP * (span(t, 0.28, 0.42) - span(t, 0.6, 0.76))
+    p[8] = span(t, 0.26, 0.42)
     p[7] = span(t, 0.42, 0.72)
     p[6] = 1.07 * span(t, 0.7, 0.88) - 0.07 * span(t, 0.88, 1.0)
     p[0] -= 0.5 * math.sin(math.pi * span(t, 0.84, 0.97))
@@ -99,11 +112,11 @@ def drawn(t, base):
 
 
 def put_away(t, base):
-    """The blade slides in; the housing pops, rolls back behind the wrist and drops into it; the arm goes down."""
+    """The blade slides in; the housing runs back into the port and sinks out of sight; the arm goes down."""
     p = base + (LOW - base) * span(t, 0.55, 1.0)
     p[6] = 1.0 - span(t, 0.0, 0.28)
-    p[8] = POP * (span(t, 0.24, 0.36) - span(t, 0.56, 0.7))
-    p[7] = 1.0 - span(t, 0.34, 0.62)
+    p[7] = 1.0 - span(t, 0.3, 0.56)
+    p[8] = 1.0 - span(t, 0.56, 0.7)
     return p
 
 
@@ -166,6 +179,7 @@ def view_mesh(p):
     V, G, tris, skins = shared(p)
     blade = np.array([g == "blade" for g in G])
     moving = np.array([g in ("blade", "housing") for g in G])
+    hatch = np.array([g == "hatch" for g in G])
     sides = (("r", 1, V), ("l", -1, V * np.array([1.0, -1, 1])))
     frames = []
     for name, n, rate, f, _ in SEQS:
@@ -176,6 +190,7 @@ def view_mesh(p):
                 Q = P.copy()
                 Q[blade] = blade_in(Q[blade], pp[side][6])
                 Q[moving] = housing_move(Q[moving], pp[side][7], pp[side][8])
+                Q[hatch] = hatch_move(Q[hatch], pp[side][8])
                 R, E = placed(pp[side], s)
                 out.append((Q @ R.T + E) * np.array([K, -K, K]))
             frames.append(np.concatenate(out))

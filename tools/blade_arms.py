@@ -1,8 +1,8 @@
 """The arms that hold the arm blades in their owner's view (CoopMechBlade), ours and built to be seen up close. (The body's
 own forearms, tried first, were its far-off low-poly sleeves and mitten hands: the user called them "absolute garbage",
 2026-10-27.) Machine-made, organic in shape (the user, 2026-10-29: "still... made out of machine", but "a more organic
-shape and less industrial"): a muscled forearm (surface) sheathed in domed scale plates (shell), a teardrop blade
-housing, a rounded collar at the wrist, a rounded fist under a ridged plate, fingers and a thumb of jointed tapered
+shape and less industrial"): a muscled forearm (surface) sheathed in domed scale plates (shell), a slim blade
+housing hidden in it that runs out of a port near the wrist (HOLE), a rounded collar at the wrist, a rounded fist under a ridged plate, fingers and a thumb of jointed tapered
 segments with metal collars; shaded round in the game (SMOOTH: blade_view.shared welds them). The blade, a diamond in
 section with a point, comes out of the housing's mouth over the fist. One model; each class paints it (mech_storm's kit, mech_bake's materials):
 
@@ -24,10 +24,21 @@ from mech_parts import Part, face_size, shelf_pack
 
 N = 16                                          # sides round the forearm
 WRIST = 13.0                                    # where the forearm's armour ends
-MOUTH = 13.9                                    # the housing's mouth: the blade comes out here
-BLADE = dict(x1=26.0, tip=2.8, half=0.6, thick=0.13, z=1.72)
-SHEETS = {"core": 0, "plate": 0, "rim": 0, "housing": 0, "rail": 0, "joint": 0, "slot": 0}   # else 1 (hand, blade)
-SMOOTH = ("core", "plate", "housing", "rail", "joint", "hand", "finger", "hinge")   # shaded round in the game
+HOLE, HOLE_Z = 11.2, 1.62                       # the port the housing comes out of: its front on the forearm's top (a
+                                                # few cm behind the wrist), the middle of its opening
+SLOPE = 0.02                                    # the housing's line out of it: up toward the hand, so behind the port it dives into the arm
+HOUSING = dict(length=8.0, hw=0.5, hh=0.3)      # the housing: slim enough to lie hidden in the forearm
+MOUTH = 16.9                                    # its mouth, run out over the hand: the blade comes out here
+
+
+def axis_z(x):
+    """The height of the housing's line (through the port's opening) at x."""
+    return HOLE_Z + (x - HOLE) * SLOPE
+
+
+BLADE = dict(x1=29.0, tip=2.8, half=0.42, thick=0.11, z=axis_z(MOUTH))
+SHEETS = {"core": 0, "plate": 0, "rim": 0, "housing": 0, "port": 0, "portin": 0, "joint": 0, "slot": 0}   # else 1
+SMOOTH = ("core", "plate", "housing", "port", "joint", "hand", "finger", "hinge")   # shaded round in the game
 
 
 def unit(v):
@@ -122,13 +133,22 @@ def surface(x, th):
     return np.array([x, ry * m * math.cos(th), rz * m * math.sin(th)])
 
 
-HOUSING_X0 = 4.3                                # the housing's back end (its hinge, blade_view)
-RAIL = (3.0, 12.5)                              # its track along the forearm's top
+HATCH = dict(x0=6.0, x1=12.42, half=0.44, thick=0.17)   # the hatch over the housing: from x0 up to the wrist's collar
+                                                # (no groove left before it; the user), half its
+                                                # angle across the forearm's top, as thick as the plates beside it
+CHANNEL = 0.46                                  # half the angle of the channel it lies in (the side plates' inner edges)
+
+
+def hatch_hinge():
+    """The hatch's hinge: the middle of its back edge, on top."""
+    x = HATCH["x0"]
+    return np.array([x, 0.0, surface(x, math.pi / 2)[2] + HATCH["thick"] + 0.01])
 
 
 def hinge():
-    """The housing's hinge: the middle of its back end, as built."""
-    return np.array([HOUSING_X0, 0.0, surface(HOUSING_X0, math.pi / 2)[2] + 0.23 + 0.04])
+    """The housing's hinge: the middle of its back end, as built (run out)."""
+    x = MOUTH - HOUSING["length"]
+    return np.array([x, 0.0, axis_z(x)])
 
 
 PLATES = []                                     # the armour's shells: (x0, x1, centre angle, half width at 0 and 1, scallop)
@@ -169,8 +189,8 @@ def shell(p, x0, x1, thc, half0, half1, thick, scallop=0.35, nx=10, na=8):
 def build():
     """The right arm with its blade; each face's group in p.groups ("arm", "blade"). Machine-made, organic in shape
     (the user, 2026-10-29: "they should still look like they're made out of machine... but the arms themselves should
-    have a more organic shape and be less industrial"): a muscled forearm sheathed in domed scale plates, a teardrop
-    housing, a rounded collar at the wrist, a rounded hand under a ridged plate, fingers of jointed tapered segments."""
+    have a more organic shape and be less industrial"): a muscled forearm sheathed in domed scale plates, a port near
+    the wrist and the slim housing that runs out of it, a rounded collar at the wrist, a rounded hand under a ridged plate, fingers of jointed tapered segments."""
     p = Part("bladearm", mesh="BladeArm")
     p.groups = []
     del PLATES[:]
@@ -178,36 +198,54 @@ def build():
     loft(p, [np.array([surface(x, t) for t in th]) for x in np.linspace(0.0, WRIST, 11)], "core", ("slot", None))
     # The armour: three overlapping scales over the extensors (the housing rides on them), a sheath under the flexors.
     shell(p, 0.5, 4.75, 1.38, 0.98, 0.9, 0.2)
-    shell(p, 4.45, 8.75, 1.4, 0.88, 0.74, 0.19)
-    shell(p, 8.45, 12.55, 1.42, 0.72, 0.5, 0.17)
+    shell(p, 4.45, 6.4, 1.5, 0.88, 0.84, 0.19)
+    for side in (1, -1):    # toward the wrist: two side plates along the channel the hatch lies in and the housing runs out
+        shell(p, 6.05, 12.55, math.pi / 2 + side * (CHANNEL + 0.31), 0.31, 0.29, 0.17, scallop=0.2)
     shell(p, 1.6, 11.7, 4.62, 0.78, 0.42, 0.14, scallop=0.5, nx=12)
-    # The wrist's collar: rounded.
-    loft(p, [ring(x, ry, rz) for x, ry, rz in ((12.45, 1.46, 1.24), (12.75, 1.57, 1.36), (13.05, 1.63, 1.43),
-                                                (13.45, 1.61, 1.41), (13.8, 1.52, 1.31), (13.98, 1.44, 1.22))], "joint")
+    # The wrist's collar: rounded, low on top (the housing passes over it).
+    loft(p, [ring(x, ry, rz) for x, ry, rz in ((12.45, 1.46, 1.22), (12.75, 1.57, 1.27), (13.05, 1.63, 1.31),
+                                                (13.45, 1.61, 1.3), (13.8, 1.52, 1.25), (13.98, 1.44, 1.2))], "joint")
     tag(p, "arm")
-    # The blade's housing: a teardrop along the top, pointed behind, its mouth over the wrist (built so; in the view it
-    # moves: blade_view.housing_move).
+    # The hatch over the housing (the user: the swell "collapsed into the arm itself in the very... beginning... it
+    # looks like it's basically just part of like the arm... the swell pops up, the housing comes out, and then the
+    # blade"): a panel of the armour in the channel, flush with the plates beside it, hinged at its back; drawn, its front
+    # lifts (blade_view.hatch_move) and the housing runs out from under it. Its underside and its side walls (dark, inside
+    # the arm while it is shut) close the sides of the opening it makes.
+    nx, na = 8, 6
+    def at(x, v, lift):
+        q = surface(x, math.pi / 2 + v * HATCH["half"])
+        rad = unit(np.array([0.0, q[1], q[2]]))
+        return q + rad * (HATCH["thick"] * lift + 0.01), rad
+    xs, vs = np.linspace(HATCH["x0"], HATCH["x1"], nx + 1), np.linspace(-1, 1, na + 1)
+    G = [[at(x, v, 1.0)[0] for v in vs] for x in xs]
+    B = [[at(x, v, 0.0) for v in vs] for x in xs]
+    for i in range(nx):
+        for j in range(na):
+            q = [G[i][j], G[i][j + 1], G[i + 1][j + 1], G[i + 1][j]]
+            m = np.mean(q, 0)
+            face(p, q, m - np.array([m[0], 0, 0]), "port")
+            q = [B[i][j][0], B[i][j + 1][0], B[i + 1][j + 1][0], B[i + 1][j][0]]
+            face(p, q, np.array([m[0], 0, 0]) - m, "portin")
+    for i in range(nx):
+        for j, sgn in ((0, -1), (na, 1)):
+            face(p, [G[i][j], G[i + 1][j], B[i + 1][j][0], B[i][j][0]], np.array([0, sgn * 1.0, 0]), "rim")
+            deep = [B[i][j][0], B[i + 1][j][0], B[i + 1][j][0] - B[i + 1][j][1] * 0.75, B[i][j][0] - B[i][j][1] * 0.75]
+            face(p, deep, np.array([0, sgn * 1.0, 0]), "portin")
+    for i, sgn in ((0, -1), (nx, 1)):
+        for j in range(na):
+            face(p, [G[i][j], G[i][j + 1], B[i][j + 1][0], B[i][j][0]], np.array([sgn * 1.0, 0, 0]), "rim")
+    tag(p, "hatch")
+    # The blade's housing, built run out (out of the port, over the wrist and the hand, its mouth past the knuckles;
+    # blade_view.housing_move draws it back in): straight along its line, rounded to a point behind.
     secs = []
-    for x in np.linspace(HOUSING_X0, MOUTH, 9):
-        u = (x - HOUSING_X0) / (MOUTH - HOUSING_X0)
-        s = math.sin(min(1.0, u * 1.7) * math.pi / 2)
-        hh = max(0.04, 0.42 * s)
-        base = surface(x, math.pi / 2)[2] + 0.23 + hh                  # on the scales...
-        zc = base + (BLADE["z"] - base) * u ** 3                        # ...to the blade's height at the mouth
-        secs.append(superellipse(np.array([x, 0.0, zc]), np.array([0, 1.0, 0]), np.array([0, 0, 1.0]),
-                                 max(0.06, 0.68 * s), hh, 2.4, 10))
+    L = HOUSING["length"]
+    for u in np.linspace(0.0, 1.0, 10):
+        x = MOUTH - L * (1 - u)
+        k = math.sin(min(1.0, u / 0.22) * math.pi / 2)
+        secs.append(superellipse(np.array([x, 0.0, axis_z(x)]), np.array([0, 1.0, 0]), np.array([0, 0, 1.0]),
+                                 max(0.05, HOUSING["hw"] * k), max(0.04, HOUSING["hh"] * k), 2.4, 10))
     loft(p, secs, "housing", ("housing", "housing"))
     tag(p, "housing")
-    # Its track: two rails along the forearm's top, the channel it lies sunk in when collapsed and slides out along
-    # (the user: the back "remains like mechanically intact, like coming from the same like hole"): its tail never
-    # leaves them (blade_view: the housing travels 4.3, its rails run 9.5).
-    for side in (1, -1):
-        rail = []
-        for x in np.linspace(RAIL[0], RAIL[1], 8):
-            top = surface(x, math.pi / 2)[2] + 0.19
-            rail.append(superellipse(np.array([x, side * 0.84, top + 0.12]), np.array([0, 1.0, 0]),
-                                     np.array([0, 0, 1.0]), 0.1, 0.13, 2.6, 8))
-        loft(p, rail, "rail", ("rail", "rail"))
     # The hand, palm down: rounded, a plate over its back with a ridge to each knuckle.
     secs = [superellipse(np.array([x, 0.05, zc]), np.array([0, 1.0, 0]), np.array([0, 0, 1.0]), hy, hz, 3.0, 14)
             for x, hy, hz, zc in ((13.3, 1.62, 1.0, -0.16), (14.2, 1.88, 1.1, -0.18), (15.2, 2.06, 1.12, -0.2),
@@ -254,17 +292,18 @@ def build():
     d = unit(T[2] - T[0])
     capsule(p, T[1] - d * 0.1, T[1] + d * 0.1, 0.5, 0.5, "hinge", n=8, up=(0, 0, 1), rounds=(False, False))
     tag(p, "arm")
-    # The blade: a flat diamond (its flats up and down, an edge each side), out of the mouth, a point.
+    # The blade: a flat diamond (its flats up and down, an edge each side), out of the mouth along the housing's line,
+    # a point.
     b = BLADE
-    sec = lambda x, s: np.array([[x, 0.0, b["z"] + b["thick"] * s], [x, b["half"] * s, b["z"]],
-                                 [x, 0.0, b["z"] - b["thick"] * s], [x, -b["half"] * s, b["z"]]])
+    sec = lambda x, s: np.array([[x, 0.0, axis_z(x) + b["thick"] * s], [x, b["half"] * s, axis_z(x)],
+                                 [x, 0.0, axis_z(x) - b["thick"] * s], [x, -b["half"] * s, axis_z(x)]])
     x2 = b["x1"] - b["tip"]
     S0, S1 = sec(MOUTH - 0.4, 1.0), sec(x2, 1.08)
     loft(p, [S0, S1], "blade")
-    tip = np.array([b["x1"], -0.25, b["z"]])
+    tip = np.array([b["x1"], -0.25 * b["half"] / 0.6, axis_z(b["x1"])])
     for i in range(4):
         q = [S1[i], S1[(i + 1) % 4], tip]
-        face(p, q, np.mean(q, 0) - np.array([x2, 0, b["z"]]), "blade")
+        face(p, q, np.mean(q, 0) - np.array([x2, 0, axis_z(x2)]), "blade")
     tag(p, "blade")
     p.smooth = SMOOTH
     return p
@@ -330,7 +369,7 @@ def paint(cls, region, pos, n, ao, edge, mats):
         rim = True
     else:
         rim = False
-    if region in ("core", "plate", "joint", "housing") and not rim:
+    if region in ("core", "plate", "joint", "housing", "port") and not rim:
         # Lit as the curved shell it stands for (round the forearm's axis), not as flat facets that each catch the
         # gloss whole (they showed as white panels): the face's normal bent toward the radial.
         rad = pos * np.array([0.0, 1, 1])
@@ -345,7 +384,7 @@ def paint(cls, region, pos, n, ao, edge, mats):
         col = STEEL[None] * (0.82 + 0.12 * grain)[:, None]
         col = col * (1 - 0.35 * fuller)[:, None] + (rim * 70)[:, None]
         return mech_bake.lit(col, nn, ao, gloss=150, power=24)
-    if region == "slot":
+    if region in ("slot", "portin"):
         return np.repeat(np.array([[8.0, 8, 9]]), k, 0)
     if region == "joint":
         g = mech_bake.triplanar(mats["gunmetal"], pos, nn, 30).mean(-1) / 128.0
@@ -367,13 +406,14 @@ def paint(cls, region, pos, n, ao, edge, mats):
     if cls == "Jensen":
         # Glossy black shells, gold seams at their rims; a faint hex in the plates; gold joints; a gold line along the
         # housing.
-        base = {"core": 26.0, "plate": 20.0, "housing": 16.0, "rail": 18.0, "hand": 22.0, "finger": 24.0,
+        base = {"core": 26.0, "plate": 20.0, "housing": 16.0, "port": 20.0, "portin": 6.0, "hand": 22.0, "finger": 24.0,
                 "hinge": 22.0}[region]
         carbon = mech_bake.triplanar(mats["carbon"], pos, nn, 10).mean(-1) / 128.0
         col = np.array([[1.0, 0.98, 0.96]]) * (base * (0.85 + 0.25 * carbon))[:, None]
-        if region == "plate" and not rim:
+        if region in ("plate", "port") and not rim:        # (the port's swell: the plates' own surface, one piece)
             h = mech_bake.hex_edge(pos[:, 0], np.arctan2(pos[:, 2], pos[:, 1]) * 1.8, 0.7)
             col = col * (1 + 0.6 * mech_bake.line(h, 0.05))[:, None]
+        if region == "plate" and not rim:
             g = np.clip(groove + lip, 0, 1)
             col = col * (1 - g)[:, None] + GOLD[None] * g[:, None]
         if rim or region == "hinge":
@@ -411,8 +451,12 @@ def bake(p, cls, sheet, out_png, A=1024, S=512):
     from PIL import Image
     mats = {k: mech_bake.material(k, blur=0.8) for k in ("gunmetal", "steel", "carbon")}
     mats["grunge"] = np.asarray(Image.open(os.path.join(mech_bake.MATS, "grunge.png")).convert("RGB"), float) / 255.0
+    # The occluders: the arm, not the parts that move (built run out, the housing and the blade would shade the hatch
+    # they lie hidden under most of the time: the dark spot the user saw on it).
     tris = []
-    for pts, _ in p.faces:
+    for (pts, _), g in zip(p.faces, p.groups):
+        if g in ("housing", "blade"):
+            continue
         tris.append([pts[0], pts[1], pts[2]])
         if len(pts) == 4:
             tris.append([pts[0], pts[2], pts[3]])

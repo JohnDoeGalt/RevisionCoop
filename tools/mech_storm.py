@@ -855,7 +855,7 @@ def gauntlets():
     (group lhand: out of sight but for the reload). (vertices, groups, triangles, skins), wound as built."""
     import blade_arms, blade_view
     a = blade_arms.made()
-    A, _, tris, skins = blade_view.shared(a, drop=("blade", "housing"))
+    A, _, tris, skins = blade_view.shared(a, drop=("blade", "housing", "portin"))   # (the hatch shut, flush)
     right = A + np.array([GAUNTLET_X, 0.0, 0.0])
     u = REACH / np.linalg.norm(REACH)
     w = np.array([0.0, 0, 1]) - u[2] * u

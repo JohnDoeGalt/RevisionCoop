@@ -1,11 +1,13 @@
 """The arm blades' sounds (CoopMechBlade, the Mech's and the Light Mech's), cut from real CC0 recordings as the Arm
 Cannon's draw and reload are (tools/storm_foley.py's helpers; art/sounds/cc0, README there): synthesized, their thuds
 were the "bouncing ball" the user heard in the cannon's. Timed to the owner's view (tools/blade_view.py): drawn, the
-housing pops, rolls forward and the blade slides out, locked at about 0.63 s; put away, the reverse, down by 0.4 s.
+housing rises, runs out of its port and the blade slides out, locked at about 0.63 s; put away, the reverse, in by
+0.4 s.
 
-- BladeOut     the housing's hinge (a click), its roll forward (a slide), steel drawn out of it (a knife's draw,
-               lower), locked (a latch, a dull knock)
-- BladeIn      the steel slid back (a draw, backwards), the hinge, the roll back, seated with a click and a knock
+- BladeOut     the housing rising (a click), running out of its port (a slide), steel drawn out of it (a knife's
+               draw, lower), locked (a latch, a dull knock)
+- BladeIn      the steel slid back (a draw, backwards), the housing let go and run back in, seated with a click and a
+               knock
 - BladeSwing   a cut: a heavy blade's swish
 
   python -I tools/blade_sounds.py [out dir]     (default src/RevNet/Sounds; needs ffmpeg)
@@ -20,7 +22,7 @@ from storm_sounds import RATE, finish, n_, reverb, write_wav
 
 
 def blade_out():
-    """On the draw's beats (blade_view.drawn, 0.7 s): the housing's front pops on its hinge (0.2 s), it rolls forward
+    """On the draw's beats (blade_view.drawn, 0.7 s): the housing rises onto its line (0.2 s), runs out of its port
     over the wrist (0.29-0.5 s), the blade is drawn out of it (0.49 s) and locks (0.63 s)."""
     out = np.zeros(n_(0.85))
     lay(out, cut("metalClick.ogg", 0.07, 0.16, 0.85), 0.19, 0.55)
@@ -32,8 +34,8 @@ def blade_out():
 
 
 def blade_in():
-    """On the put-away's beats (blade_view.put_away, 0.6 s): the blade slides in (0-0.17 s), the housing pops (0.15 s),
-    rolls back behind the wrist (0.2-0.37 s) and drops into the forearm (0.4 s)."""
+    """On the put-away's beats (blade_view.put_away, 0.6 s): the blade slides in (0-0.17 s), the housing lets go
+    (0.15 s), runs back into its port (0.2-0.34 s) and sinks out of sight (0.4 s)."""
     out = np.zeros(n_(0.6))
     lay(out, cut("drawKnife3.ogg", 0.08, 0.36, 0.95)[::-1], 0.0, 0.8)
     lay(out, cut("metalClick.ogg", 0.07, 0.16, 0.85), 0.15, 0.5)
