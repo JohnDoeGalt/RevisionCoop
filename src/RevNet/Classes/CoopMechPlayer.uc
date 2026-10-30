@@ -34,15 +34,19 @@ var bool bRebooted;      // (host) used on this map
 var Inventory Scrapped[8];          // (host) scrapped canisters, deleted a moment later (a client's
 var float ScrappedAt;               // belt still draws them for up to 0.25 s: REVNET_DEV)
 var localized string NoNanoText, BuiltInText, SalvageText, UpgradedText, InstalledText, ScrapText, RebootText;
+var bool bBigPack;                  // twice a normal player's inventory and ammo (the heavy Mech; not the Light Mech's)
+var travel byte MechSlots[60];      // (host) its grid: two pages of the normal one (Inventory, below)
+var travel byte InvPage;            // which page is on show (0, 1): for the screen's label
+var transient bool bWideGrid;       // (FindInventorySlot) both pages searched
 
 replication
 {
 	reliable if ( Role==ROLE_Authority && bNetOwner )
-		Salvage, ModuleLevels, ModulesOn;
+		Salvage, ModuleLevels, ModulesOn, InvPage;
 	reliable if ( Role==ROLE_Authority )
 		ClientOptics;
 	reliable if ( Role<ROLE_Authority )
-		ServerUpgradeModule, ServerScrapCanisters;
+		ServerUpgradeModule, ServerScrapCanisters, ServerTurnPage;
 }
 
 // ----------------------------------------------------------------------
@@ -135,6 +139,214 @@ function TravelPostAccept()
 	MechLook();
 	PrePivot.Z += MechRaise;
 	RefreshModules();
+	MechAmmoCaps();
+}
+
+// ----------------------------------------------------------------------
+// Ammo: the heavy Mech carries twice a normal player's rounds of every kind (the user, 2026-10-29):
+// each round type's cap twice its single-player one (co-op keeps those: CoopGameInfo). MaxAmmo is
+// per item and kept neither over travel nor in a co-op save, so it is set as ammo comes in
+// (AddInventory: pickups, a weapon's rounds, a save's ammo) and again after travel. Revision's "no
+// max ammo" (9999) is left alone.
+// ----------------------------------------------------------------------
+
+function MechAmmoCaps()
+{
+	local Inventory Inv;
+
+	for ( Inv=Inventory; Inv!=None; Inv=Inv.Inventory )
+		MechAmmoCap( Ammo(Inv) );
+}
+
+function MechAmmoCap( Ammo A )
+{
+	if ( bBigPack && A!=None && A.MaxAmmo<9999 )
+		A.MaxAmmo = Max( A.MaxAmmo, 2 * A.default.MaxAmmo );
+}
+
+// ----------------------------------------------------------------------
+// Inventory: the heavy Mech's is twice a normal player's (the user, 2026-10-29): two pages of the
+// normal grid. The page on show is always columns 0 to maxInvCols-1, as anyone's, so the stock
+// inventory screen works on it unchanged; the other page is kept in the next maxInvCols columns,
+// and turning the page (CoopScreenMechInventory's button) swaps the halves on the host, the items'
+// positions reaching the client by replication. DeusExPlayer's grid is a fixed 30 slots
+// (invSlots[30], 5x6), so the Mech keeps its own of twice that (MechSlots), and every function that
+// reads the grid reads that one here. No item spans the pages; picking something up, the page on
+// show is filled first, then the other.
+// ----------------------------------------------------------------------
+
+function int PageCols()
+{
+	if ( bWideGrid )
+		return maxInvCols / 2;
+	return maxInvCols;
+}
+
+function int MechSlot( int Col, int Row )
+{
+	return Row * 2 * PageCols() + Col;
+}
+
+function bool MechFits( int SizeX, int SizeY, int Col, int Row )
+{
+	local int c, r, w;
+
+	w = PageCols();
+	if ( Col<0 || Row<0 || Col+SizeX>2*w || Row+SizeY>maxInvRows || 2*w*maxInvRows>ArrayCount(MechSlots) )
+		return false;
+	if ( Col<w && Col+SizeX>w )
+		return false;                       // across the pages
+	if ( Level.NetMode!=NM_Standalone && bBeltIsMPInventory )
+		return true;
+	for ( r=0; r<SizeY; r++ )
+		for ( c=0; c<SizeX; c++ )
+			if ( MechSlots[MechSlot( Col+c, Row+r )]==1 )
+				return false;
+	return true;
+}
+
+function bool IsEmptyItemSlot( Inventory anItem, int col, int row )
+{
+	local Inventory Inv;
+	local DeusExRootWindow Root;
+	local PersonaScreenInventory WinInv;
+
+	if ( !bBigPack )
+		return Super.IsEmptyItemSlot( anItem, col, row );
+	if ( anItem==None )
+		return false;
+	Root = DeusExRootWindow(rootWindow);
+	if ( Root!=None )
+		WinInv = PersonaScreenInventory(Root.GetTopWindow());
+	if ( !bCheatsEnabled && (WinInv==None || !WinInv.bDragging) )     // (as the stock one: no overlapping)
+		for ( Inv=Inventory; Inv!=None; Inv=Inv.Inventory )
+			SetInvSlots( Inv, 1 );
+	return MechFits( anItem.invSlotsX, anItem.invSlotsY, col, row );
+}
+
+function bool IsEmptyItemSlotXY( int invSlotsX, int invSlotsY, int col, int row )
+{
+	if ( !bBigPack )
+		return Super.IsEmptyItemSlotXY( invSlotsX, invSlotsY, col, row );
+	return MechFits( invSlotsX, invSlotsY, col, row );
+}
+
+function SetInvSlots( Inventory anItem, int newValue )
+{
+	local int c, r;
+
+	if ( !bBigPack )
+	{
+		Super.SetInvSlots( anItem, newValue );
+		return;
+	}
+	if ( anItem==None || anItem.invPosX==-1 || anItem.invPosY==-1 )
+		return;
+	for ( r=0; r<anItem.invSlotsY; r++ )
+		for ( c=0; c<anItem.invSlotsX; c++ )
+			if ( anItem.invPosX+c<2*PageCols() && anItem.invPosY+r<maxInvRows )
+				MechSlots[MechSlot( anItem.invPosX+c, anItem.invPosY+r )] = newValue;
+}
+
+function ClearInventorySlots()
+{
+	local int i;
+
+	Super.ClearInventorySlots();
+	for ( i=0; i<ArrayCount(MechSlots); i++ )
+		MechSlots[i] = 0;
+}
+
+function RepairInventory()
+{
+	local byte Fill[60];
+	local Inventory Inv;
+	local int i, c, r;
+
+	if ( !bBigPack )
+	{
+		Super.RepairInventory();
+		return;
+	}
+	if ( Level.NetMode!=NM_Standalone && bBeltIsMPInventory )
+		return;
+	for ( Inv=Inventory; Inv!=None; Inv=Inv.Inventory )
+		if ( Inv.invPosX!=-1 && Inv.invPosY!=-1 )
+			for ( r=0; r<Inv.invSlotsY; r++ )
+				for ( c=0; c<Inv.invSlotsX; c++ )
+					if ( Inv.invPosX+c<2*PageCols() && Inv.invPosY+r<maxInvRows )
+						Fill[MechSlot( Inv.invPosX+c, Inv.invPosY+r )] = 1;
+	for ( i=0; i<ArrayCount(MechSlots); i++ )
+		if ( Fill[i]<MechSlots[i] )
+			MechSlots[i] = Fill[i];
+}
+
+// The page on show first (the stock search, Revision's rules and all), then both pages: the stock
+// search over twice the columns, which only the other page can still take.
+function bool FindInventorySlot( Inventory anItem, optional bool bSearchOnly )
+{
+	local bool bFound;
+
+	if ( !bBigPack || bWideGrid )
+		return Super.FindInventorySlot( anItem, bSearchOnly );
+	if ( Super.FindInventorySlot( anItem, bSearchOnly ) )
+		return true;
+	bWideGrid = true;
+	maxInvCols *= 2;
+	bFound = Super.FindInventorySlot( anItem, bSearchOnly );
+	maxInvCols /= 2;
+	bWideGrid = false;
+	return bFound;
+}
+
+function bool FindInventorySlotXY( int invSlotsX, int invSlotsY, out int newSlotX, out int newSlotY )
+{
+	local bool bFound;
+
+	if ( !bBigPack || bWideGrid )
+		return Super.FindInventorySlotXY( invSlotsX, invSlotsY, newSlotX, newSlotY );
+	if ( Super.FindInventorySlotXY( invSlotsX, invSlotsY, newSlotX, newSlotY ) )
+		return true;
+	bWideGrid = true;
+	maxInvCols *= 2;
+	bFound = Super.FindInventorySlotXY( invSlotsX, invSlotsY, newSlotX, newSlotY );
+	maxInvCols /= 2;
+	bWideGrid = false;
+	return bFound;
+}
+
+// The other page on show: every placed item moved across (the halves swapped), the grid redone.
+function ServerTurnPage()
+{
+	local Inventory Inv;
+	local int i, w;
+
+	if ( !bBigPack )
+		return;
+	w = PageCols();
+	for ( Inv=Inventory; Inv!=None; Inv=Inv.Inventory )
+		if ( Inv.invPosX!=-1 && Inv.invPosY!=-1 )
+		{
+			if ( Inv.invPosX<w )
+				Inv.invPosX += w;
+			else
+				Inv.invPosX -= w;
+		}
+	for ( i=0; i<ArrayCount(MechSlots); i++ )
+		MechSlots[i] = 0;
+	for ( Inv=Inventory; Inv!=None; Inv=Inv.Inventory )
+		SetInvSlots( Inv, 1 );
+	InvPage = 1 - InvPage;
+}
+
+function bool AddInventory( Inventory Item )
+{
+	local bool bAdded;
+
+	bAdded = Super.AddInventory( Item );
+	if ( bAdded )
+		MechAmmoCap( Ammo(Item) );
+	return bAdded;
 }
 
 // ----------------------------------------------------------------------
@@ -777,6 +989,7 @@ function GiveBuiltIn( class<DeusExWeapon> C, int BeltSlot )
 
 defaultproperties
 {
+	bBigPack=True
 	Mesh=LodMesh'DeusExCharacters.GM_DressShirt_B'
 	DrawScale=1.06
 	Texture=Texture'DeusExItems.Skins.PinkMaskTex'

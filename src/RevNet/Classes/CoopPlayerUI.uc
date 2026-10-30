@@ -238,6 +238,36 @@ simulated function ClientUITest( string Command, optional string Arg )
 		Root.ClearWindowStack();
 		ServerUIReply( "closed, top" @ Root.GetTopWindow() );
 	}
+	else if ( Command=="page" )
+	{
+		// The heavy Mech's page button (CoopScreenMechInventory).
+		if ( CoopScreenMechInventory(Root.GetTopWindow())==None )
+		{
+			ServerUIReply( "page | no Mech inventory screen:" @ Root.GetTopWindow() );
+			return;
+		}
+		CoopScreenMechInventory(Root.GetTopWindow()).TurnPage();
+		ServerUIReply( "page turned" );
+	}
+	else if ( Command=="shown" )
+	{
+		// The inventory screen's item buttons: those shown, and how many are hidden.
+		InvWin = PersonaScreenInventory(Root.GetTopWindow());
+		if ( InvWin==None )
+		{
+			ServerUIReply( "shown | no inventory screen:" @ Root.GetTopWindow() );
+			return;
+		}
+		for ( W=InvWin.winItems.GetTopChild(); W!=None; W=W.GetLowerSibling() )
+			if ( PersonaInventoryItemButton(W)!=None && Inventory(W.GetClientObject())!=None )
+			{
+				if ( W.IsVisible() )
+					S = S @ Inventory(W.GetClientObject()).Class.Name;
+				else
+					i++;
+			}
+		ServerUIReply( "shown:" $ S @ "| hidden" @ i @ "| screen" @ InvWin.Class.Name );
+	}
 	else if ( Left( Command, 4 )=="inv " )
 	{
 		// The inventory screen's buttons on an item: inv use|drop|equip <class>.

@@ -463,6 +463,30 @@ Default to generic looks: female JC, JC skins, MJ12 elite, Trestkon, UNATCO, NSF
 - **Risks:** `GoDown` puts the weapon away (`PutInHand(None)`). Needs a "draw the pistol"
   step.
 
+#### A14. Voiced co-op commentary in the game's own scenes (backlog, the user's idea, 2026-10-29)
+
+- **Pitch:** the other players get voices of their own and chime in during the existing
+  conversations and barks: a quip after an NPC's line, a reaction to a reveal, a remark on
+  a scene. The game's own dialogue is never changed; the co-op voice sits beside it.
+- **2-4 players:** the extra agents feel present in the story instead of standing silent
+  behind JC.
+- **Fit:** good if the lines stay short and in-world, and come only at natural pauses.
+- **Build:**
+  - Voices from a local text-to-speech engine with a commercial-OK licence (a local
+    voice stack: a designed or cloned voice per player class, e.g. the Mech's). VoxCPM2
+    (Apache-2.0) designs a voice from a description alone; the user
+    rated its first two (a gravelly Mech on a radio, a field agent) "excellent" (2026-10-29).
+    CosyVoice 3 is the fast, small cloner, with styles (angry, loud...) and
+    inline tags (`<strong>`, `[breath]`) for delivery.
+  - Lines written per conversation and event, keyed by conversation name and line, and
+    generated ahead of time into a sound package (no live generation in the game).
+  - Played after the NPC's line ends (`CoopPlayerTalk.Voice` and `CoopConClient.Speech`
+    already play conversation sound on each client), on the speaking player, subtitled.
+- **Effort:** M for the system and a first set of scenes; L to cover the whole game.
+- **Risks:** writing volume (thousands of conversation lines); timing so a quip never
+  talks over the game's own speech; a per-player toggle for players who want the
+  original scenes untouched.
+
 ### 5.2 (b) Classes and archetypes
 
 #### B0. How a class works

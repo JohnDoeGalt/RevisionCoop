@@ -143,7 +143,16 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
 | Jump | 270 against JC's 300 (a class default: Revision derives the jump from it) | defaults |
 | Mass | 270 against 150: louder steps, heard further, less knockback | defaults, `PlayFootStep` |
 | Nano augmentations | can't be installed (medical bots say why); the default three stay; canisters can be scrapped for salvage | `ServerInstallAug`, `CoopMedAugs`, `ServerScrapCanisters` |
+| Inventory (the heavy Mech; the user, 2026-10-29) | twice a normal player's: two pages of the normal grid, a page button over the grid; pickups fill the page on show first; no item spans the pages | `CoopMechPlayer` (Inventory: `MechSlots[60]`, the grid functions, `ServerTurnPage`), `CoopScreenMechInventory` |
+| Ammo caps (the heavy Mech) | twice the single-player cap of every round type (Revision's "no max ammo" left alone) | `MechAmmoCap`, `AddInventory`, `TravelPostAccept` |
 | Skills, items, weapons | as anyone's | |
+
+The grid: `DeusExPlayer.invSlots` is a fixed 30 slots (5x6) and its inventory screen is drawn for
+one grid, so the Mech keeps its own grid of twice that, and every grid function reads it. The page
+on show is always the grid's own columns, so the stock screen works on it unchanged; the other page
+is kept past them (hidden on the screen), and the page button swaps the two halves on the host (the
+positions reach a client by replication). The Light Mech (`bBigPack=False`) keeps the normal grid
+and caps.
 
 ## The arsenal (built in)
 
@@ -161,7 +170,11 @@ loading a Mech's record doesn't get them.
   hits), the user's design: a Metal Storm gun, a slender casing over the back of the hand
   with nine barrels, 3 x 3 (10 mm bores; the user's latest, 2026-10-29, after five as a die shows),
   caseless rounds (nothing thrown out: `Cased`/`Caseless` take away the casings the stock 7.62 mm
-  spawns, on the host and on the player's own machine), a brick magazine on its back, carried
+  spawns, on the host and on the player's own machine). Its skins are matched to the game's own
+  weapon skins (the user, 2026-10-29: "more similar to the textures in the actual base game"; HDTP's
+  measured: dark, nearly grey gunmetal with grit, scratches, dirt in the grooves, worn edges, painted
+  bevels, stencils): `mech_storm.paint`/`weathered`/`hardware` over an original grunge swatch
+  (`tools/grunge.py`), all procedural (nothing of the game's in them). A brick magazine on its back, carried
   behind the right shoulder blade. It sits low, its underside on the back of the hand and a short post
   down to the wrist's pin (less leverage in the recoil: the user's ask); level when aimed, seated on
   the arm as low as it goes and sinking a little into the fist (the arm points up as he shoots). 7.62 mm rounds, the assault rifle's ammo;

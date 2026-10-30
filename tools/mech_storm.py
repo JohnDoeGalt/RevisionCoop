@@ -299,14 +299,58 @@ def hashn(pos, s, seed):
     return out
 
 
-# ---- paint. Colours 0-255: the Mech's palette. Sizes in game units.
-CASING = np.array([64.0, 69.0, 76.0])           # dark slate gunmetal
-OLIVE = np.array([76.0, 80.0, 56.0])            # the brick
-FACEPLATE = np.array([36.0, 38.0, 42.0])
-BRASS = np.array([182.0, 140.0, 72.0])
+# ---- paint. Colours 0-255: the Mech's palette. Sizes in game units. Matched to the game's own weapon skins (the
+# user, 2026-10-29: "more similar to the textures in the actual base game"): HDTP's are dark, nearly grey gunmetal
+# (luma 10/50/90%: about 18/40/80, saturation under 0.18) with strong grit, scratches, dirt in the grooves, worn
+# edges and painted bevels; the cannon's first skins were clean, brighter and flatter (build/tmp/tex_stats.py).
+CASING = np.array([60.0, 63.0, 67.0])           # dark gunmetal, barely blue
+OLIVE = np.array([74.0, 76.0, 62.0])            # the brick: drab, as the plasma rifle's body
+FACEPLATE = np.array([30.0, 31.0, 34.0])
+BRASS = np.array([170.0, 132.0, 70.0])
 STEEL = np.array([150.0, 156.0, 162.0])
-HAZARD = np.array([226.0, 176.0, 38.0])
+HAZARD = np.array([200.0, 158.0, 46.0])         # warning yellow, dulled
 INK = np.array([22.0, 22.0, 24.0])
+WORN = np.array([126.0, 128.0, 130.0])          # bare metal where paint is chipped or scratched
+
+
+def wear(pos, n, mats, scale=22.0):
+    """The grunge swatch at each texel (tools/grunge.py, from three sides): dirt 0-1, grain and scratches about 0."""
+    g = mech_bake.triplanar(mats["grunge"], pos, np.broadcast_to(n, pos.shape), scale)
+    return g[..., 0:1], g[..., 1:2] - 0.5, g[..., 2:3] - 0.5
+
+
+def weathered(col, pos, n, mats, edge, painted, seed):
+    """Grit, dirt blotches, scratches (bright: bare metal through paint; dark: pits) and, on painted parts, paint
+    chipped off at the edges."""
+    dirt, grain, scr = wear(pos, n, mats)
+    col = col * (1 + 1.0 * grain) * (1 - 0.5 * dirt)
+    bare = np.clip((scr - 0.06) * 4.0, 0, 1) * (0.5 if painted else 0.32)
+    col = col + (WORN - col) * bare
+    col = col * (1 + np.clip(scr + 0.12, -0.5, 0) * 1.6)
+    if painted:                                 # paint worn through to the metal along the edges, in patches
+        chip = (hashn(pos, 3.0, seed)[..., None] > 0.62) & (edge < 0.05 + 0.04 * hashn(pos, 9.0, seed + 1)[..., None])
+        col = np.where(chip, WORN * (0.7 + 0.3 * grain), col)
+    return col
+
+
+_LABELS = {}
+
+
+def label(text, r, u, height):
+    """Where a stencil of text is (centred on r = u = 0, height tall, reading along r): a mask."""
+    from PIL import Image, ImageDraw, ImageFont
+    if text not in _LABELS:
+        font = ImageFont.load_default()
+        w = int(ImageDraw.Draw(Image.new("L", (1, 1))).textlength(text, font=font)) + 2
+        im = Image.new("L", (w, 12), 0)
+        ImageDraw.Draw(im).text((1, 0), text, fill=255, font=font)
+        _LABELS[text] = np.asarray(im) > 100
+    m = _LABELS[text]
+    H, W = m.shape
+    px = np.floor((r / height + W / H / 2) * H).astype(int)
+    py = np.floor((0.5 - u / height) * H).astype(int)
+    ok = (px >= 0) & (px < W) & (py >= 0) & (py < H)
+    return ok & m[np.clip(py, 0, H - 1), np.clip(px, 0, W - 1)]
 
 
 def decals(pos, n, col):
@@ -323,56 +367,231 @@ def decals(pos, n, col):
         d = pos - np.array([xm, side * h, zc - 0.5])
         r, u = d @ right, d @ up
         plate = (np.abs(r) < 0.6) & (np.abs(u) < 0.22)
-        col = np.where(plate[..., None], np.array([54.0, 56, 60]), col)
-        txt = plate & (np.abs(u) < 0.15) & (np.mod(r * 6.0, 1) < 0.62) & (np.abs(r) < 0.58) & (np.abs(u - 0.05) > 0.03)
-        col = np.where(txt[..., None], np.array([160.0, 162, 166]), col)
+        col = np.where(plate[..., None], np.array([40.0, 41, 44]), col)
+        col = np.where(label("MS-9 STORM", r, u - 0.06, 0.13)[..., None], np.array([150.0, 152, 154]), col)
+        col = np.where(label("9x7.62 CL", r, u + 0.09, 0.11)[..., None], np.array([120.0, 122, 124]), col)
         strip = (pos[..., 0] > 13.6) & (pos[..., 0] < 18.6) & (np.abs(pos[..., 2] - (zc - h + 0.32)) < 0.07)
         col = np.where(strip[..., None], mech_bake.LIGHT, col)
     return col
+
+
+def tinted(col, rl):
+    """The relief's colours: raised plates a little lighter, slots and holes dark inside."""
+    if rl is None:
+        return col
+    _, dark, plate = rl
+    return col * (1 + 0.22 * plate) * (1 - 0.75 * dark)
+
+
+# ---- painted relief: the detail the game's weapon skins paint onto flat faces (the user, 2026-10-29: Revision's skins
+# "give the models themselves depth and detail"; these "look really dull... not intricate"). Each kind of face has a
+# height map in its own plane (game units: a along the gun, b across it), made of recessed panels, raised plates, slots,
+# ports, ribs, screws; the slopes are lit by the bake's key light, so they read carved and raised, as HDTP's do.
+
+def _smooth(x, w):
+    t = np.clip(x / w, 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+def sd_box(a, b, ca, cb, ha, hb, r=0.0):
+    """Signed distance to a rounded rectangle (negative inside)."""
+    qa = np.abs(a - ca) - (ha - r)
+    qb = np.abs(b - cb) - (hb - r)
+    return np.hypot(np.maximum(qa, 0), np.maximum(qb, 0)) + np.minimum(np.maximum(qa, qb), 0) - r
+
+
+def sd_capsule(a, b, a0, b0, a1, b1, r):
+    """Signed distance to a pill (a slot) from (a0, b0) to (a1, b1), r its half width."""
+    pa, pb, da, db = a - a0, b - b0, a1 - a0, b1 - b0
+    t = np.clip((pa * da + pb * db) / (da * da + db * db), 0, 1)
+    return np.hypot(pa - t * da, pb - t * db) - r
+
+
+class Relief:
+    """A height map built up shape by shape, with where the dark interiors and the raised plates are."""
+
+    def __init__(self, a):
+        self.H = np.zeros_like(a)
+        self.dark = np.zeros_like(a)
+        self.plate = np.zeros_like(a)
+
+    def recess(self, d, depth=0.035, bevel=0.035, dark=0.0):
+        k = _smooth(-d, bevel)
+        self.H = self.H - depth * k
+        self.dark = np.maximum(self.dark, dark * k)
+
+    def raise_(self, d, height=0.03, bevel=0.03, plate=1.0):
+        k = _smooth(-d, bevel)
+        self.H = self.H + height * k
+        self.plate = np.maximum(self.plate, plate * k)
+
+    def screw(self, a, b, ca, cb, R=0.08):
+        r = np.hypot(a - ca, b - cb)
+        self.H = self.H + 0.024 * np.sqrt(np.clip(1 - (r / R) ** 2, 0, 1))
+        slot = (np.abs((a - ca) - (b - cb)) < 0.016) & (r < 0.75 * R)
+        self.dark = np.maximum(self.dark, 0.55 * slot)
+
+
+def relief(region, kind, a, b):
+    """The height map of one kind of face of a region at in-plane points (a, b)."""
+    R = Relief(a)
+    zc, h = CASS["z"], CASS["h"]
+    if region == "casing" and kind == "side":                    # a = x (12.6-20.6), b = z (1.7-4.3)
+        for s in (13.9, 18.95):                                  # the panel joints: grooves
+            R.recess(np.abs(a - s) - 0.022, 0.03, 0.02, 0.4)
+        R.recess(sd_box(a, b, 16.42, zc + 0.12, 2.32, 0.86, 0.14))                       # the main panel, set in
+        R.recess(sd_box(a, b, 16.1, zc - h + 0.32, 2.55, 0.07, 0.05), 0.03, 0.02)        # the light's channel
+        for k in range(4):                                       # vents
+            bb = zc + 0.62 - 0.27 * k
+            R.recess(sd_capsule(a, b, 14.45, bb, 15.2, bb, 0.07), 0.06, 0.03, 0.85)
+        R.raise_(sd_box(a, b, 16.6, zc + 0.04, 0.82, 0.8, 0.07), 0.035, 0.03)            # the plate under the markings
+        for ca in (15.9, 17.3):
+            for cb in (zc - 0.64, zc + 0.72):
+                R.screw(a, b, ca, cb)
+        for (a0, b0, a1, b1) in ((17.6, zc + 0.8, 17.95, zc + 0.45), (17.95, zc + 0.45, 18.7, zc + 0.45),
+                                 (17.6, zc - 0.55, 18.7, zc - 0.55)):          # cut lines
+            R.recess(sd_capsule(a, b, a0, b0, a1, b1, 0.018), 0.025, 0.015, 0.5)
+        R.recess(np.hypot(a - 18.25, b - (zc - 0.02)) - 0.2, 0.05, 0.03, 0.6)           # a round port...
+        R.raise_(np.abs(np.hypot(a - 18.25, b - (zc - 0.02)) - 0.12) - 0.03, 0.03, 0.02, 0.5)   # ...its ring
+        for k in range(5):                                       # a rivet column behind the first joint
+            R.screw(a, b, 13.3, zc - 0.85 + 0.42 * k, 0.07)
+        for ca in (19.95, 20.3):                                 # cooling holes at the muzzle end
+            for k in range(5):
+                R.recess(np.hypot(a - ca, b - (zc - 0.8 + 0.4 * k)) - 0.1, 0.06, 0.03, 0.9)
+    elif region == "casing" and kind == "top":                   # a = x, b = y (+-1.3)
+        for s in (13.9, 18.95):
+            R.recess(np.abs(a - s) - 0.022, 0.03, 0.02, 0.4)
+        rail = sd_box(a, b, 16.4, 0.0, 2.3, 0.4, 0.04)
+        R.raise_(rail, 0.04, 0.025, 0.6)                         # a rail along the top...
+        cut = (np.mod(a - 14.1, 0.32) < 0.13) & (rail < -0.05) & (np.abs(b) < 0.28)
+        R.H = R.H - 0.03 * cut                                   # ...slotted across
+        R.dark = np.maximum(R.dark, 0.35 * cut)
+        vx = a - 13.2
+        R.recess(np.where((np.abs(b) < 0.6) & (vx > 0) & (vx < 0.5), np.abs(np.mod(vx, 0.1) - 0.05) - 0.022, 1.0),
+                 0.05, 0.015, 0.9)                               # the vent
+        for ca in (12.95, 19.25):
+            for cb in (-0.95, 0.95):
+                R.screw(a, b, ca, cb, 0.07)
+    elif region == "brick" and kind == "side":                   # a = x (8.8-12.6), b = z (1.7-4.3)
+        b0, b1 = BRICK["z0"], BRICK["z1"]
+        for k in range(4):                                       # ribs below the band
+            bb = b0 + 0.3 + 0.55 * k
+            if bb < b1 - 1.0:
+                R.raise_(sd_box(a, b, 10.7, bb, 1.35, 0.08, 0.06), 0.03, 0.03, 0.3)
+        R.raise_(sd_box(a, b, 10.7, b1 - 0.6, 1.95, 0.2, 0.03), 0.025, 0.02, 0.0)     # the band's strap
+        for ca in (9.06, 12.34):                                 # corner brackets, screwed on
+            R.raise_(sd_box(a, b, ca, (b0 + b1) / 2, 0.22, (b1 - b0) / 2 - 0.3, 0.05), 0.04, 0.03)
+            for cb in (b0 + 0.55, b1 - 0.55):
+                R.screw(a, b, ca, cb, 0.075)
+    elif region == "brick" and kind == "top":                    # a = x, b = y (+-1.5)
+        for ca in (BRICK["x0"] + 1.0, BRICK["x1"] - 1.0):        # plates under the handle's posts
+            R.raise_(sd_box(a, b, ca, 0.0, 0.42, 0.62, 0.06), 0.035, 0.03)
+            for sa in (-0.3, 0.3):
+                for cb in (-0.48, 0.48):
+                    R.screw(a, b, ca + sa, cb, 0.06)
+        R.recess(sd_box(a, b, 10.7, 0.0, 0.62, 0.95, 0.08), 0.03, 0.03)      # a label panel between them
+    elif region == "brick" and kind == "back":                   # a = y (+-1.5), b = z: the face the Mech sees most
+        b0, b1 = BRICK["z0"], BRICK["z1"]
+        R.recess(sd_box(a, b, 0.0, (b0 + b1) / 2, 1.18, (b1 - b0) / 2 - 0.28, 0.16))
+        for i in (-1, 0, 1):                                     # the feed indicator: a disc for each of the nine barrels
+            for j in (-1, 0, 1):
+                ca, cb = 0.42 * i, (b0 + b1) / 2 - 0.1 + 0.42 * j
+                R.raise_(np.hypot(a - ca, b - cb) - 0.15, 0.03, 0.025, 0.4)
+                R.recess(np.hypot(a - ca, b - cb) - 0.07, 0.03, 0.02, 0.8)
+        for ca in (-1.25, 1.25):
+            for cb in (b0 + 0.3, b1 - 0.3):
+                R.screw(a, b, ca, cb, 0.08)
+    elif region == "frame" and kind == "top":                    # the handle's grip: knurled
+        knurl = (np.abs(np.mod(a + b, 0.16) - 0.08) < 0.022) | (np.abs(np.mod(a - b, 0.16) - 0.08) < 0.022)
+        on = (b > -0.36) & (b < 0.36)
+        R.H = R.H - 0.012 * (knurl & on)
+        R.dark = np.maximum(R.dark, 0.25 * (knurl & on))
+    return R
+
+
+def face_axes(n):
+    """A face's plane axes (a, b) and its kind, by its normal; None for a slanted face (the chamfers)."""
+    ax = np.abs(n)
+    if ax[2] > 0.9:
+        return np.array([1.0, 0, 0]), np.array([0, 1.0, 0]), "top" if n[2] > 0 else "bottom"
+    if ax[1] > 0.9:
+        return np.array([1.0, 0, 0]), np.array([0, 0, 1.0]), "side"
+    if ax[0] > 0.9:
+        return np.array([0, 1.0, 0]), np.array([0, 0, 1.0]), "back" if n[0] < 0 else "front"
+    return None
+
+
+def relief_light(region, pos, n):
+    """A face's painted relief at its texels: (shade, dark, plate), or None. The slopes (by central differences) lit
+    by the key light in the face's plane; recesses a little shaded at the bottom."""
+    axes = face_axes(n)
+    if axes is None:
+        return None
+    A, B, kind = axes
+    a, b = pos @ A, pos @ B
+    R = relief(region, kind, a, b)
+    if not R.H.any() and not R.dark.any():
+        return None
+    e = 0.012
+    Ha = (relief(region, kind, a + e, b).H - relief(region, kind, a - e, b).H) / (2 * e)
+    Hb = (relief(region, kind, a, b + e).H - relief(region, kind, a, b - e).H) / (2 * e)
+    La, Lb = float(mech_bake.KEY @ A), float(mech_bake.KEY @ B)
+    shade = np.clip(1 - 2.2 * (Ha * La + Hb * Lb), 0.35, 1.9) * (1 - 0.35 * np.clip(-R.H / 0.06, 0, 1))
+    return shade[..., None], R.dark[..., None], R.plate[..., None]
 
 
 def paint(region, pos, n, a3, sx, ty, w, h, mats):
     """A face's colour at its texels, before the edge line, light and occlusion."""
     flat = np.ones(pos.shape[:-1] + (1,))
     nb = np.broadcast_to(n, pos.shape)
-    if region == "casing":
-        grain = mech_bake.triplanar(mats["steel"], pos, nb, 24).mean(-1, keepdims=True) / 128.0
-        col = CASING * (0.9 + 0.1 * grain)
-        col = col * (1 - 0.1 * hashn(pos, 0.8, 1)[..., None])
-        edge = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))[..., None]
-        chip = (hashn(pos, 5.0, 2)[..., None] > 0.8) & (edge < 0.07)                      # a little worn bright
-        col = np.where(chip, np.array([150.0, 154, 158]), col)
-        return decals(pos, n, col)
-    if region == "brick":                       # olive, ribbed sides, a yellow band, the round counter
-        grain = mech_bake.triplanar(mats["steel"], pos, nb, 24).mean(-1, keepdims=True) / 128.0
-        col = OLIVE * (0.9 + 0.1 * grain) * (1 - 0.08 * hashn(pos, 0.8, 5)[..., None])
+    edge = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))[..., None]
+    rl = relief_light(region, pos, n) if region in ("casing", "brick", "frame") else None
+    if region == "casing":                      # dark gunmetal, worn bright where hands and the brick rub
+        col = tinted(CASING * (0.94 + 0.12 * hashn(pos, 0.8, 1)[..., None]), rl)
+        col = decals(pos, n, col)
+        if rl is not None:
+            col = col * rl[0]
+        col = weathered(col, pos, n, mats, edge, False, 2)
+        if abs(float(n[1])) > 0.9:              # its blue light strip lit over the wear (a light doesn't weather)
+            strip = (pos[..., 0] > 13.6) & (pos[..., 0] < 18.6) & (np.abs(pos[..., 2] - (CASS["z"] - CASS["h"] + 0.32)) < 0.07)
+            col = np.where(strip[..., None], mech_bake.LIGHT, col)
+        return col
+    if region == "brick":                       # drab olive paint, ribbed sides, a yellow band, the round counter
+        col = tinted(OLIVE * (0.94 + 0.12 * hashn(pos, 0.8, 5)[..., None]) * flat, rl)
         if abs(float(n[1])) > 0.9:
-            rib = mech_bake.line(np.mod(pos[..., 2] - BRICK["z0"], 0.55) - 0.275, 0.04)
-            col = col * (1 - 0.45 * rib * (pos[..., 2] < BRICK["z1"] - 1.0))[..., None]
             band = np.abs(pos[..., 2] - (BRICK["z1"] - 0.6)) < 0.18
-            col = np.where(band[..., None], HAZARD * 0.92, col)
+            col = np.where(band[..., None], HAZARD * 0.85, col)
             if n[1] > 0.9:                      # the left side: nine blue cells, a round counter
                 d = pos - np.array([10.7, BRICK["y"], BRICK["z0"] + 1.0])
                 box = (np.abs(d[..., 0]) < 1.5) & (np.abs(d[..., 2]) < 0.3)
-                col = np.where(box[..., None], np.array([18.0, 20, 24]), col)
+                col = np.where(box[..., None], np.array([16.0, 17, 20]), col)
                 cell = box & (np.abs(d[..., 2]) < 0.22) & (np.mod((d[..., 0] + 1.5) * 3.0, 1) < 0.7) & (np.abs(d[..., 0]) < 1.42)
-                col = np.where(cell[..., None], mech_bake.LIGHT, col)
-        edge = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))[..., None]
-        chip = (hashn(pos, 5.0, 6)[..., None] > 0.8) & (edge < 0.07)
-        return np.where(chip, np.array([140.0, 140, 120]), col)
-    if region == "chevron":
+            else:                               # the right side: its stencil
+                d = pos - np.array([10.7, -BRICK["y"], BRICK["z0"] + 1.0])
+                col = np.where(label("7.62 CASELESS 40", d[..., 0], d[..., 2], 0.2)[..., None], INK * 1.3, col)
+        if rl is not None:
+            col = col * rl[0]
+        col = weathered(col, pos, n, mats, edge, True, 6)
+        if n[1] > 0.9:                          # the counter's cells lit over the wear
+            col = np.where(cell[..., None], mech_bake.LIGHT, col)
+        return col
+    if region == "chevron":                     # stencilled warning stripes, scuffed and dirty
         stripe = np.mod(pos[..., 0] + pos[..., 1] + pos[..., 2], 0.6) < 0.3
-        return np.where(stripe[..., None], HAZARD, INK)
+        return weathered(np.where(stripe[..., None], HAZARD * 0.8, INK * 1.6), pos, n, mats, edge, True, 9)
     if region in ("frame", "recess"):
         g = mech_bake.triplanar(mats["gunmetal"], pos, nb, 32).mean(-1, keepdims=True)
-        return g * (0.5 if region == "frame" else 0.3) * np.array([0.95, 0.98, 1.02])
+        col = tinted(g * (0.62 if region == "frame" else 0.34) * np.array([0.97, 0.99, 1.02]), rl)
+        if rl is not None:
+            col = col * rl[0]
+        return weathered(col, pos, n, mats, edge, False, 11)
     if region == "barrel":                      # the barrels' ends out of the breech: worn steel, bright at the lip
         grain = mech_bake.triplanar(mats["steel"], pos, nb, 24).mean(-1, keepdims=True) / 128.0
-        col = STEEL * (0.5 + 0.12 * grain)
-        lip = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))[..., None] < 0.04
-        return np.where(lip & (float(n[0]) < -0.9), STEEL * 0.95, col)
+        col = STEEL * (0.42 + 0.12 * grain)
+        col = np.where((edge < 0.04) & (float(n[0]) < -0.9), STEEL * 0.85, col)
+        return weathered(col, pos, n, mats, edge, False, 13)
     if region in ("face", "muzzle"):
-        col = FACEPLATE * flat
+        dirt, grain, _ = wear(pos, n, mats)
+        col = FACEPLATE * (1 + 0.8 * grain) * (1 - 0.3 * dirt)
         centres, _ = bores()
         best = np.full(pos.shape[:-1], 99.0)
         for cy, cz in centres:
@@ -396,6 +615,7 @@ def bake(p, sheet, out_png, A=1024, S=512):
     """One of the gun's skins: every face's cell painted from its 3D surface, a soft key light, occlusion."""
     from PIL import Image
     mats = {k: mech_bake.material(k, blur=0.8) for k in ("gunmetal", "steel")}
+    mats["grunge"] = np.asarray(Image.open(os.path.join(mech_bake.MATS, "grunge.png")).convert("RGB"), float) / 255.0
     tris = []
     for pts, _ in p.faces:
         tris.append([pts[0], pts[1], pts[2]])
@@ -431,10 +651,22 @@ def bake(p, sheet, out_png, A=1024, S=512):
         w, h = face_size(P)
         col = paint(region, pos, n, a3, sx, ty, w, h, mats)
         if region not in SHARED:
-            edge = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))
-            col = col * (0.6 + 0.4 * np.clip(edge / 0.035, 0, 1))[..., None]         # a dark line at each edge
-            light = 0.72 + 0.4 * (np.clip(float(n @ mech_bake.KEY), -1, 1) * 0.5 + 0.5) ** 2
-            col = col * (light * (0.55 + 0.45 * np.clip(a3, 0, 1) ** 1.2))[..., None]
+            # A painted bevel at each edge, as the game's skins have: lit where the edge turns toward the key light,
+            # shaded where it turns away, a thin dark seam at the very edge.
+            U = mech_bake.unit(P[1] - P[0])
+            V = mech_bake.unit(P[-1] - P[0])
+            dist = np.stack([sx * w, (1 - sx) * w, ty * h, (1 - ty) * h], -1)
+            near = dist.argmin(-1)
+            outward = np.array([-U, U, -V, V])[near]
+            dmin = dist.min(-1)
+            if len(P) == 4:                     # (a triangle is part of a fanned cap: its inner edges are no edges)
+                bev = np.clip(1 - dmin / 0.07, 0, 1) ** 1.5 * (outward @ mech_bake.KEY)
+                col = col * (1 + 1.1 * bev)[..., None] * (0.5 + 0.5 * np.clip(dmin / 0.014, 0, 1))[..., None]
+            light = 0.66 + 0.8 * (np.clip(float(n @ mech_bake.KEY), -1, 1) * 0.5 + 0.5) ** 2
+            light = light * (0.88 + 0.2 * np.clip((pos[..., 2] + 1.5) / 6.5, 0, 1))      # lighter toward the top
+            col = col * (light * (0.42 + 0.58 * np.clip(a3, 0, 1) ** 1.3))[..., None]  # dirt and shade in the grooves
+            gloss = np.clip(float(n @ mech_bake.HALF), 0, 1) ** 6 * 0.35 * (0.6 + 0.4 * ty)   # a sheen, brighter up the face
+            col = col * (1 + gloss)[..., None]
         ok = (ys >= 0) & (ys < A) & (xs >= 0) & (xs < A)
         img[ys[ok], xs[ok]] = col[ok]
         mask[ys[ok], xs[ok]] = True

@@ -363,6 +363,7 @@ simulated function ClientDash( vector V )
 
 defaultproperties
 {
+	bBigPack=False
 	Mesh=LodMesh'DeusExCharacters.GM_Trench'
 	DrawScale=1.0
 	MultiSkins(0)=None

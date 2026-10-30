@@ -12,7 +12,9 @@ class CoopRootWindow extends RevRootWindow;
 event MutateNewChild( Window NewParent, out class<Window> DesignatedClass )
 {
 	Super.MutateNewChild( NewParent, DesignatedClass );
-	if ( DesignatedClass==class'RevPersonaScreenInventory' )
+	if ( DesignatedClass==class'RevPersonaScreenInventory' && CoopMechPlayer(parentPawn)!=None && CoopMechPlayer(parentPawn).bBigPack )
+		DesignatedClass = class'CoopScreenMechInventory'; // the heavy Mech's two pages (CoopMechPlayer)
+	else if ( DesignatedClass==class'RevPersonaScreenInventory' )
 		DesignatedClass = class'CoopScreenInventory';
 	else if ( DesignatedClass==class'RevPersonaScreenAugmentations' && CoopLightMechPlayer(parentPawn)!=None )
 		DesignatedClass = class'CoopScreenLightMech'; // the Light Mech's (docs/LIGHT_MECH_CLASS.md)
