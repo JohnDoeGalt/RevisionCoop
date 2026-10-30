@@ -42,7 +42,8 @@ DICE = NINE
 BORE_DEPTH, NOSE = 1.0, 0.4                    # a bore's depth; a round's nose
 BREECH, STUB = 0.45, 0.3                       # how far the barrels stand out of the block's back; their outer radius
 GRAB = np.array([10.7, 0.4, BRICK["z1"] + 2.6])  # the left fist's centre, on the brick's handle
-SHARED = ("bore", "cap", "nose")               # regions sharing one texture cell each
+SHARED = ("bore", "cap", "nose", "grip")       # regions sharing one texture cell each
+SMOOTH = ("grip",)                             # regions shaded round in the game (their faces share vertices)
 SHEET = {"casing": 0, "chevron": 0, "brick": 1}   # three skins (else 2): byte UVs, so each skin's
                                                  # 256 steps go further
 FIRST = ("gun", "brick", "mount")              # what the Mech sees (StormView, with its gauntlets: view_mesh)
@@ -98,6 +99,43 @@ def face(p, pts, out, region):
     if n @ np.asarray(out, float) < 0:
         P = P[::-1]
     (p.add_quad if len(P) == 4 else p.add_tri)(*P, region)
+
+
+def handle(p):
+    """The brick's carry handle (the user, 2026-10-29: "more smooth and less boxy, more ergonomically shaped"): an
+    arch of oval section swept over the brick, flatter on top where the hand closes, its feet flaring into the brick
+    and sunk a little into it, three shallow finger grooves under the grip. The grip's middle stays where the left
+    fist takes it in the reload (HANDLE: x 10.7, its centreline z1 + 0.88). Its faces share their vertices in the
+    game mesh (SMOOTH), so the game shades it round."""
+    z1 = BRICK["z1"]
+    cx, half, top = 10.7, 1.08, 0.88                 # the arch: middle, half span, its centreline's height
+    ts = np.linspace(-np.pi / 2, np.pi / 2, 21)
+    ring = 10
+    def centre(t):
+        return np.array([cx + half * np.sin(t), 0.0, z1 - 0.08 + (top + 0.08) * np.cos(t) ** 0.55])
+    rings = []
+    for t in ts:
+        P = centre(t)
+        T = mech_bake.unit(centre(min(t + 0.01, np.pi / 2)) - centre(max(t - 0.01, -np.pi / 2)))
+        N = np.cross(T, np.array([0.0, 1.0, 0.0]))   # in the arch's plane, away from the brick
+        if N[2] < 0 and abs(t) < 1.2:
+            N = -N
+        foot = np.clip((abs(t) - 1.05) / 0.52, 0, 1) ** 2
+        wy, hn = 0.34 * (1 + 0.4 * foot), 0.17 * (1 + 0.6 * foot)
+        u = (P[0] - cx) / 0.62                       # the grip's span: three grooves for the fingers, underneath
+        groove = 0.035 * np.sin(1.5 * np.pi * (u + 1)) ** 2 if abs(u) <= 1 else 0.0
+        pts = []
+        for k in range(ring):
+            f = 2 * np.pi * k / ring
+            s = np.sin(f)
+            off = (hn - groove) * s if s < 0 else hn * s
+            pts.append(P + np.array([0.0, 1.0, 0.0]) * wy * np.cos(f) + N * off)
+        rings.append((P, pts))
+    for (P0, r0), (P1, r1) in zip(rings, rings[1:]):
+        for k in range(ring):
+            q = (k + 1) % ring
+            mid = (r0[k] + r0[q] + r1[k] + r1[q]) / 4
+            face(p, [r0[k], r0[q], r1[q], r1[k]], mid - (P0 + P1) / 2, "grip")
 
 
 def tag(p, group):
@@ -220,9 +258,7 @@ def build():
     # The brick: a big box on the barrel block's back, a handle on top.
     b = BRICK
     prism(p, chamfered(b["y"], b["z0"], b["z1"], 0.35), b["x0"], b["x1"], "x", "brick", ("brick", "brick"))
-    for x in (b["x0"] + 0.8, b["x1"] - 1.2):
-        block(p, (x, -0.4, b["z1"]), (x + 0.4, 0.4, b["z1"] + 0.7), "frame")
-    block(p, (b["x0"] + 0.8, -0.4, b["z1"] + 0.7), (b["x1"] - 0.8, 0.4, b["z1"] + 1.05), "frame")
+    handle(p)
     tag(p, "brick")
     # The wrist's trunnions (the pin's bearings): on the body's own arm too.
     for s in (1, -1):
@@ -501,11 +537,6 @@ def relief(region, kind, a, b):
         for ca in (-1.25, 1.25):
             for cb in (b0 + 0.3, b1 - 0.3):
                 R.screw(a, b, ca, cb, 0.08)
-    elif region == "frame" and kind == "top":                    # the handle's grip: knurled
-        knurl = (np.abs(np.mod(a + b, 0.16) - 0.08) < 0.022) | (np.abs(np.mod(a - b, 0.16) - 0.08) < 0.022)
-        on = (b > -0.36) & (b < 0.36)
-        R.H = R.H - 0.012 * (knurl & on)
-        R.dark = np.maximum(R.dark, 0.25 * (knurl & on))
     return R
 
 
@@ -602,6 +633,9 @@ def paint(region, pos, n, a3, sx, ty, w, h, mats):
         ring = (best > BORE) & (best < BORE + 0.08)
         col = np.where(ring[..., None], STEEL * (0.8 + 0.2 * np.clip((best - BORE) / 0.08, 0, 1))[..., None], col)
         return np.where(((best >= BORE + 0.08) & (best < BORE + 0.11))[..., None], col * 0.5, col)
+    if region == "grip":                        # the handle: rubberized, dark, a fine grit (one cell for all its faces)
+        dirt, grain, _ = wear(pos, n, mats, 60.0)
+        return np.array([44.0, 45.0, 48.0]) * (1 + 0.7 * grain) * (1 - 0.25 * dirt)
     if region == "bore":
         return np.array([30.0, 30, 33]) * (0.35 + 0.65 * sx)[..., None]       # darker towards the back
     if region == "cap":
@@ -697,7 +731,7 @@ def mesh_of(p, groups, drop):
             continue
         P = [np.asarray(p.verts[i]) for i in t[:3]]
         n = np.cross(P[1] - P[0], P[2] - P[0])
-        n = tuple(np.round(n / (np.linalg.norm(n) + 1e-12), 2))
+        n = None if r in SMOOTH else tuple(np.round(n / (np.linalg.norm(n) + 1e-12), 2))
         ids = []
         for i in t[:3]:
             key = (tuple(np.round(p.verts[i], 4)), n, vg[i])

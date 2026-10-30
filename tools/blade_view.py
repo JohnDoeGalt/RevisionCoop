@@ -148,6 +148,7 @@ def shared(p, drop=()):
     tr = [r for (pts, r) in p.faces for _ in range(len(pts) - 2)]
     ts = [s for (pts, _), s in zip(p.faces, p.sheets) for _ in range(len(pts) - 2)]
     vg = [g for (pts, _), g in zip(p.faces, p.groups) for _ in pts]
+    smooth = getattr(p, "smooth", ())           # regions shaded round: their faces share vertices (blade_arms.SMOOTH)
     V, G, index, tris, skins = [], [], {}, [], []
     for t, r, s in zip(p.tris, tr, ts):
         if r in drop:
@@ -155,7 +156,7 @@ def shared(p, drop=()):
         skins.append(s)
         P = [np.asarray(p.verts[i]) for i in t[:3]]
         n = np.cross(P[1] - P[0], P[2] - P[0])
-        n = tuple(np.round(n / (np.linalg.norm(n) + 1e-12), 2))
+        n = ("round", r) if r in smooth else tuple(np.round(n / (np.linalg.norm(n) + 1e-12), 2))
         ids = []
         for i in t[:3]:
             key = (tuple(np.round(p.verts[i], 4)), n, vg[i])
