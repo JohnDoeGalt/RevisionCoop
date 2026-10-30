@@ -26,8 +26,8 @@ N = 16                                          # sides round the forearm
 WRIST = 13.0                                    # where the forearm's armour ends
 MOUTH = 13.9                                    # the housing's mouth: the blade comes out here
 BLADE = dict(x1=26.0, tip=2.8, half=0.6, thick=0.13, z=1.72)
-SHEETS = {"core": 0, "plate": 0, "rim": 0, "housing": 0, "joint": 0, "slot": 0}   # else 1 (the hand, the blade)
-SMOOTH = ("core", "plate", "housing", "joint", "hand", "finger", "hinge")   # shaded round in the game
+SHEETS = {"core": 0, "plate": 0, "rim": 0, "housing": 0, "rail": 0, "joint": 0, "slot": 0}   # else 1 (hand, blade)
+SMOOTH = ("core", "plate", "housing", "rail", "joint", "hand", "finger", "hinge")   # shaded round in the game
 
 
 def unit(v):
@@ -122,6 +122,15 @@ def surface(x, th):
     return np.array([x, ry * m * math.cos(th), rz * m * math.sin(th)])
 
 
+HOUSING_X0 = 4.3                                # the housing's back end (its hinge, blade_view)
+RAIL = (3.0, 12.5)                              # its track along the forearm's top
+
+
+def hinge():
+    """The housing's hinge: the middle of its back end, as built."""
+    return np.array([HOUSING_X0, 0.0, surface(HOUSING_X0, math.pi / 2)[2] + 0.23 + 0.04])
+
+
 PLATES = []                                     # the armour's shells: (x0, x1, centre angle, half width at 0 and 1, scallop)
 
 
@@ -175,10 +184,12 @@ def build():
     # The wrist's collar: rounded.
     loft(p, [ring(x, ry, rz) for x, ry, rz in ((12.45, 1.46, 1.24), (12.75, 1.57, 1.36), (13.05, 1.63, 1.43),
                                                 (13.45, 1.61, 1.41), (13.8, 1.52, 1.31), (13.98, 1.44, 1.22))], "joint")
-    # The blade's housing: a teardrop along the top, pointed behind, its mouth over the wrist.
+    tag(p, "arm")
+    # The blade's housing: a teardrop along the top, pointed behind, its mouth over the wrist (built so; in the view it
+    # moves: blade_view.housing_move).
     secs = []
-    for x in np.linspace(4.3, MOUTH, 9):
-        u = (x - 4.3) / (MOUTH - 4.3)
+    for x in np.linspace(HOUSING_X0, MOUTH, 9):
+        u = (x - HOUSING_X0) / (MOUTH - HOUSING_X0)
         s = math.sin(min(1.0, u * 1.7) * math.pi / 2)
         hh = max(0.04, 0.42 * s)
         base = surface(x, math.pi / 2)[2] + 0.23 + hh                  # on the scales...
@@ -186,6 +197,17 @@ def build():
         secs.append(superellipse(np.array([x, 0.0, zc]), np.array([0, 1.0, 0]), np.array([0, 0, 1.0]),
                                  max(0.06, 0.68 * s), hh, 2.4, 10))
     loft(p, secs, "housing", ("housing", "housing"))
+    tag(p, "housing")
+    # Its track: two rails along the forearm's top, the channel it lies sunk in when collapsed and slides out along
+    # (the user: the back "remains like mechanically intact, like coming from the same like hole"): its tail never
+    # leaves them (blade_view: the housing travels 4.3, its rails run 9.5).
+    for side in (1, -1):
+        rail = []
+        for x in np.linspace(RAIL[0], RAIL[1], 8):
+            top = surface(x, math.pi / 2)[2] + 0.19
+            rail.append(superellipse(np.array([x, side * 0.84, top + 0.12]), np.array([0, 1.0, 0]),
+                                     np.array([0, 0, 1.0]), 0.1, 0.13, 2.6, 8))
+        loft(p, rail, "rail", ("rail", "rail"))
     # The hand, palm down: rounded, a plate over its back with a ridge to each knuckle.
     secs = [superellipse(np.array([x, 0.05, zc]), np.array([0, 1.0, 0]), np.array([0, 0, 1.0]), hy, hz, 3.0, 14)
             for x, hy, hz, zc in ((13.3, 1.62, 1.0, -0.16), (14.2, 1.88, 1.1, -0.18), (15.2, 2.06, 1.12, -0.2),
@@ -345,7 +367,8 @@ def paint(cls, region, pos, n, ao, edge, mats):
     if cls == "Jensen":
         # Glossy black shells, gold seams at their rims; a faint hex in the plates; gold joints; a gold line along the
         # housing.
-        base = {"core": 26.0, "plate": 20.0, "housing": 16.0, "hand": 22.0, "finger": 24.0, "hinge": 22.0}[region]
+        base = {"core": 26.0, "plate": 20.0, "housing": 16.0, "rail": 18.0, "hand": 22.0, "finger": 24.0,
+                "hinge": 22.0}[region]
         carbon = mech_bake.triplanar(mats["carbon"], pos, nn, 10).mean(-1) / 128.0
         col = np.array([[1.0, 0.98, 0.96]]) * (base * (0.85 + 0.25 * carbon))[:, None]
         if region == "plate" and not rim:

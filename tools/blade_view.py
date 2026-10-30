@@ -1,7 +1,9 @@
 """The arm blades as their owner sees them (CoopMechBlade), for each class: its blade arms (tools/blade_arms.py: ours,
 built to be seen up close, painted for the class), posed in the view. The right arm leads from the lower right, its
-blade toward the middle; the left waits lower in its corner. Drawn, both come up and the blades slide out of their
-housings past the fists; three cuts (Attack: a slash from the right; Attack2: from the left; Attack3: a thrust with
+blade toward the middle; the left waits lower in its corner. Drawn (0.7 s), both come up with their housings
+collapsed into the forearms behind the wrists, the housings' fronts pop up on a hinge at their backs, they roll
+forward over the hands and the blades slide out past the fists (the user's design, 2026-10-29: housing_move,
+blade_in); three cuts (Attack: a slash from the right; Attack2: from the left; Attack3: a thrust with
 both), each lasting as the combat knife's does with its HandToHandAttack notify at its middle, when it lands; put away,
 the blades slide back in and the arms drop. The same blades others see on it slide out in steps (STAGES, staged).
 
@@ -20,10 +22,44 @@ K = mech_storm.K
 
 # An arm's place and turn in the eye's frame, as seen from its own side: the elbow ahead, out to its side (lateral),
 # up; pitch lifts the forearm, yaw turns it in towards the middle, roll turns its top (the blade's side) from up in
-# towards the middle (degrees); ext: how far the blade is out (0 in its housing, 1 out).
-GUARD = np.array([4.0, 9.0, -9.0, 22.0, 15.0, 18.0, 1.0])          # the right: the fist low right, the blade in
-REST_L = np.array([4.0, 11.0, -12.0, 18.0, 12.0, 22.0, 1.0])         # the left: lower, out in its corner
-LOW = np.array([2.0, 11.0, -22.0, -25.0, 8.0, 0.0, 0.0])
+# towards the middle (degrees); ext: how far the blade is out (0 in its housing, 1 out); out: where the housing is (0
+# collapsed behind the wrist, 1 run forward over the hand); pop: its front tipped up about its hinge (degrees).
+GUARD = np.array([4.0, 9.0, -9.0, 22.0, 15.0, 18.0, 1.0, 1.0, 0.0])      # the right: the fist low right, the blade in
+REST_L = np.array([4.0, 11.0, -12.0, 18.0, 12.0, 22.0, 1.0, 1.0, 0.0])     # the left: lower, out in its corner
+LOW = np.array([2.0, 11.0, -22.0, -25.0, 8.0, 0.0, 0.0, 0.0, 0.0])
+
+# The housing (the user, 2026-10-29): at rest collapsed into the forearm, sunk between its rails (blade_arms.RAIL), its
+# front just behind the wrist's joint, the blade hidden in it; drawn, its front lifts a little on a hinge at its back,
+# it rolls forward along the rails over the wrist, and the blade slides out. Run forward it rides 3 units further out
+# than built, on the back of the hand (the user: "about 25% more forward... the reach of the blade"), its tail still
+# between the rails ("the back remains attached"), tipped a touch nose down to lie on the hand.
+COLLAPSED = np.array([-1.3, 0.0, -0.18])
+DEPLOYED = np.array([3.0, 0.0, -0.3])
+DEPLOY_TILT = -0.6                                              # degrees, run forward
+POP = 3.0
+SLIDE = blade_arms.BLADE["x1"] - (blade_arms.MOUTH - 0.6)       # how far the blade runs back to hide in the housing
+
+
+def housing_move(P, out, pop):
+    """Points of the housing (and the blade in it), as built, moved to where it is: along its rails from collapsed to
+    run forward, its front tipped up pop degrees about its hinge (its back end, which moves with it), and run
+    forward settled nose down onto the hand."""
+    off = COLLAPSED + (DEPLOYED - COLLAPSED) * out
+    h = blade_arms.hinge() + off
+    Q = P + off
+    a = math.radians(pop + DEPLOY_TILT * out)
+    dx, dz = Q[:, 0] - h[0], Q[:, 2] - h[2]
+    Q[:, 0] = h[0] + dx * math.cos(a) - dz * math.sin(a)
+    Q[:, 2] = h[2] + dx * math.sin(a) + dz * math.cos(a)
+    return Q
+
+
+def blade_in(P, ext):
+    """The blade's points slid back into the housing (ext 1: out as built, 0: all of it inside): it runs back along
+    the housing, and what would pass its mouth's inside stays there (folded into the housing, out of sight)."""
+    Q = P.copy()
+    Q[:, 0] = np.maximum(Q[:, 0] - (1 - ext) * SLIDE, blade_arms.MOUTH - 0.3)
+    return Q
 
 
 def ease(t):
@@ -44,24 +80,30 @@ def keys(t, ks):
 
 
 def pose(base=GUARD, **kw):
-    """base with some of its values changed (x, lateral, z, pitch, yaw, roll, ext)."""
+    """base with some of its values changed (x, lateral, z, pitch, yaw, roll, ext, out, pop)."""
     p = base.copy()
     for k, v in kw.items():
-        p["x lateral z pitch yaw roll ext".split().index(k)] = v
+        p["x lateral z pitch yaw roll ext out pop".split().index(k)] = v
     return p
 
 
 def drawn(t, base):
-    """Up from below; the blade slides out (a little past, then home: a jolt as it locks)."""
-    p = LOW + (base - LOW) * span(t, 0.0, 0.5)
-    p[6] = 1.07 * span(t, 0.4, 0.72) - 0.07 * span(t, 0.72, 1.0)
-    p[0] -= 0.5 * math.sin(math.pi * span(t, 0.68, 0.9))
+    """Up from below with the housing collapsed; its front pops up, it rolls forward over the wrist and settles; the
+    blade slides out (a little past, then home: a jolt as it locks)."""
+    p = LOW + (base - LOW) * span(t, 0.0, 0.4)
+    p[8] = POP * (span(t, 0.28, 0.42) - span(t, 0.6, 0.76))
+    p[7] = span(t, 0.42, 0.72)
+    p[6] = 1.07 * span(t, 0.7, 0.88) - 0.07 * span(t, 0.88, 1.0)
+    p[0] -= 0.5 * math.sin(math.pi * span(t, 0.84, 0.97))
     return p
 
 
 def put_away(t, base):
-    p = base + (LOW - base) * span(t, 0.35, 1.0)
-    p[6] = 1.0 - span(t, 0.0, 0.4)
+    """The blade slides in; the housing pops, rolls back behind the wrist and drops into it; the arm goes down."""
+    p = base + (LOW - base) * span(t, 0.55, 1.0)
+    p[6] = 1.0 - span(t, 0.0, 0.28)
+    p[8] = POP * (span(t, 0.24, 0.36) - span(t, 0.56, 0.7))
+    p[7] = 1.0 - span(t, 0.34, 0.62)
     return p
 
 
@@ -95,8 +137,8 @@ def thrust(t, base):
 # Attack 0.36, Attack2 0.55, Attack3 0.4, Down 0.5); the cuts' notify at their middle, as the knife's.
 # (name, frames, rate, poses of t in 0-1, notify time)
 SEQS = [("Still", 1, 1, lambda t: {"r": GUARD, "l": REST_L}, None),
-        ("Select", 13, 30, lambda t: {"r": drawn(t, GUARD), "l": drawn(t, REST_L)}, None),
-        ("Down", 15, 30, lambda t: {"r": put_away(t, GUARD), "l": put_away(t, REST_L)}, None),
+        ("Select", 21, 30, lambda t: {"r": drawn(t, GUARD), "l": drawn(t, REST_L)}, None),
+        ("Down", 18, 30, lambda t: {"r": put_away(t, GUARD), "l": put_away(t, REST_L)}, None),
         ("Idle1", 12, 8, lambda t: {"r": breathe(t, GUARD), "l": breathe(t, REST_L, phase=0.6)}, None),
         ("Idle2", 16, 8, lambda t: {"r": pose(roll=GUARD[5] + 28 * math.sin(math.pi * t) ** 2, yaw=GUARD[4] + 4 * math.sin(math.pi * t)),
                                      "l": breathe(t, REST_L, 0.6)}, None),
@@ -123,6 +165,7 @@ def view_mesh(p):
     finalized blade arm (blade_arms.made); the right arm as built, the left its mirror; the blade group slides."""
     V, G, tris, skins = shared(p)
     blade = np.array([g == "blade" for g in G])
+    moving = np.array([g in ("blade", "housing") for g in G])
     sides = (("r", 1, V), ("l", -1, V * np.array([1.0, -1, 1])))
     frames = []
     for name, n, rate, f, _ in SEQS:
@@ -131,8 +174,8 @@ def view_mesh(p):
             out = []
             for side, s, P in sides:
                 Q = P.copy()
-                ext = max(pp[side][6], 0.002)
-                Q[blade, 0] = blade_arms.MOUTH + (Q[blade, 0] - blade_arms.MOUTH) * ext
+                Q[blade] = blade_in(Q[blade], pp[side][6])
+                Q[moving] = housing_move(Q[moving], pp[side][7], pp[side][8])
                 R, E = placed(pp[side], s)
                 out.append((Q @ R.T + E) * np.array([K, -K, K]))
             frames.append(np.concatenate(out))
