@@ -9,16 +9,18 @@
 #   keep      [[from, to], ...] the stretches of that clock kept, in order (absent: all of it)
 #   hold      seconds the last frame is held after the last stretch (the end card), fading to black over "fade"
 #   track     a WAV laid under it from 0 (on the edited timeline), or absent: silent
-#   captions  [{t0, t1, text, size, x, y}] on the edited timeline (x, y: drawtext expressions); fade in and out 0.3 s
+#   captions  [{t0, t1, text, size, x, y, line_spacing}] on the edited timeline (x, y: drawtext expressions; text
+#             can run to more lines); fade in and out 0.3 s
 #   font      a TrueType font for the captions
 #   grade     an ffmpeg filter for the picture (e.g. "eq=gamma=1.6:saturation=1.1")
 #   dim       [from, amount]: the picture darkened by amount from then (under an end card), the captions not
+#   fps       the video's frame rate (absent: 30, the game's shots; a 60 fps render: 60)
 import glob, json, os, shutil, subprocess, sys
 import numpy as np
 from PIL import Image
 
 NET = r"C:\Program Files (x86)\Steam\steamapps\common\Deus Ex\Revision\CoopNet"
-FPS = 30
+FPS = 30                                    # (the default: an edit's "fps" over it)
 
 
 def frame_list(spec):
@@ -38,6 +40,8 @@ def drawtext(c, work, k):
     opts = ["fontfile=font.ttf", "textfile=" + name, "fontsize=%d" % c.get("size", 34), "fontcolor=white",
             "x=" + str(c.get("x", 48)), "y=" + str(c.get("y", "h-150")), "alpha='%s'" % alpha,
             "enable='between(t,%.3f,%.3f)'" % (t0, t1)]
+    if c.get("line_spacing"):
+        opts.append("line_spacing=%d" % c["line_spacing"])
     if c.get("box", True):
         opts += ["box=1", "boxcolor=black@0.55", "boxborderw=14"]
     if c.get("shadow", True):
@@ -46,7 +50,9 @@ def drawtext(c, work, k):
 
 
 def main():
+    global FPS
     edit = json.load(open(sys.argv[1], encoding="utf-8"))
+    FPS = edit.get("fps", FPS)
     out = os.path.abspath(sys.argv[2])
     work = out[:-4] + "_work"
     os.makedirs(work, exist_ok=True)

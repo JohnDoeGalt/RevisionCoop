@@ -92,7 +92,33 @@ def storm_reload_in():
     return finish(reverb(body(out), 0.28, 0.15))
 
 
-SOUNDS = {"StormDraw": storm_draw, "StormReloadOut": storm_reload_out, "StormReloadIn": storm_reload_in}
+def storm_hopper():
+    """A dry gun's second brick (with Hopper, after the first is seated: the user, 2026-10-29, a hopper "similar to the
+    one for the auto cannon in helldivers... you hear a whirr and a rapid set of clinking noises"): the feed's motor
+    spins up, the brick's rounds are stripped into the gun's hopper one after another, faster as it goes (real metal
+    clicks, a little lower or higher each), the hopper full (a clunk), the motor winds down. The motor is ours (no
+    recording of one): a low geared hum, kept gritty."""
+    out = np.zeros(n_(1.15))
+    t = np.arange(len(out)) / RATE
+    level = np.clip(t / 0.14, 0, 1) * np.clip((1.05 - t) / 0.12, 0, 1)
+    pitch = 62 + 58 * np.clip(t / 0.18, 0, 1) - 30 * np.clip((t - 0.93) / 0.15, 0, 1)
+    phase = 2 * np.pi * np.cumsum(pitch) / RATE
+    hum = (np.sin(phase) + 0.55 * np.sin(2 * phase) + 0.3 * np.sin(3 * phase + 0.4)) * (0.8 + 0.2 * np.sin(phase * 7))
+    grind = band(noise(1.15), 180, 1400) * (0.5 + 0.5 * np.sin(phase * 4))
+    lay(out, drive(0.5 * hum + 0.35 * grind, 2.0) * level, 0.0, 0.42)
+    clicks = [cut("metalClick.ogg", 0.07, 0.15, r) for r in (0.66, 0.74, 0.7, 0.8)]
+    at, k = 0.13, 0
+    while at < 0.9:                                  # the rounds, one by one
+        lay(out, clicks[k % 4], at + 0.004 * ((k * 7) % 3), 0.5 + 0.12 * (k % 3))
+        at += 1.0 / (16 + 14 * (at - 0.13))
+        k += 1
+    lay(out, cut("shotguncock.wav", 0.19, 0.42, 0.8), 0.9, 0.7)               # full
+    lay(out, cut("doorClose_4.ogg", 0.08, 0.28, 0.75), 0.91, 0.4)
+    return finish(reverb(body(out), 0.28, 0.15))
+
+
+SOUNDS = {"StormDraw": storm_draw, "StormReloadOut": storm_reload_out, "StormReloadIn": storm_reload_in,
+          "StormHopper": storm_hopper}
 
 
 def main():

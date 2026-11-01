@@ -38,6 +38,10 @@ var int GoneCount;
 var float NextDownedCheck;
 
 var string PendingOpen, BootTo;
+var CoopTest Test;              // ?CoopTest=
+var int CustomStep;             // the menu map: 1 the host is choosing custom difficulty (CustomReady), 2 done
+var int AutoPage;               // (?CustomAuto: CoopTestCustomDiff) the screen pages shot so far
+var float AutoAt;               // and when the next is
 var float StartDifficulty;      // combat difficulty of new players (?Difficulty=0..3)
 var bool bCoop;                 // a co-op listen server (not the menu, not single-player)
 var bool bStartup;              // NetMode reads NM_Standalone until the first tick
@@ -137,7 +141,8 @@ event InitGame( string Options, out string Error )
 		TestClass = class<CoopTest>( DynamicLoadObject( "RevNet.CoopTest" $ S, class'Class', true ) );
 		if ( TestClass==None )
 			TestClass = class'CoopTest';
-		Spawn( TestClass ).Start( S );
+		Test = Spawn( TestClass );
+		Test.Start( S );
 	}
 }
 
@@ -172,7 +177,7 @@ event Tick( float DeltaTime )
 		bStartup = false;
 		Level.NetMode = NM_ListenServer;
 		Nobody = Spawn( class'CoopNobody' );
-		Spawn( class'CoopClient' );
+		Spawn( class'CoopClient' ).HostSwitches = ModeSwitches();
 		Spawn( class'CoopArms' );
 		StartManagers();
 		AutoSaveAt = Level.TimeSeconds + 8.0; // after the mission script's first frame
@@ -203,7 +208,9 @@ event Tick( float DeltaTime )
 		RevertTeam();
 	}
 	for ( i=0; i<FixCount; i++ )
-		if ( FixNextTick[i]!=None )
+		if ( ScriptedPawn(FixNextTick[i])!=None )
+			class'CoopCustomDifficulty'.static.Spawned( ScriptedPawn(FixNextTick[i]), Human(GetPlayerPawn()) );
+		else if ( FixNextTick[i]!=None )
 			class'CoopRules'.static.SinglePlayerValues( FixNextTick[i] );
 	FixCount = 0;
 	StartingSkill = None;
@@ -220,6 +227,11 @@ event Timer()
 		if ( P==None )
 		{
 			SetTimer( 0.5, false ); // the menu player is spawned a moment later
+			return;
+		}
+		if ( !CustomReady( P ) )
+		{
+			SetTimer( 0.25, false );
 			return;
 		}
 		Log( "RevNet: opening" @ PendingOpen, 'RevNet' );
@@ -251,6 +263,91 @@ event Timer()
 		Level.ServerTravel( BootTo, false );
 		BootTo = "";
 	}
+}
+
+// The mode's own switches as this game has them (Revision's options: the launcher writes them
+// for the host), by name: only Biomod has them all, Shifter and HR the skill system.
+function string ModeSwitches()
+{
+	local string S, N;
+	local int i;
+
+	for ( i=0; i<ArrayCount(class'CoopCustomDifficulty'.default.Switches); i++ )
+	{
+		N = class'CoopCustomDifficulty'.default.Switches[i];
+		if ( GetPropertyText( N )!="" )
+			S = S $ N $ "=" $ GetPropertyText( N ) $ ";";
+	}
+	return S;
+}
+
+// The host's game with custom difficulty (CoopCustomDifficulty): chosen on Revision's
+// own screens before the first map opens (the item and enemy quantity go in its URL);
+// a continued game plays with its save's. ?CustomAuto (CoopTestCustomDiff): the test's
+// values, each page shot, then start.
+function bool CustomReady( PlayerPawn P )
+{
+	local DeusExRootWindow Root;
+	local string S;
+
+	if ( InStr( PendingOpen, "Listen" )<0 || CustomStep==2 )
+		return true;
+	if ( CustomStep==0 )
+	{
+		CustomStep = 2;
+		if ( InStr( PendingOpen, "CoopLoad" )>=0 )
+			class'CoopCustomDifficulty'.static.Begin( class'CoopSave'.static.Get( Mode ).CustomDifficulty );
+		else if ( !(ParseOption( Mid( PendingOpen, InStr( PendingOpen, "?" ) ), "CustomDifficulty" )~="True") )
+			class'CoopCustomDifficulty'.static.Begin( "" );
+		else
+		{
+			S = ParseOption( Mid( PendingOpen, InStr( PendingOpen, "?" ) ), "CustomAuto" );
+			if ( S!="" )
+				S = class'CoopTestCustomDiff'.static.Preset( S );
+			if ( class'CoopCustomDifficulty'.static.Ask( P, S ) )
+			{
+				CustomStep = 1;
+				return false;
+			}
+			Log( "RevNet: custom difficulty: no screens on the menu map, the last choice", 'RevNet' );
+			class'CoopCustomDifficulty'.static.Begin( class'CoopCustomDifficulty'.default.Values );
+		}
+	}
+	else if ( class'CoopCustomDifficulty'.default.Open>0 )
+	{
+		Root = DeusExRootWindow(DeusExPlayer(P).rootWindow);
+		if ( ParseOption( Mid( PendingOpen, InStr( PendingOpen, "?" ) ), "CustomAuto" )!="" && Root!=None && Root.winCount>0 && MenuUIScreenWindow(Root.winStack[Root.winCount-1])!=None )
+		{
+			if ( AutoAt==0 )
+				AutoAt = Level.TimeSeconds + 1.5;      // (drawn first)
+			if ( Level.TimeSeconds<AutoAt )
+				return false;
+			AutoAt = Level.TimeSeconds + 1.5;
+			P.ConsoleCommand( "shot" );
+			Log( "RevNetTest: customdiff menu page" @ AutoPage + 1 @ Root.winStack[Root.winCount-1].Class, 'RevNet' );
+			switch ( AutoPage++ )
+			{
+				case 0: S = "AIPAGE"; break;
+				case 1: S = "AIPAGE2"; break;
+				case 2: S = "OBJECTSPAGE"; break;
+				default: S = "STARTGAME";
+			}
+			MenuUIScreenWindow(Root.winStack[Root.winCount-1]).ProcessAction( S );
+		}
+		return false;
+	}
+	else
+	{
+		// Start pressed (else backed out: the values they were opened with).
+		CustomStep = 2;
+		if ( !class'CoopCustomDifficulty'.default.bChosen )
+			class'CoopCustomDifficulty'.static.Chosen( P );
+		class'CoopCustomDifficulty'.static.Begin( class'CoopCustomDifficulty'.default.Values );
+	}
+	S = class'CoopCustomDifficulty'.static.Options( PendingOpen );
+	Log( "RevNet: custom difficulty" @ class'CoopCustomDifficulty'.default.bOn $ ":" @ class'CoopCustomDifficulty'.default.Session, 'RevNet' );
+	PendingOpen = S;
+	return true;
 }
 
 // ----------------------------------------------------------------------
@@ -285,7 +382,7 @@ event PlayerPawn Login( string Portal, string Options, out string Error, class<P
 	// A saved game keeps its players, waiting for them (GameInfo.Login takes an
 	// unoccupied one; under single-player rules any of them): this player gets back
 	// the one with their name, as it was saved (Loadgame: Revision doesn't reset it).
-	InName = Left( ParseOption( Options, "Name" ), 20 );
+	InName = CleanName( ParseOption( Options, "Name" ) );
 	for ( P=Level.PawnList; P!=None; P=P.NextPawn )
 		if ( PlayerPawn(P)!=None && PlayerPawn(P).Player==None && P.bIsPlayer && P.PlayerReplicationInfo!=None )
 		{
@@ -325,6 +422,8 @@ event PlayerPawn Login( string Portal, string Options, out string Error, class<P
 	NewPlayer.PlayerReplicationInfo.Team = 0; // one team (bIsTeamGame)
 	if ( StartDifficulty>0 && DeusExPlayer(NewPlayer)!=None )
 		DeusExPlayer(NewPlayer).CombatDifficulty = StartDifficulty;
+	// Custom difficulty (its base difficulty too): the host's before the map's pass (ApplyGamemode).
+	class'CoopCustomDifficulty'.static.Apply( DeusExPlayer(NewPlayer) );
 	if ( n>0 )
 		StepAside( NewPlayer );
 	return NewPlayer;
@@ -366,6 +465,9 @@ event PostLogin( PlayerPawn NewPlayer )
 		if ( DeusExPlayer(NewPlayer)!=None )
 			DeusExPlayer(NewPlayer).flagBase.SetBool( 'PlayerTraveling', false, true, 0 );
 	}
+	// Custom difficulty on the player's own machine too (its weapon's accuracy, energy).
+	if ( class'CoopCustomDifficulty'.default.bOn && CoopPlayerCore(NewPlayer)!=None && NewPlayer!=GetPlayerPawn() )
+		class'CoopCustomDifficulty'.static.SendTo( CoopPlayerCore(NewPlayer) );
 	// The rifle's values (RifleRework), on the player's own machine too.
 	if ( RifleDamage>0 && CoopPlayerCore(NewPlayer)!=None )
 	{
@@ -382,6 +484,58 @@ event PostLogin( PlayerPawn NewPlayer )
 // reconnect): its old pawn, on a connection waiting for its time-out, goes now (as a
 // kick does), so the player gets its things from it (PlayerLeaving) and there is one
 // of it in the world.
+// ----------------------------------------------------------------------
+// Names and admin (the security sweep of 2026-10-31)
+// ----------------------------------------------------------------------
+
+// No admin in co-op: the engine's takes a password from the map's URL.
+function AdminLogin( PlayerPawn P, string Password );
+
+// A name as everyone sees it and the co-op save keys a player's things by it (CoopSave):
+// printable, no ini, list or URL separators, 20 characters at most.
+static function string CleanName( string S )
+{
+	local string Out, C;
+	local int i;
+
+	for ( i=0; i<Len(S) && Len(Out)<20; i++ )
+	{
+		C = Mid( S, i, 1 );
+		if ( Asc(C)>=32 && Asc(C)<127 && InStr( "\\\"[]=;|,?#", C )<0 )
+			Out = Out $ C;
+	}
+	return Out;
+}
+
+// Taken by another player still in the game: the host, or a joiner whose game is still talking
+// (a crashed one's goes quiet: rejoining, it takes its place back, DropOldSelf).
+function bool NameTaken( Pawn Other, string S )
+{
+	local Pawn P;
+
+	for ( P=Level.PawnList; P!=None; P=P.NextPawn )
+		if ( P!=Other && PlayerPawn(P)!=None && !P.bDeleteMe && P.PlayerReplicationInfo!=None && P.PlayerReplicationInfo.PlayerName~=S
+			&& (Viewport(PlayerPawn(P).Player)!=None || (NetConnection(PlayerPawn(P).Player)!=None && Level.TimeSeconds - PlayerPawn(P).ServerTimeStamp < 5)) )
+			return true;
+	return false;
+}
+
+// Every name, the one a player arrives with and any change (the engine takes anything, and a
+// player taking a teammate's name took their place and their things): clean, and not one taken.
+function ChangeName( Pawn Other, coerce string S, bool bNameChange )
+{
+	local string Name;
+	local int n;
+
+	Name = CleanName( S );
+	if ( Name=="" )
+		Name = "Player";
+	S = Name;
+	for ( n=2; NameTaken( Other, S ) && n<100; n++ )
+		S = Left( Name, 17 ) $ n;
+	Super.ChangeName( Other, S, bNameChange );
+}
+
 function DropOldSelf( DeusExPlayer P )
 {
 	local Pawn Old;
@@ -389,7 +543,8 @@ function DropOldSelf( DeusExPlayer P )
 
 	for ( Old=Level.PawnList; Old!=None; Old=Old.NextPawn )
 		if ( Old!=P && CoopPlayerCore(Old)!=None && Old!=GetPlayerPawn() && !Old.bDeleteMe && Old.PlayerReplicationInfo!=None
-			&& Old.PlayerReplicationInfo.PlayerName==P.PlayerReplicationInfo.PlayerName )
+			&& Old.PlayerReplicationInfo.PlayerName==P.PlayerReplicationInfo.PlayerName
+			&& Level.TimeSeconds - PlayerPawn(Old).ServerTimeStamp >= 5 )
 		{
 			Log( "RevNet:" @ P.PlayerReplicationInfo.PlayerName @ "came back before their old connection dropped: it goes", 'RevNet' );
 			// Its things now: the pawn of a player still connected goes as the
@@ -493,13 +648,53 @@ function bool Crowded( Pawn Who, vector Loc )
 // per map, from the host, who owns the settings (a remote player has no root window).
 function ApplyGamemode( DeusExPlayer Player )
 {
+	local RevPawnHook P, Pawns[256];
+	local float Hear[256], See[256];
+	local AutoTurret T, Turrets[64];
+	local int Damage[64];
+	local int i, n, m;
+	local bool bCustom;
+
 	if ( !IsMenuMap() )
 	{
 		if ( bGamemodeApplied || Player.rootWindow==None )
 			return;
 		bGamemodeApplied = true;
+		// Custom difficulty's pass over the map's characters, turrets and cameras runs once a
+		// map (its flag): a co-op map always starts fresh (CoopMapMemory), so on every visit.
+		bCustom = Human(Player)!=None && Human(Player).bCustomDifficulty;
+		if ( bCustom && Player.flagBase!=None && GetLevelInfo()!=None )
+			Player.flagBase.SetBool( DeusExRootWindow(Player.rootWindow).StringToName( GetLevelInfo().MapName $ "_CustomDifficultyApplied" ), false, true, 0 );
+		if ( Test!=None )
+			Test.BeforeMapPass();
+		if ( bCustom )
+		{
+			foreach AllActors( class'RevPawnHook', P )
+				if ( n<ArrayCount(Pawns) )
+				{
+					Pawns[n] = P;
+					Hear[n] = P.HearingThreshold;
+					See[n] = P.VisibilityThreshold;
+					n++;
+				}
+			foreach AllActors( class'AutoTurret', T )
+				if ( m<ArrayCount(Turrets) )
+				{
+					Turrets[m] = T;
+					Damage[m++] = T.gunDamage;
+				}
+		}
 	}
 	Super.ApplyGamemode( Player );
+	// The pass keeps the AI's hearing and sight settings as whole numbers (RevPawnHook's are
+	// ints: 0.25-0.75 made characters hear and see everything, 1.25-1.75 changed nothing) and
+	// rounds a turret's damage down (5 x 0.75: 3): the settings as the sliders show them.
+	for ( i=0; i<n; i++ )
+		if ( Pawns[i]!=None && Pawns[i].bInCustomDifficulty )
+			class'CoopCustomDifficulty'.static.Senses( Pawns[i], Hear[i], See[i], Human(Player) );
+	for ( i=0; i<m; i++ )
+		if ( Turrets[i]!=None )
+			Turrets[i].gunDamage = int( Damage[i] * Human(Player).CDTurretDamage + 0.5 );
 }
 
 function ApplySeasons( RevJCDentonMale Player )
@@ -568,6 +763,9 @@ function bool IsRelevant( Actor Other )
 		// Weapons and items spawned under deathmatch rules: what their own code hard-codes
 		// for it, on the next tick (CoopRules.SinglePlayerItem).
 		if ( Level.NetMode!=NM_Standalone && Inventory(Other)!=None && FixCount<ArrayCount(FixNextTick) )
+			FixNextTick[FixCount++] = Other;
+		// A character after the map's custom difficulty pass: it too, once it has started.
+		else if ( bGamemodeApplied && ScriptedPawn(Other)!=None && class'CoopCustomDifficulty'.default.bOn && FixCount<ArrayCount(FixNextTick) )
 			FixNextTick[FixCount++] = Other;
 	}
 	return Super.IsRelevant( Other );

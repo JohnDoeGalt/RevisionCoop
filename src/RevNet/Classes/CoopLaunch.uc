@@ -20,6 +20,7 @@ var config string AutoOpen; // e.g. "01_NYC_UNATCOIsland?Listen?Game=RevNet.Coop
 var config int Rejoins;     // tries left for AutoOpen
 var config string LastHost; // the host this client last played with
 var config string Agent;    // the launcher's class choice: "Mech", "LightMech" or "" (?RevClass=)
+var config string JoinPassword; // the host's game password from the launcher's join URL (its lobby's): rejoins take it too
 
 static function Remember( string Host )
 {
@@ -31,7 +32,8 @@ static function Remember( string Host )
 
 static function string Take()
 {
-	local string URL;
+	local string URL, S;
+	local int i;
 
 	URL = default.AutoOpen;
 	if ( URL!="" )
@@ -40,6 +42,20 @@ static function string Take()
 			default.Rejoins--;
 		else
 			default.AutoOpen = "";
+		// A join: the host's game password kept (LastHost, a rejoin's address, has none), or put back.
+		if ( InStr( URL, "Listen" )<0 )
+		{
+			i = InStr( Caps(URL), "?PASSWORD=" );
+			if ( i>=0 )
+			{
+				S = Mid( URL, i + 10 );
+				if ( InStr( S, "?" )>=0 )
+					S = Left( S, InStr( S, "?" ) );
+				default.JoinPassword = S;
+			}
+			else if ( default.JoinPassword!="" )
+				URL = URL $ "?Password=" $ default.JoinPassword;
+		}
 		StaticSaveConfig();
 		if ( default.Agent!="" && InStr( URL, "RevClass=" )<0 )
 			URL = URL $ "?RevClass=" $ default.Agent;

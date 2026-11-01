@@ -89,7 +89,7 @@ SPHERE = struct.pack("<4f", 0, 0, 13000, 22000)
 
 
 # Meshes made here with no game data in them (tools/mech_storm.py, tools/blade_arms.py): kept whole.
-WHOLE = ("StormView", "MechBladeView", "JensenBladeView")
+WHOLE = ("StormView", "MechBladeView", "JensenBladeView", "MechBladeViewA", "JensenBladeViewA", "FPVDrone")
 FROM_BODY = ()   # meshes of the body's own faces, their triangles emptied too (none now: the views carry their own arms)
 
 

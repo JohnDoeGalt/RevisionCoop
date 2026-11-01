@@ -105,6 +105,22 @@ function string Limbs( DeusExPlayer P )
 	return "health" @ P.Health @ "head" @ P.HealthHead @ "torso" @ P.HealthTorso @ "arms" @ P.HealthArmLeft @ P.HealthArmRight @ "legs" @ P.HealthLegLeft @ P.HealthLegRight;
 }
 
+// Every body part at H (Health is made from the parts after a hit: the parts' total is what a hit took).
+function Fill( Pawn P, int H )
+{
+	P.HealthHead = H;
+	P.HealthTorso = H;
+	P.HealthArmLeft = H;
+	P.HealthArmRight = H;
+	P.HealthLegLeft = H;
+	P.HealthLegRight = H;
+}
+
+function int Parts( Pawn P )
+{
+	return P.HealthHead + P.HealthTorso + P.HealthArmLeft + P.HealthArmRight + P.HealthLegLeft + P.HealthLegRight;
+}
+
 function ClientDo( string Command, optional Actor A )
 {
 	if ( Probe==None )

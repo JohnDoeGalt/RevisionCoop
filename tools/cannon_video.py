@@ -1,7 +1,7 @@
 # The Arm Cannon show's video: the game's own screenshots (CoopTestCannonShow: ~12 a second, from 1.5 s before the
 # draw), each placed by its file's time on a 30 fps timeline, with the soundtrack mixed from the gun's own sounds on the
 # show's timeline (tools/cannon_soundtrack.py, lead 1.5 s), into an MP4.
-#   python -I tools/cannon_video.py <out.mp4>
+#   python -I tools/cannon_video.py <out.mp4> [frames dir: default the dev folder's]
 import glob, os, shutil, subprocess, sys
 import numpy as np
 from PIL import Image
@@ -13,7 +13,7 @@ FPS = 30
 
 def main():
     out = os.path.abspath(sys.argv[1])
-    shots = sorted(glob.glob(os.path.join(NET, "Shot*.bmp")))
+    shots = sorted(glob.glob(os.path.join(sys.argv[2] if len(sys.argv) > 2 else NET, "Shot*.bmp")))
     if not shots:
         sys.exit("no shots")
     times = np.array([os.stat(p).st_mtime_ns for p in shots], float) / 1e9

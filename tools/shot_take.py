@@ -23,14 +23,17 @@ def mover(dest, stop, count):
             files.append((st.st_mtime_ns, p, st.st_size))
         files.sort()
         now = time.time_ns()
+        blocked = False                                     # (in order: nothing newer moves before an older one)
         for mt, p, size in files:
-            if not last and (now - mt < 300_000_000 or seen.get(p) != (size, mt)):
-                seen[p] = (size, mt)
-                break                                       # (in order: nothing newer moves before it)
+            if blocked or not last and (now - mt < 300_000_000 or seen.get(p) != (size, mt)):
+                seen[p] = (size, mt)                        # (every new file looked at once a pass, not only the
+                blocked = True                              # first: one a pass fell behind 30 a second, the 256
+                continue                                    # names filled and the game wrote nothing, 2026-10-30)
             try:
                 os.replace(p, os.path.join(dest, "f%05d.bmp" % count[0]))
             except OSError:
-                break                                       # (still open: next look)
+                blocked = True                              # (still open: next look)
+                continue
             count[0] += 1
             seen.pop(p, None)
         if last:

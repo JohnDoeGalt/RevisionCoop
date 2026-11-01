@@ -3,7 +3,8 @@
 //
 // The Mech's arm cannon (CoopMechPlayer), the user's design: a Metal Storm gun
 // that rides behind the shoulder blade, slides down the back of the arm and
-// spins over the hand; nine barrels, 3 x 3; a brick of rounds on its back (tools/mech_storm.py).
+// rolls round the outside of the forearm onto its top; nine barrels, 3 x 3; a brick of rounds on its back (tools/mech_storm.py),
+// as many again in its own hopper (ReloadAmmo).
 // Fed with the same 7.62 mm rounds as the assault rifle, caseless in it. The Mech sees its own model on
 // its own armoured gauntlets, StormView (RevNetMech, built at install; without it the
 // wrist-mounted mini-crossbow's); the others see it on the body (CoopMechParts:
@@ -26,6 +27,7 @@ class CoopMechCannon extends WeaponMiniCrossbow;
 #exec AUDIO IMPORT FILE="Sounds\StormReloadIn.wav" NAME="StormReloadIn" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormDry.wav" NAME="StormDry" GROUP="MechCannon"
 #exec AUDIO IMPORT FILE="Sounds\StormMode.wav" NAME="StormMode" GROUP="MechCannon"
+#exec AUDIO IMPORT FILE="Sounds\StormHopper.wav" NAME="StormHopper" GROUP="MechCannon"
 
 var Texture MechHandTex;
 var Mesh StormView;
@@ -34,11 +36,15 @@ var localized string ModeNames[3];
 var CoopSoundLoop Loop;         // (host) Storm's BRRRT while it fires
 var ShellCasing Had[32];        // the casings about before a shot (Caseless)
 var int NHad, CasedDepth;
+var int Brick;                  // a brick's rounds (the Arm Cannon module's Magazine: SetBrick); the gun holds twice it
+var travel int Hopper;          // what its own hopper had at the last reload (the brick fires first)
+var bool bLoadHopper;           // (host) this reload fills the hopper: the gun had run dry
+var bool bSimHopper;            // (the player's machine) its reload shows the hopper being filled (ClientHopper)
 
 replication
 {
 	reliable if ( Role==ROLE_Authority )
-		ClientMode;
+		ClientMode, ClientHopper;
 }
 
 function texture GetWeaponHandTex()
@@ -213,12 +219,154 @@ simulated function SimGenerateBullet()
 	Caseless();
 }
 
-// A reload with lossy magazines drops the rounds left in the brick, a casing each.
+// The hopper (the user, 2026-10-29: "similar to the one for the auto cannon in helldivers... half the ammo is internal
+// and the other half is external"): the gun holds a brick's worth of rounds of its own and the brick on its back
+// another, and the brick fires first. A reload with rounds left swaps the brick and the hopper keeps what it has (a
+// lossy reload drops the old brick's rounds only, a casing each); run dry, two bricks (bLoadHopper): the first seated
+// and stripped into the hopper (Hopper, StormHopper's whirr and clinks), taken off, a new one on: twice a brick.
+function SetBrick( int Rounds )
+{
+	Brick = Rounds;
+	ReloadCount = 2 * Rounds;
+}
+
+// What the hopper has now, of Left rounds loaded (the brick's spent first; at least what the brick can't hold).
+function int InHopper( int Left )
+{
+	return Max( Left - Brick, Min( Hopper, Left ) );
+}
+
 function ReloadAmmo()
 {
+	local int Left, Before;
+
+	Before = ClipCount;
+	if ( !IsInState( 'Reload' ) && ReloadCount>0 && AmmoType!=None )
+	{
+		Left = AmmoLeftInClip();
+		Hopper = InHopper( Left );
+		bLoadHopper = Left==0;
+		ClipCount = Min( ReloadCount, ClipCount + Hopper );        // (for the stock one, only the brick's rounds left: what a lossy reload drops)
+	}
 	Cased();
 	Super.ReloadAmmo();
 	Caseless();
+	ClipCount = Before;         // (all of it loaded till the reload is done: Reloaded)
+}
+
+// The reload done: run dry, the hopper full and a full brick on; else a new brick on what the hopper kept.
+function Reloaded()
+{
+	if ( bLoadHopper )
+		Hopper = Brick;
+	ClipCount = Max( 0, ReloadCount - (Hopper + Brick) );
+	bLoadHopper = false;
+}
+
+// (A client's reload done on its machine: the host's Reload has done the count.)
+function ServerDoneReloading()
+{
+}
+
+simulated function ClientHopper( bool bFill )
+{
+	bSimHopper = bFill;
+}
+
+// The host's reload: the brick off, a new one on; the hopper filled first when the gun is dry (the first brick
+// seated and stripped, Hopper, then off). For a client the player's machine plays it (SimReload) and the host waits.
+state Reload
+{
+Begin:
+	FinishAnim();
+	if ( AmmoType.AmmoAmount>0 )
+	{
+		if ( (Level.NetMode==NM_DedicatedServer) || ((Level.NetMode==NM_ListenServer) && Owner.IsA('DeusExPlayer') && !DeusExPlayer(Owner).PlayerIsListenClient()) )
+		{
+			ClientHopper( bLoadHopper );
+			ClientReload();
+			Sleep( GetReloadTime() );
+			if ( bLoadHopper )
+				Sleep( 2.25 + 0.5 * GetReloadTime() );      // (the hopper's: Hopper, ReloadBegin, half a Reload, ReloadEnd)
+			Reloaded();
+			ReadyClientToFire( True );
+		}
+		else
+		{
+			Owner.PlaySound( CockingSound, SLOT_None,,, 1024 );
+			PlayAnim( 'ReloadBegin' );
+			NotifyOwner( True );
+			FinishAnim();
+			LoopAnim( 'Reload' );
+			Sleep( GetReloadTime() );
+			Owner.PlaySound( AltFireSound, SLOT_None,,, 1024 );
+			PlayAnim( 'ReloadEnd' );
+			FinishAnim();
+			if ( bLoadHopper )
+			{
+				Owner.PlaySound( Sound'StormHopper', SLOT_None,,, 1024 );
+				if ( HasAnim( 'Hopper' ) )
+					PlayAnim( 'Hopper' );
+				else
+					Sleep( 1.0 );
+				FinishAnim();
+				Owner.PlaySound( CockingSound, SLOT_None,,, 1024 );
+				PlayAnim( 'ReloadBegin' );
+				FinishAnim();
+				LoopAnim( 'Reload' );
+				Sleep( 0.5 * GetReloadTime() );
+				Owner.PlaySound( AltFireSound, SLOT_None,,, 1024 );
+				PlayAnim( 'ReloadEnd' );
+				FinishAnim();
+			}
+			NotifyOwner( False );
+			Reloaded();
+			ResetShake();
+		}
+	}
+	GotoState( 'Idle' );
+}
+
+// A client's reload on its own machine, as the host's: with the hopper's when the host says (ClientHopper).
+simulated state SimReload
+{
+Begin:
+	if ( bWasInFiring )
+	{
+		if ( bHasMuzzleFlash )
+			EraseMuzzleFlashTexture();
+		FinishAnim();
+	}
+	bInProcess = False;
+	bFiring = False;
+	Owner.PlaySound( CockingSound, SLOT_None,,, 1024 );
+	PlayAnim( 'ReloadBegin' );
+	FinishAnim();
+	LoopAnim( 'Reload' );
+	Sleep( GetSimReloadTime() );
+	Owner.PlaySound( AltFireSound, SLOT_None,,, 1024 );
+	PlayAnim( 'ReloadEnd' );
+	FinishAnim();
+	if ( bSimHopper )
+	{
+		Owner.PlaySound( Sound'StormHopper', SLOT_None,,, 1024 );
+		if ( HasAnim( 'Hopper' ) )
+			PlayAnim( 'Hopper' );
+		else
+			Sleep( 1.0 );
+		FinishAnim();
+		Owner.PlaySound( CockingSound, SLOT_None,,, 1024 );
+		PlayAnim( 'ReloadBegin' );
+		FinishAnim();
+		LoopAnim( 'Reload' );
+		Sleep( 0.5 * GetSimReloadTime() );
+		Owner.PlaySound( AltFireSound, SLOT_None,,, 1024 );
+		PlayAnim( 'ReloadEnd' );
+		FinishAnim();
+	}
+	bSimHopper = false;
+	ServerDoneReloading();
+	GotoState( 'SimIdle' );
 }
 
 // Caseless rounds (the user's design, 2026-10-29): nothing thrown out. The stock 7.62 mm spawns a
@@ -341,5 +489,5 @@ defaultproperties
 	ItemName="Arm Cannon"
 	ItemArticle="the"
 	beltDescription="CANNON"
-	Description="Nine barrels of stacked caseless rounds fired electronically, carried behind the shoulder blade: drawn, it slides down the arm and spins over the hand. A brick magazine on its back takes standard 7.62 mm rounds. The ammo key switches its fire: full auto; Storm, at a minigun's rate; Spread, all nine barrels at once."
+	Description="Nine barrels of stacked caseless rounds fired electronically, carried behind the shoulder blade: drawn, it slides up the arm and rolls round it onto the forearm. A brick magazine on its back takes standard 7.62 mm rounds, and the gun holds a brick's worth more in its own hopper: run it dry and the reload strips one brick into the hopper and puts a fresh one on. The ammo key switches its fire: full auto; Storm, at a minigun's rate; Spread, all nine barrels at once."
 }

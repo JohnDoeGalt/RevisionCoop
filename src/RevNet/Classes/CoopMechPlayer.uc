@@ -35,8 +35,14 @@ var Inventory Scrapped[8];          // (host) scrapped canisters, deleted a mome
 var float ScrappedAt;               // belt still draws them for up to 0.25 s: REVNET_DEV)
 var localized string NoNanoText, BuiltInText, SalvageText, UpgradedText, InstalledText, ScrapText, RebootText;
 var bool bBigPack;                  // twice a normal player's inventory and ammo (the heavy Mech; not the Light Mech's)
+var bool bLogHits;                  // (tests) each hit logged as it lands: by whom, with what, the multiplier
 var travel byte MechSlots[60];      // (host) its grid: two pages of the normal one (Inventory, below)
 var travel byte InvPage;            // which page is on show (0, 1): for the screen's label
+var CoopDroneKey DroneKey;      // the FPV Drones key just pressed: a tap or a hold (ActivateAugmentation)
+var travel byte DroneGear;      // (host) the FPV drone's speed, kept for the next: 0 slow, 1 medium, 2 fast (CoopFPV.SetGear)
+var CoopFPV MyFPV;             // (its own machine) the FPV drone it flies, and that drone's gun-cam overlay
+var CoopFPVView FPVView;
+var float NextFPVLook;
 var transient bool bWideGrid;       // (FindInventorySlot) both pages searched
 
 replication
@@ -46,7 +52,7 @@ replication
 	reliable if ( Role==ROLE_Authority )
 		ClientOptics;
 	reliable if ( Role<ROLE_Authority )
-		ServerUpgradeModule, ServerScrapCanisters, ServerTurnPage;
+		ServerUpgradeModule, ServerScrapCanisters, ServerTurnPage, ServerFlyDrone, ServerDroneGear;
 }
 
 // ----------------------------------------------------------------------
@@ -127,10 +133,10 @@ simulated function MountParts()
 	if ( Parts[0]!=None )
 		return;
 	Parts[0] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettParts" );
-	Parts[1] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettCannon", class'CoopMechCannon' );
+	// The cannon: behind the collarbone, slid down and round the arm as it is drawn (as its own view, 0.7 s; away 0.5 s).
+	Parts[1] = class'CoopMechParts'.static.MountPath( Self, default.Mesh, "BarrettCannon", "BarrettCannonBack", class'CoopMechCannon', 4, 0.7, 0.5 );
 	Parts[2] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettBlade", class'CoopMechBlade' );
-	Parts[3] = class'CoopMechParts'.static.Mount( Self, default.Mesh, "BarrettCannonBack", class'CoopMechCannon', true );
-	Log( "RevNet: a Mech's parts on this machine (its role" @ int(Role) $ "):" @ (Parts[0]!=None) @ (Parts[1]!=None) @ (Parts[2]!=None) @ (Parts[3]!=None), 'RevNet' );
+	Log( "RevNet: a Mech's parts on this machine (its role" @ int(Role) $ "):" @ (Parts[0]!=None) @ (Parts[1]!=None) @ (Parts[2]!=None) @ "cannon steps" @ Parts[1].Ways, 'RevNet' );
 }
 
 function TravelPostAccept()
@@ -486,6 +492,8 @@ function RefreshModules()
 			W.HitDamage = CannonMod.LevelValues[CannonMod.ModuleLevel()];
 			W.ReloadCount = CannonMod.Magazine[CannonMod.ModuleLevel()];
 		}
+		if ( CoopMechCannon(W)!=None )
+			CoopMechCannon(W).SetBrick( W.ReloadCount );       // (as many again in its hopper)
 		// The rifle as a battle rifle (CoopGameInfo.RifleRework): level 1 hits as hard as a
 		// rifle round (the table's 5), the rest in step; it keeps its faster fire.
 		G = CoopGameInfo(Level.Game);
@@ -506,6 +514,12 @@ function RefreshModules()
 	{
 		MaxRegenPoint = EnergyMax * Gen.LevelValues[Gen.ModuleLevel()];
 		RegenRate = Gen.Rate[Gen.ModuleLevel()];
+	}
+	// Custom difficulty's recharge (CoopCustomDifficulty.Apply): the better of the two.
+	if ( bCustomDifficulty )
+	{
+		MaxRegenPoint = FMax( MaxRegenPoint, CDEnergyRechargePoint );
+		RegenRate = FMax( RegenRate, CDEnergyRechargeRate );
 	}
 }
 
@@ -623,6 +637,15 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation, Vector m
 	Mult = DamageMult( damageType );
 	if ( Mult<=0 )
 		return; // hydraulic legs, an immune circuit
+	// The arm blades out all the way, a guard (the user, 2026-10-30: "you're more likely to like be able to fend off
+	// attacks"): a melee hit (its weapon a hand-to-hand one: knives, batons, swords, claws and bites) does a quarter.
+	if ( CoopMechBlade(Weapon)!=None && CoopMechBlade(Weapon).Mode==1 && instigatedBy!=None
+		&& DeusExWeapon(instigatedBy.Weapon)!=None && DeusExWeapon(instigatedBy.Weapon).bHandToHand )
+		Mult *= CoopMechBlade(Weapon).GuardMult;
+	if ( bLogHits )         // (a test's: CoopTestCreatureGuard) each hit as it lands
+		Log( "RevNet: hit on the Mech:" @ Damage @ damageType @ "by" @ instigatedBy @ "weapon" @ instigatedBy.Weapon
+			@ "hand-to-hand" @ (DeusExWeapon(instigatedBy.Weapon)!=None && DeusExWeapon(instigatedBy.Weapon).bHandToHand)
+			@ "x" $ Mult, 'RevNet' );
 	if ( Damage>0 )
 		Damage = Max( 1, int( Damage * Mult + 0.5 ) );
 	momentum *= PushMult;
@@ -697,6 +720,8 @@ function CreateDrone()
 	local CoopMechAug M;
 	local vector Loc;
 
+	if ( !bSpyDroneActive || (aDrone!=None && !aDrone.bDeleteMe) )
+		return;                                 // (asked for by the player's machine: one at a time)
 	M = class'CoopMechAug'.static.Find( Self, class'CoopMechAugDrones' );
 	if ( M==None || !M.bIsActive )
 	{
@@ -709,10 +734,136 @@ function CreateDrone()
 	if ( aDrone!=None )
 	{
 		aDrone.Instigator = Self;
-		aDrone.Damage = M.LevelValues[0];
-		aDrone.blastRadius = CoopMechAugDrones(M).Blast;
-		Log( "RevNet:" @ PlayerReplicationInfo.PlayerName @ "FPV launched", 'RevNet' );
+		CoopFPV(aDrone).SetGear( DroneGear );
+		CoopMechAugDrones(M).Flown( CoopFPV(aDrone) );
+		Log( "RevNet:" @ PlayerReplicationInfo.PlayerName @ "FPV launched, lead" @ CoopFPV(aDrone).bLead, 'RevNet' );
 	}
+}
+
+// The FPV Drones key (CoopMechAugDrones, F7) on the player's own machine: tapped, the module as
+// its level says; held, a drone flown by hand at any level, at level 4 the swarm's lead
+// (CoopDroneKey decides). Flying, a press calls it back at once.
+exec function ActivateAugmentation( int num )
+{
+	local CoopMechAug M;
+
+	M = class'CoopMechAug'.static.Find( Self, class'CoopMechAugDrones' );
+	if ( num==class'CoopMechAugDrones'.default.Key - 3 && M!=None && M.bHasIt && !bSpyDroneActive && !RestrictInput() )
+	{
+		if ( DroneKey==None || DroneKey.bDeleteMe )
+			DroneKey = Spawn( class'CoopDroneKey', Self );
+		return;
+	}
+	Super.ActivateAugmentation( num );
+}
+
+function DroneTapped()
+{
+	Super.ActivateAugmentation( class'CoopMechAugDrones'.default.Key - 3 );
+}
+
+function DroneHeld()
+{
+	ServerFlyDrone();
+}
+
+// A drone flown by hand (the key held; or FlyDrone bound to a key of its own, "set input X FlyDrone").
+exec function FlyDrone()
+{
+	ServerFlyDrone();
+}
+
+function ServerFlyDrone()
+{
+	local CoopMechAug M;
+
+	M = class'CoopMechAug'.static.Find( Self, class'CoopMechAugDrones' );
+	if ( M!=None && M.bHasIt )
+		CoopMechAugDrones(M).Fly();
+}
+
+// On a client, the FPV drone's gun-cam overlay (CoopFPV.OpenView): the drone is a dumb proxy there (SpyDrone's
+// RemoteRole: none of its script runs, so it can't open the overlay itself, nor close it), so its pilot opens it once
+// the drone arrives and closes it once the drone is gone. Called each frame by CoopClient (a player's own Tick never
+// runs on its machine: the engine calls PlayerTick there, in each state).
+simulated function WatchFPV()
+{
+	local CoopFPV D;
+
+	if ( Level.NetMode!=NM_Client )
+		return;
+	if ( MyFPV!=None && (MyFPV.bDeleteMe || !bSpyDroneActive) )
+		MyFPV = None;
+	if ( FPVView!=None && (MyFPV==None || FPVView.Drone!=MyFPV) )
+	{
+		FPVView.Destroy();
+		FPVView = None;
+	}
+	if ( !bSpyDroneActive )
+		return;
+	if ( MyFPV==None && Level.TimeSeconds>=NextFPVLook )
+	{
+		NextFPVLook = Level.TimeSeconds + 0.2;
+		foreach AllActors( class'CoopFPV', D )
+			if ( D.Owner==Self && !D.bDeleteMe )
+				MyFPV = D;
+	}
+	if ( MyFPV!=None && FPVView==None )
+		FPVView = MyFPV.NewView();                  // (this player's only: CoopFPV.NewView)
+}
+
+// The reload key while flying a drone: its next speed (the user, 2026-10-30: "a button you press for the different
+// speed modes"); else a reload, as ever.
+exec function ReloadWeapon()
+{
+	if ( bSpyDroneActive )
+	{
+		ServerDroneGear();
+		return;
+	}
+	Super.ReloadWeapon();
+}
+
+// The drone's speed on a key of its own ("set input X DroneSpeed").
+exec function DroneSpeed()
+{
+	ServerDroneGear();
+}
+
+// The FPV drone's next speed, slow, medium, fast (100 mph, a real racer's), for the one in the air and the next.
+function ServerDroneGear()
+{
+	DroneGear = (DroneGear + 1) % 3;
+	if ( CoopFPV(aDrone)!=None )
+		CoopFPV(aDrone).SetGear( DroneGear );
+	ClientMessage( "FPV drone speed:" @ class'CoopFPV'.default.GearNames[DroneGear] );
+	PlaySound( Sound'StormMode', SLOT_None,,, 512 );
+}
+
+// The fire button while flying (ParseLeftClick): from the swarm's lead, the next of the swarm
+// (CoopMechAugDrones.FromLead); else the drone goes off.
+function DroneExplode()
+{
+	local CoopMechAug M;
+
+	M = class'CoopMechAug'.static.Find( Self, class'CoopMechAugDrones' );
+	if ( M!=None && CoopMechAugDrones(M).FromLead() )
+		return;
+	Super.DroneExplode();
+}
+
+// The swarm's lead goes as its pilot's keys say (CoopFPV.Steer: on the host, the player's machine's
+// call; the host's own for a client's has no keys in it); the racer flies the way the view points.
+simulated function MoveDrone( float DeltaTime, vector loc )
+{
+	if ( CoopFPV(aDrone)!=None && CoopFPV(aDrone).bLead )
+	{
+		if ( VSize(loc)>0 )
+			CoopFPV(aDrone).Steer( loc );
+		return;
+	}
+	if ( aDrone!=None )      // (none yet: asked for, not made)
+		Super.MoveDrone( DeltaTime, loc );
 }
 
 // Hydraulic Legs 2: a hard landing throws back and hurts those around.
@@ -830,6 +981,7 @@ simulated function ClientTest( string Command )
 	local DeusExWeapon W;
 	local CoopSoundLoop Loop;
 	local ShellCasing Casing;
+	local CoopFPV Drone;
 	local string S;
 	local int i;
 
@@ -861,6 +1013,42 @@ simulated function ClientTest( string Command )
 		foreach AllActors( class'CoopSoundLoop', Loop )
 			S = S @ Loop.AmbientSound @ "on" @ Loop.Base;
 		ServerTestReply( "client hears loops:" $ S );
+		return;
+	}
+	if ( Command=="bladeview" )
+	{
+		W = DeusExWeapon(FindInventoryType( class'CoopMechBlade' ));
+		if ( W!=None )
+			ServerTestReply( "client's blades: mode" @ CoopMechBlade(W).Mode @ "view" @ W.Mesh @ "anim" @ W.AnimSequence );
+		return;
+	}
+	if ( Command=="cannonanim" )
+	{
+		W = DeusExWeapon(FindInventoryType( class'CoopMechCannon' ));
+		if ( W!=None )
+			ServerTestReply( "client's cannon: state" @ W.GetStateName() @ "anim" @ W.AnimSequence @ "frame" @ W.AnimFrame @ "hopper shown" @ CoopMechCannon(W).bSimHopper );
+		return;
+	}
+	if ( Command=="dronegear" )        // the drone's speed as this machine has it (its overlay's GEAR) and its buzz's pitch
+	{
+		foreach AllActors( class'CoopFPV', Drone )
+			if ( Drone.Owner==Self )
+			{
+				S = S @ Drone.Gear @ "pitch" @ Drone.SoundPitch @ "overlay" @ (Drone.View!=None || (FPVView!=None && FPVView.Drone==Drone)) @ "| mine" @ MyFPV @ FPVView
+					@ "flying" @ bSpyDroneActive @ "netmode" @ Level.NetMode @ "role" @ Drone.Role;
+			}
+		ServerTestReply( "client's drone gear:" $ S );
+		return;
+	}
+	if ( Command=="augkeyhold" )       // the FPV Drones key down and held (its binding holds bExtra3 down with it)
+	{
+		bExtra3 = 1;
+		ActivateAugmentation( class'CoopMechAugDrones'.default.Key - 3 );
+		return;
+	}
+	if ( Command=="augkeyup" )
+	{
+		bExtra3 = 0;
 		return;
 	}
 	if ( Left( Command, 7 )=="augkey " && Len( Command )==8 && Mid( Command, 7 )>="0" && Mid( Command, 7 )<="9" )
@@ -1017,6 +1205,7 @@ defaultproperties
 	Mass=270
 	Buoyancy=279
 	MechRaise=2.96
+	DroneGear=1
 	Modules(0)=Class'CoopMechAugBlades'
 	Modules(1)=Class'CoopMechAugCannon'
 	Modules(2)=Class'CoopMechAugBurst'

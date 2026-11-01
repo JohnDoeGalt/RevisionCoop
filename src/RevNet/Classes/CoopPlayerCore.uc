@@ -36,6 +36,10 @@ var int HitRegion;             // ... and the body parts before it, for CoopWorl
 var int HitBefore[6];          // head, torso, left arm, right arm, left leg, right leg
 var Augmentation FoundAug;     // (CoopRules.FirstAug: HR's manager's FirstAug, read by name)
 var bool bRifleRework;         // the host's RifleRework is on: the ammo key gives the rifle select fire
+var int EnergyTicks;            // (CoopTestCustomDiff) MaintainEnergy calls so far
+var float EnergyTime;           // and the time they were given
+var float HostUpkeepTime;       // (MultiplayerTick) the host's own player's energy upkeep time so far
+var string CustomParts;         // (ClientCustomDifficulty) the host's values, as they come
 var localized string SemiAutoText, FullAutoText;
 
 replication
@@ -43,9 +47,9 @@ replication
 	reliable if ( Role==ROLE_Authority )
 		bDowned;
 	reliable if ( Role==ROLE_Authority )
-		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast;
+		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast, ClientCustomDifficulty;
 	reliable if ( Role<ROLE_Authority )
-		ServerAnswerTravel, ServerWeaponValues, ServerLook, ServerSelectFire, ServerCannonMode;
+		ServerAnswerTravel, ServerWeaponValues, ServerLook, ServerSelectFire, ServerCannonMode, ServerBladeMode;
 }
 
 // ----------------------------------------------------------------------
@@ -205,10 +209,28 @@ simulated function ClientRifleRework( int Damage, float ShotTime, float Recoil )
 	class'CoopRules'.static.SetRifle( Self, Damage, ShotTime, Recoil );
 }
 
+// The host's custom difficulty on this player's own machine (CoopCustomDifficulty).
+// (In parts: a replicated string that long would be dropped.)
+simulated function ClientCustomDifficulty( string Part, bool bFirst, bool bLast )
+{
+	if ( Level.NetMode!=NM_Client )
+		return;
+	if ( bFirst )
+		CustomParts = "";
+	if ( Len(CustomParts) + Len(Part) <= 2000 )      // (31 values are ~800 characters)
+		CustomParts = CustomParts $ Part;
+	if ( !bLast )
+		return;
+	class'CoopCustomDifficulty'.static.Begin( CustomParts );
+	class'CoopCustomDifficulty'.static.Apply( Self );
+}
+
 exec function SwitchAmmo()
 {
 	if ( CoopMechCannon(inHand)!=None )
 		ServerCannonMode();                         // the Arm Cannon's fire modes
+	else if ( CoopMechBlade(inHand)!=None )
+		ServerBladeMode();                          // the Arm Blades' two modes
 	else if ( bRifleRework && inHand!=None && inHand.IsA('WeaponAssaultGun') )
 		ServerSelectFire();
 	else
@@ -219,6 +241,12 @@ function ServerCannonMode()
 {
 	if ( CoopMechCannon(inHand)!=None )
 		CoopMechCannon(inHand).CycleMode();
+}
+
+function ServerBladeMode()
+{
+	if ( CoopMechBlade(inHand)!=None )
+		CoopMechBlade(inHand).CycleMode();
 }
 
 function ServerSelectFire()
@@ -464,6 +492,82 @@ function bool SetBasedPawnSize( float NewRadius, float NewHeight )
 	return Super.SetBasedPawnSize( NewRadius, NewHeight );
 }
 
+// ----------------------------------------------------------------------
+// The engine's and DeusEx's calls a player's game makes on the host, checked
+// (the security sweep of 2026-10-31): only the host may travel or restart the
+// game (SwitchLevel to a URL with ?AdminPassword= made a joiner admin: any console
+// command on the host), stay on the team, one drone at a time, only its own things.
+// ----------------------------------------------------------------------
+
+exec function SwitchLevel( string URL )
+{
+	if ( NetConnection(Player)==None )
+		Super.SwitchLevel( URL );
+}
+
+exec function SwitchCoopLevel( string URL )
+{
+	if ( NetConnection(Player)==None )
+		Super.SwitchCoopLevel( URL );
+}
+
+function ServerReStartGame()
+{
+	if ( NetConnection(Player)==None )
+		Super.ServerReStartGame();
+}
+
+function ChangeTeam( int N )
+{
+	if ( NetConnection(Player)==None )
+		Super.ChangeTeam( N );
+}
+
+function CreateDrone()
+{
+	if ( !bSpyDroneActive || (aDrone!=None && !aDrone.bDeleteMe) )
+		return;
+	Super.CreateDrone();
+}
+
+exec function bool DropItem( optional Inventory inv, optional bool bDrop )
+{
+	if ( inv!=None && inv.Owner!=Self )
+		return false;
+	return Super.DropItem( inv, bDrop );
+}
+
+exec function PutInHand( optional Inventory inv )
+{
+	if ( inv!=None && inv.Owner!=Self )
+		return;
+	Super.PutInHand( inv );
+}
+
+function SetInHand( Inventory newInHand )
+{
+	if ( newInHand!=None && newInHand.Owner!=Self )
+		return;
+	Super.SetInHand( newInHand );
+}
+
+// The host's own player (a listen server's): its player tick runs single-player's
+// RefreshSystems (the HUD's refresh) and MultiplayerTick (energy, shield, burn, poison)
+// on one timer, LastRefreshTime, each adding the frame and starting it again at 0.25 s,
+// so the host's energy was kept up for more or less time than passed (measured: 88-133%,
+// a client's: 100%). Its own time here, put back before each.
+function MultiplayerTick( float DeltaTime )
+{
+	if ( Level.NetMode!=NM_ListenServer || Viewport(Player)==None )
+	{
+		Super.MultiplayerTick( DeltaTime );
+		return;
+	}
+	lastRefreshTime = HostUpkeepTime;
+	Super.MultiplayerTick( DeltaTime );
+	HostUpkeepTime = lastRefreshTime;
+}
+
 // The Power Recirculator (AugPower): deathmatch's rule (AugmentationManager.CalcEnergyUse)
 // switches it on whenever energy is used, and then its own drain keeps it on. Here that
 // switch goes nowhere (a hotkey out of range, for this call only), and the mode's
@@ -476,6 +580,8 @@ function MaintainEnergy( float deltaTime )
 	local int Key;
 	local string HighDrain;
 
+	EnergyTicks++;
+	EnergyTime += deltaTime;
 	if ( AugmentationSystem!=None && Level.NetMode!=NM_Standalone )
 		for ( A=class'CoopRules'.static.FirstAug( Self ); A!=None; A=A.next )
 		{

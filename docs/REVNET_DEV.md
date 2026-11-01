@@ -262,6 +262,13 @@ A game that dies without "Critical" lines crashed hard: the Windows Application 
 (Id 1000) has it. Log results as `RevNetTest:` lines; a client-side check logs on the client
 (`Level.NetMode==NM_Client`) and shows in the client's log.
 
+**Demo videos** (`tools/shot_take.py` films a show, `tools/demo_video.py` cuts it): pace the *show* for its
+captions, never freeze the picture under them (the user, 2026-10-30: "make longer videos... the transitions
+between different things timed for the text"). Each step lasts as long as its caption takes to read (1.2 s and
+0.3 s a word, at least 2.5 s; `CoopTestBladeShow.Beat`) or its action, whichever is longer, with the idles playing
+live in between; captions are written for a viewer, plainly. `demo_video.py` prints `SHORT:` for a caption up less
+than that: give that step longer in the show and film again.
+
 Reference sources (read-only, not in the repo): `ref/` — `DeusEx/` (Revision's DeusEx
 package), `Revision/`, `RevisionMission/`, `sz/Rev/Engine/`, `export/<pkg>/` (with
 defaults), `HX/` (another co-op mod: ideas only, don't copy). RF package (no source):

@@ -40,6 +40,7 @@ function Run( int t )
 			return;
 		}
 		// The client behind the host, out of the picture; the host looking a little down the room.
+		PhotoStage();
 		R = Host.ViewRotation;
 		R.Pitch = 64300;
 		Host.ViewRotation = R;
@@ -49,6 +50,7 @@ function Run( int t )
 		R.Pitch = 0;
 		Remote.SetLocation( Host.Location - vector(R) * 160 );
 		Host.PutInHand( None );
+		DeusExRootWindow(Host.rootWindow).hud.Hide();      // (the picture clean, as MechLook's)
 		Mark( "rolling" );
 		NextAt = Level.TimeSeconds + 1.5;
 		NextShot = Level.TimeSeconds;

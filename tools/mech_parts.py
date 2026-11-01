@@ -400,8 +400,13 @@ def main():
         t, b = blade_view.build(cls, out)
         blade_tex += t
         blade_meshes += b
+    for cls in ("Mech", "Jensen"):          # the blades' other mode: out all the way (CoopMechBlade.Mode 1, a guard)
+        blade_meshes += blade_view.build(cls, out, b=False, suffix="A")[1]
     for f, pose in previews:
         mech_art.write_obj(os.path.join(out, "body_%s.obj" % pose), m, pkg.frames(m)[f])
+    # (The FPV drones' own model: tools/mech_drone.py's improvised quad, turned down by the user 2026-10-30, "way too
+    # modern... this is a retro future cyberpunk setting": left out until its new design; the drones keep the Spy
+    # Drone's look meanwhile, CoopFPV.Dress.)
     write_uc(os.path.join(out, "Classes", "MechArt.uc"), m, list(meshes), seqs, blade_tex, blade_meshes)
     os.makedirs(os.path.join(out, "Textures"), exist_ok=True)
     bake_atlas([p for p in parts if p.mesh == "BarrettParts"] + [p for p in parts if p.mesh != "BarrettParts"],
@@ -422,11 +427,11 @@ def storm_parts(F, L, T, m, texdir):
     for s in range(3):
         im = mech_storm.bake(p, s, os.path.join(texdir, "StormGun%d.png" % (s + 1)))
         mech_bake.save_pcx(np.asarray(im, float), os.path.join(texdir, "StormGun%d.pcx" % (s + 1)))
-    detail = ("face", "bore", "cap", "nose", "barrel")
+    detail = ("face", "bore", "cap", "nose", "barrel")   # left off the draw's steps (moving, a moment each)
     out = []
 
-    def placed(name, mesh, groups, o, ax, up, anchor, shape=None):
-        V, G, tris, skins = mech_storm.mesh_of(p, groups, detail)
+    def placed(name, mesh, groups, o, ax, up, anchor, shape=None, drop=()):
+        V, G, tris, skins = mech_storm.mesh_of(p, groups, drop)
         if shape:
             V = shape(V, G)
         left = -np.cross(up, ax)                    # the gun's left, as the game shows it
@@ -451,31 +456,66 @@ def storm_parts(F, L, T, m, texdir):
     CLIP = 1.2
     C, B = mech_storm.CASS, mech_storm.BRICK
 
-    def level(V, G):
+    def level(V, G, turn=rise):
         g = np.isin(np.asarray(G), ("gun", "brick"))
         V = V.copy()
-        V[g] = mech_storm.spin(V[g], rise)
+        V[g] = mech_storm.spin(V[g], turn)
+        V[g, 0] -= mech_storm.MOUNT[0]  # (3 cm back off the wrist joint, as in the Mech's own view)
         sink = []                       # how far the arm's top is above the underside, at points along it
         for x0, x1, zb, hw in ((C["x0"], C["x1"], C["z"] - C["h"], C["h"]), (B["x0"], B["x1"], B["z0"], B["y"])):
             for x in np.linspace(x0, x1, 17):
-                P = mech_storm.spin(np.array([[x, 0.0, zb]]), rise)[0]
+                P = mech_storm.spin(np.array([[x, 0.0, zb]]), turn)[0] - np.array([mech_storm.MOUNT[0], 0.0, 0.0])
                 below = arm[(np.abs(arm[:, 0] - P[0]) < 1.0) & (np.abs(arm[:, 1]) < hw + 0.3)]
                 if len(below):
                     sink.append(below[:, 2].max() - P[2])
         dz = max(sink) - CLIP
         V[g, 2] += dz
         print("cannon: turned down %.1f degrees to shoot level, raised %+.2f: into the arm %.2f at most, "
-              "%.2f over the wrist" % (rise, dz, CLIP, -(sink[0] - dz)))
+              "%.2f over the wrist" % (turn, dz, CLIP, -(sink[0] - dz)))
         return V
-    placed("cannon", "BarrettCannon", mech_storm.THIRD, e, ax, up, dict(group="rarm", zmin=-8, zmax=8), level)
-    # Behind the right shoulder blade: muzzle down, its underside (the yoke's side) on the back.
-    x, z = 4.8, 15.0
-    back = 40 - mech_art.ray(T, (x, 40, z), (0, -1, 0))
-    centre = np.array([x, back, z])
-    down, out_ = np.array([0.0, 0.0, -1.0]), np.array([0.0, 1.0, 0.0])
+    forearm = dict(group="rarm", zmin=-8, zmax=8)
+    # The very gun the Mech sees, its every detail (the user, 2026-10-30: "the same exact skin... the same model").
+    placed("cannon", "BarrettCannon", mech_storm.THIRD, e, ax, up, forearm, level)
+    # Behind the collarbone, high on the right shoulder blade (the user, 2026-10-30: "on the scapula... slightly to
+    # the left of behind the shoulder", then "even higher... right behind the collarbone area", as it slides down the
+    # arm when drawn, never up first): muzzle down, its top at the shoulder's top, a little in from the shoulder joint
+    # (about 11 out) toward the spine; leant back with the back (it leans out going up), its underside on the back
+    # where the back stands out most along it.
+    x, zc, half = 8.5, 22.0, 6.0
+    back = lambda z: 40 - (mech_art.ray(T, (x, 40, z), (0, -1, 0)) or 99)
+    y0, y1 = back(zc - half), back(zc + 2.0)              # (its top end clears the shoulder: the back's lean below it)
+    down = norm(np.array([0.0, y0 - y1, -(half + 2.0)]))
+    out_ = np.array([0.0, -down[2], down[1]])
+    line = lambda z: y0 + (z - (zc - half)) * (y1 - y0) / (half + 2.0)
+    lift = max(back(z) - line(z) for z in np.linspace(zc - half, zc + half, 13))
+    centre = np.array([x, line(zc) + lift / out_[1], zc])
     gx, gz = (mech_storm.BRICK["x0"] + mech_storm.CASS["x1"]) / 2, mech_storm.CASS["z"] - mech_storm.CASS["h"]
     placed("cannon_back", "BarrettCannonBack", mech_storm.BACK, centre - gx * down - gz * out_, down, out_,
            dict(group="torso", zmin=8, zmax=24))
+    # The draw for others' eyes (the user, 2026-10-30: "animate it when it gets equipped on the character model...
+    # slides down and over"), in steps (CoopMechParts.Path) as its own view draws it (mech_storm.draw): off the
+    # shoulder blade onto the back of the shoulder, down the back of the upper arm, under the forearm (upside down,
+    # by the elbow), round the outside of the forearm, onto its top. The saddle stays on the forearm.
+    S = R[[i for i in L["rarm"] if R[i, 2] > 17]].mean(0)    # the shoulder
+    dn = norm(e - S)                                          # down the upper arm
+    behind = np.array([0.35, 1.0, 0.0])
+    behind = norm(behind - (behind @ dn) * dn)                # the back of it (a little out), its top that way
+    upper = dict(group="rarm", zmin=9, zmax=24)
+    for k, f in ((1, 0.15), (2, 0.55)):
+        mid = S + f * (e - S) + 2.3 * behind
+        placed("cannon%d" % k, "BarrettCannon%d" % k, mech_storm.BACK, mid - gx * dn - gz * behind, dn, behind, upper,
+               drop=detail)
+
+    def stepped(roll, slide):
+        def shape(V, G):
+            V = level(V, G, 0.0)            # (along the forearm, as its own view draws it)
+            g = np.isin(np.asarray(G), ("gun", "brick"))
+            V[g] = mech_storm.rolled(V[g], roll)
+            V[g, 0] += slide
+            return V
+        return shape
+    placed("cannon3", "BarrettCannon3", mech_storm.THIRD, e, ax, up, forearm, stepped(180, -6.0), drop=detail)
+    placed("cannon4", "BarrettCannon4", mech_storm.THIRD, e, ax, up, forearm, stepped(90, -1.5), drop=detail)
     return out, mech_storm.view_mesh(p)
 
 
@@ -494,13 +534,14 @@ def forearm_frame(F, L):
     return e, w, ax, norm(up - (up @ ax) * ax)
 
 
-def write_d3d(path, nverts, tris, skins=None):
+def write_d3d(path, nverts, tris, skins=None, types=None):
     with open(path, "wb") as f:
         f.write(struct.pack("<HHHH3I4I12s", len(tris), nverts, 0, 0, 0, 0, 0, 0, 0, 0, 0, b"\0" * 12))
         for k, (a, b, c, ua, ub, uc) in enumerate(tris):
-            # Winding as built (outward by the right-hand rule): measured in the game. The last but one
-            # byte: the triangle's skin (MESHMAP SETTEXTURE NUM).
-            f.write(struct.pack("<3HBB6BBB", a, b, c, 0, 0, ua[0], ua[1], ub[0], ub[1], uc[0], uc[1],
+            # Winding as built (outward by the right-hand rule): measured in the game. The byte after the
+            # corners: the triangle's type (0 normal, 2 translucent, both sides); the last but one: its skin
+            # (MESHMAP SETTEXTURE NUM).
+            f.write(struct.pack("<3HBB6BBB", a, b, c, types[k] if types else 0, 0, ua[0], ua[1], ub[0], ub[1], uc[0], uc[1],
                                 skins[k] if skins else 0, 0))
 
 

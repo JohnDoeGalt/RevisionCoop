@@ -18,6 +18,9 @@ Year Edition and Deus Ex: Revision (free for Deus Ex owners).
 - **Single-player rules in a listen server.** Deus Ex switches to deathmatch rules whenever
   the game is networked; RevNet keeps the single-player behaviour feature by feature (see
   `docs/netmode_audit.json` and `docs/REVNET_DEV.md`).
+- **The host's settings are everyone's:** mode, difficulty (Revision's Custom Difficulty too,
+  set on its own pages before the game starts: `docs/CUSTOM_DIFFICULTY.md`), friendly fire,
+  death and save rules, the rifle, and the mode's own switches (BioMod's options).
 - **Saves** are co-op checkpoints (`CoopSave`) with map memory (`CoopMapMemory`): flags,
   goals, notes, inventory per player, and the state of every map visited.
 - **Three classes.** Each player picks one in the launcher: JC's kind (nano-augmented), the
@@ -59,7 +62,13 @@ one PC and runs the scenario `src/RevNet/Classes/CoopTest<Name>.uc` (results are
 
 ## Security
 
-- The relay only lets members of the host's friends-only Steam lobby reach the game.
+- The relay only lets members of the host's friends-only Steam lobby reach the game, and the
+  host's game takes a per-session password that only lobby members can read; no LAN beacon or
+  server query.
+- A joiner's game can't travel or restart the host's game, become admin, leave the team, take a
+  teammate's name (and so their saved things), touch another player's items, or spawn more than
+  its own drone; names are cleaned; what the host sends a joiner (custom difficulty, music) is
+  checked (`CoopTestSecurity`).
 - The host's game is the authority over everyone's game: play with people you trust, as
   with any listen server.
 

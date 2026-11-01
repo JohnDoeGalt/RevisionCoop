@@ -169,12 +169,30 @@ function ServerAskMusic()
 			M.MusicInfo.ConversationIntroOggFile, M.MusicInfo.ConversationOggFile, M.MusicInfo.OutroOggFile, M.MusicInfo.DeathOggFile );
 }
 
+// A music file's or track's plain name (e.g. 01_UNATCOIsland_Ambient.ogg): letters, digits, _ . -,
+// no folders, 64 at most.
+static function bool MusicName( string S )
+{
+	local int i;
+
+	if ( Len(S)>64 || InStr( S, ".." )>=0 )
+		return false;
+	for ( i=0; i<Len(S); i++ )
+		if ( InStr( "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-", Mid( S, i, 1 ) )<0 )
+			return false;
+	return true;
+}
+
 simulated function ClientMusic( string Track, string AmbientIntro, string Ambient, string CombatIntro, string Combat,
 	string ConIntro, string Con, string Outro, string Death )
 {
 	local DXOggMusicManager M;
 
 	if ( DeusExRootWindow(rootWindow)==None || flagBase==None )
+		return;
+	// (File names from the host, to DXOgg's decoder: plain names only.)
+	if ( !MusicName( AmbientIntro ) || !MusicName( Ambient ) || !MusicName( CombatIntro ) || !MusicName( Combat ) || !MusicName( ConIntro )
+		|| !MusicName( Con ) || !MusicName( Outro ) || !MusicName( Death ) || !MusicName( Track ) )
 		return;
 	MusicAsks = 99;
 	flagBase.SetName( 'MusicPackageTrack', DeusExRootWindow(rootWindow).StringToName( Track ) );
@@ -382,5 +400,7 @@ simulated function Inventory Carried( string ClassName )
 
 function ServerUIReply( string Reply )
 {
+	if ( CoopGameInfo(Level.Game)==None || CoopGameInfo(Level.Game).Test==None )
+		return;                                 // (only while a test runs)
 	Log( "RevNetTest: reply from" @ PlayerReplicationInfo.PlayerName $ ":" @ Reply, 'RevNet' );
 }

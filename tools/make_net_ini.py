@@ -84,6 +84,13 @@ def build(rev_ini, mode):
         if section == 'IpDrv.TcpNetDriver' and s.startswith('NetServerMaxTickRate='):
             out.append('NetServerMaxTickRate=35')
             continue
+        # No LAN beacon, server query or master server uplink: a co-op game is only reached
+        # through the launcher's friends-only Steam lobby (security sweep 2026-10-31).
+        if s.startswith(('ServerActors=IpDrv.UdpBeacon', 'ServerActors=IpServer.')):
+            continue
+        if s.startswith('DoBeacon='):
+            out.append('DoBeacon=False')
+            continue
         # The menu map's game: it opens the launcher's host/join URL (CoopGameInfo, CoopLaunch).
         if section == 'Engine.Engine' and s.startswith(('DefaultGame=', 'DefaultServerGame=')):
             out.append(s.split('=')[0] + f'={OURS}.CoopGameInfo')

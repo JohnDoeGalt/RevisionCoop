@@ -52,6 +52,7 @@ var config int NumPlayers;
 var config string PlayerName[16];
 var config int NumLines;
 var config string Line[1200];
+var config string CustomDifficulty; // the game's custom difficulty (CoopCustomDifficulty), "": none
 
 // The save of a gameplay mode (CoopGameInfo.Mode).
 static function CoopSave Get( string Mode )
@@ -180,6 +181,7 @@ function SaveWorld( DeusExPlayer Host )
 
 	FB = Host.flagBase;
 	SavedMap = string(Host.Level.Outer.Name);
+	CustomDifficulty = class'CoopCustomDifficulty'.static.Saved();
 
 	for ( i=0; i<MaxFlags; i++ )
 		Flag[i] = "";
@@ -370,7 +372,7 @@ function int FindPlayer( string Name )
 	local int i;
 
 	for ( i=0; i<NumPlayers; i++ )
-		if ( PlayerName[i]~=Name )
+		if ( PlayerName[i]~=Escape( Name ) )   // (kept escaped, as every text here)
 			return i;
 	return -1;
 }
@@ -433,7 +435,7 @@ function SavePlayer( DeusExPlayer P )
 	if ( NumPlayers>=MaxPlayers )
 		return;
 	Idx = NumPlayers++;
-	PlayerName[Idx] = Name;
+	PlayerName[Idx] = Escape( Name );
 
 	AddLine( Idx, "C," $ P.Health $ "," $ P.HealthHead $ "," $ P.HealthTorso $ "," $ P.HealthLegLeft $ "," $ P.HealthLegRight
 		$ "," $ P.HealthArmLeft $ "," $ P.HealthArmRight $ "," $ P.Energy $ "," $ P.EnergyMax $ "," $ P.Credits

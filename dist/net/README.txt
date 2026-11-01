@@ -22,13 +22,20 @@ Install
 Play
   Open "Revision Co-op" on the desktop. Its window signs in to Steam by itself.
   You play as
-    Each player picks their own: a nano-augmented agent (JC's kind) or a Mech (see
-    "The Mech" below). Your choice is remembered.
+    Each player picks their own: a nano-augmented agent (JC's kind), a Mech or a Light
+    Mech (see "The Mech" and "The Light Mech" below). Your choice is remembered.
   Host
     Choose the mode (which gameplay mode everyone plays), difficulty, friendly fire,
     what happens when a player dies, saves, and the assault rifle; then click "Host a
     new game", or "Continue saved game" to pick up where your team left off. Your
     choices are remembered.
+    Difficulty "Custom (set in game)": before the game starts you get Revision's own
+    Custom Difficulty pages (energy, recharge, healing, damage, accuracy, caps on credits
+    and skill points, the AI, cameras, turrets, how many items and enemies), filled with
+    your last choice; everyone plays with them, and a continued game keeps them.
+    "Options..." beside Mode: the mode's own switches (BioMod has eight: the skill system,
+    aug tracking, scope reticles and Shifter's extras; Shifter and Human Revolution the
+    skill system), for everyone.
     Assault rifle: "7.62 battle rifle, select fire" (the default) makes every assault
     rifle, yours and the enemies', hit harder than the 10mm pistol, fire a little
     slower on full auto, and kick harder; its ammo key (') switches full auto,
@@ -58,13 +65,15 @@ In the game
 The Mech
   A mechanically augmented agent: the older, cruder kind of augmentation that JC's
   nano-augmentation is replacing. A tank, where JC is the ghost.
-  - Its look: a big augmented man in a black combat suit and chrome limbs, with shoulder
-    plates, a vest, a steel jaw and armoured forearms. The arm cannon comes out over his
-    hand when he draws it, the blades past his fists when he draws them. The installer
-    builds this armour from your own copy of the game.
+  - Its look: a big augmented soldier in a segmented black nanosuit with gunmetal armour,
+    blue light strips, an armoured collar and a tactical vest. The arm cannon rides behind
+    his shoulder and swings down round his arm when he draws it; the blades come out of
+    his forearms. The installer builds this armour from your own copy of the game.
   - Built into the body: Arm Blades (belt 1) and an Arm Cannon (belt 2), an automatic gun
     fed with 7.62 mm rounds (the assault rifle's ammo; Heavy Weapons skill). They can't be
-    dropped or lost.
+    dropped or lost. The ammo key (') switches the cannon's fire modes (full auto, Storm
+    at a minigun's rate, and more) and the blades' modes (hidden, fired by your punches
+    and twice as hard; or out all the way, a guard that takes most of a melee hit).
   - Armour plating: bullets, blasts, fire and blades do 30% less; prods and batons half;
     no damage from falls; hard to knock back.
   - Heavier: a little slower, jumps lower, and loud: its footsteps carry further.
@@ -77,13 +86,26 @@ The Mech
                grenades coming in, and at enemies that come close; uses the assault
                rifle's 20 mm rounds), FPV Drones (F7: explosive drones; first one you
                fly yourself, then ones that fly to the crosshair, lock on, and at the
-               top a swarm of four sent one per press).
+               top a swarm of four sent one per press; hold F7 to fly one by hand, the
+               swarm's lead at the top; the reload key while flying steps slow, medium
+               and fast, up to 100 mph).
       Chassis: Dermal Plating, Hydraulic Legs (landings that knock enemies back, higher
                jumps, full speed), Bulwark (F6: a shell that takes most of the damage),
                Servo Arms (lifts heavy things, breaks doors).
       Systems: Targeting Optics (F4: threat display, a steadier cannon), Internal
                Generator (energy refills by itself), Failsafe Reboot (gets up by itself
                when downed), EMP Hardening.
+
+The Light Mech
+  Adam Jensen's augmentations from Mankind Divided: fully mechanical like the Mech, but
+  light, quick and quiet, in Jensen's coat and prosthetic arms.
+  - A little faster than JC, jumps higher with its legs upgraded; takes normal damage.
+  - Built in: Jensen's arm blades (belt 1), with the Mech's two modes. No arm cannon.
+  - Fourteen modules on its augmentations screen, bought with Praxis (one for every 250
+    skill points, two for each scrapped nano canister; you start with three): Smart Vision,
+    Remote Hacking, Focus, Glass-Shield cloaking, Rhino armour, Titan, Sentinel RX,
+    Typhoon, Icarus landing and dash, Tesla, Nanoblade, P.E.P.S., Cybernetic Arms and Legs.
+    F3-F12 for the active ones.
 
 Death (host setting)
   - Default: a player who would die goes down instead. A teammate revives them by using
@@ -113,6 +135,8 @@ Known limits
     loads into the new map: that is it following the host, which is still loading.
   - Friends hear each map's normal music, not the combat or conversation music.
   - Steam achievements and the game's statistics count for the host only.
+  - BioMod: a friend's own game shows the reticle on scoped weapons and has no right-click
+    tracking dart, whatever the host's options say (BioMod decides those on each machine).
   - Tested with up to three players.
 
 Troubleshooting

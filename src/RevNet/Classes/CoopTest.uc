@@ -25,6 +25,9 @@ var DeusExWeapon DeadWeapon;
 var string DeadName;
 var DeusExCarcass Body;
 var int ExitAt;         // Done(): when the games quit
+var CoopLookDummy PhotoLamp;    // PhotoStage's lamp over the host's shoulder
+var vector FoyerAt;     // PhotoStage: where the host stands in 01_NYC_UNATCOHQ's foyer (the front lobby, its desks and flags: the best lit by CoopTestScout), and its way
+var int FoyerYaw;
 
 function Start( string S )
 {
@@ -83,6 +86,9 @@ function Timer()
 // A scenario class of its own (CoopTest<Name>, ?CoopTest=<Name>): t seconds since the
 // first client joined (Remote, the host's player is Host; Done() ends it).
 function Run( int t );
+
+// Just before Revision's map pass (CoopGameInfo.ApplyGamemode): what it will change.
+function BeforeMapPass();
 
 // Single-player world rules with a client in play: cameras, turrets, grenades,
 // dropped weapons, bodies.
@@ -332,6 +338,49 @@ function Done()
 	ExitAt = Seconds + 5;
 }
 
+// Demo pictures somewhere well lit (the user: "do the demo images in a better lit area... the unatco foyer
+// area"): on 01_NYC_UNATCOHQ the host into the foyer, looking across it, the map's people near it gone (out
+// of the picture); anywhere, a hidden lamp over its shoulder on its arms and what they hold (Tick keeps it there).
+function PhotoStage()
+{
+	local ScriptedPawn SP;
+	local rotator R;
+
+	R = Host.ViewRotation;
+	if ( string(Level.Outer.Name)~="01_NYC_UNATCOHQ" && Host.SetLocation( FoyerAt ) )
+	{
+		R.Yaw = FoyerYaw;
+		Host.SetRotation( R );
+		Host.ViewRotation = R;
+		Host.ClientSetLocation( Host.Location, R );
+		foreach AllActors( class'ScriptedPawn', SP )
+			if ( Animal(SP)==None && VSize( SP.Location - FoyerAt )<1200 )
+				SP.Destroy();
+	}
+	PhotoLamp = Spawn( class'CoopLookDummy',,, Host.Location );
+	PhotoLamp.DrawType = DT_None;
+	PhotoLamp.LightType = LT_Steady;
+	PhotoLamp.LightEffect = LE_None;
+	PhotoLamp.LightBrightness = 150;
+	PhotoLamp.LightSaturation = 255;      // (white)
+	PhotoLamp.LightRadius = 12;
+	PhotoLamp.bDynamicLight = true;
+	Log( "RevNetTest: photo stage at" @ Host.Location @ "zone \"" $ Host.Region.Zone.ZoneName $ "\" light" @ AIGetLightLevel( Host.Location ), 'RevNet' );
+}
+
+function Tick( float DeltaTime )
+{
+	local rotator R;
+
+	if ( PhotoLamp!=None && Host!=None )
+	{
+		// Up over its shoulder and a little ahead: the arms lit from above, the room's light still the key.
+		R = Host.ViewRotation;
+		R.Pitch = 0;
+		PhotoLamp.SetLocation( Host.Location + vect(0,0,1) * (Host.BaseEyeHeight + 40) + vector(R) * 30 );
+	}
+}
+
 function int Things( Pawn P )
 {
 	local Inventory Item;
@@ -445,4 +494,10 @@ function Report()
 
 	foreach AllActors( class'PlayerPawn', P )
 		Log( "RevNetTest: player" @ P.PlayerReplicationInfo.PlayerName @ P.Class.Name @ "remote=" $ (NetConnection(P.Player)!=None) @ "state=" $ P.GetStateName() @ "health=" $ P.Health @ "at" @ P.Location @ "traveling=" $ DeusExPlayer(P).flagBase.GetBool('PlayerTraveling') @ "pri=" $ P.PlayerReplicationInfo.Class.Name @ P.PlayerReplicationInfo.RemoteRole @ P.PlayerReplicationInfo.bAlwaysRelevant @ "gri=" $ P.GameReplicationInfo @ Level.Game.GameReplicationInfo.RemoteRole, 'RevNet' );
+}
+
+defaultproperties
+{
+	FoyerAt=(X=-775.000000,Y=-967.000000,Z=-18.500000)
+	FoyerYaw=32768
 }

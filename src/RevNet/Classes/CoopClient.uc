@@ -28,6 +28,15 @@ var int Decos;
 var float NextSettleCheck;
 var ThrownProjectile Settled[64]; // grenades and mines whose resting place went out (SettleMoved)
 var int NextSettled;
+var float NextCameraBodies, NextLaserCheck;
+var string HostSwitches;    // the host's game's mode switches (CoopGameInfo.ModeSwitches): "<name>=<value>;..."
+var float NextHUDSwitch;
+
+replication
+{
+	reliable if ( Role==ROLE_Authority )
+		HostSwitches;
+}
 
 simulated event Tick( float DeltaTime )
 {
@@ -38,6 +47,13 @@ simulated event Tick( float DeltaTime )
 	local DeusExCarcass Body;
 	local DeusExDecoration D;
 
+	if ( Level.NetMode==NM_Client && CoopMechPlayer(GetPlayerPawn())!=None )
+		CoopMechPlayer(GetPlayerPawn()).WatchFPV();         // (its FPV drone's gun-cam overlay)
+	if ( Level.NetMode==NM_Client && HostSwitches!="" && Level.TimeSeconds>=NextHUDSwitch )
+	{
+		NextHUDSwitch = Level.TimeSeconds + 1.0;
+		HUDSwitches();
+	}
 	if ( Role==ROLE_Authority )
 	{
 		KeepWeather( Level.TimeSeconds>=NextSettleCheck ); // first: what it spawns stays here (below)
@@ -55,6 +71,11 @@ simulated event Tick( float DeltaTime )
 		}
 		Turrets();
 		Cameras();
+		if ( Level.TimeSeconds>=NextLaserCheck )
+		{
+			NextLaserCheck = Level.TimeSeconds + 1.0;   // (as RevPawnHook's LaserCheckTimer)
+			Lasers();
+		}
 		Grenades();
 		Fades();
 		if ( Level.TimeSeconds>=NextSettleCheck )
@@ -224,15 +245,100 @@ function Actor SinglePlayerTarget( AutoTurret T )
 	return Target;
 }
 
+// Biomod's aug HUD takes "aug tracking or targeting" from the game's settings when it
+// starts (AugmentationDisplayWindow.InitWindow): a client has no game there, so it
+// would be off whatever the host chose. The host's, by name (only Biomod has it).
+simulated function HUDSwitches()
+{
+	local DeusExRootWindow Root;
+	local string V;
+
+	if ( DeusExPlayer(GetPlayerPawn())==None )
+		return;
+	Root = DeusExRootWindow(DeusExPlayer(GetPlayerPawn()).rootWindow);
+	if ( Root==None || Root.hud==None || Root.hud.augDisplay==None )
+		return;
+	V = class'CoopCustomDifficulty'.static.Get( HostSwitches, "bBioModAugTracking" );
+	if ( V!="" && Root.hud.augDisplay.GetPropertyText( "bBioModAugTracking" )!="" && !(Root.hud.augDisplay.GetPropertyText( "bBioModAugTracking" )~=V) )
+	{
+		Root.hud.augDisplay.SetPropertyText( "bBioModAugTracking", V );
+		Log( "RevNet: the aug HUD's tracking from the host's game:" @ V, 'RevNet' );
+	}
+}
+
 // Cameras spot players under deathmatch rules too, but only single-player sounds
-// the alarm: here it does, when single-player would.
+// the alarm: here it does, when single-player would. Single-player's camera also
+// looks for bodies while it sees no player (custom difficulty's "see bodies", and
+// Realistic); deathmatch's only looks with a player in view: here it does.
 function Cameras()
 {
 	local SecurityCamera Cam;
+	local Human Host;
+	local bool bBodies;
 
+	if ( Level.TimeSeconds>=NextCameraBodies )
+	{
+		NextCameraBodies = Level.TimeSeconds + 0.1;
+		Host = Human(GetPlayerPawn());
+		bBodies = Host!=None;
+	}
 	foreach AllActors( class'SecurityCamera', Cam )
+	{
 		if ( Cam.bActive && Cam.bPlayerSeen && !Cam.bEventTriggered && Cam.triggerTimer>=Cam.triggerDelay )
 			Cam.TriggerEvent( true );
+		else if ( bBodies && Cam.bActive && !Cam.bPlayerSeen && !Cam.bNoAlarm
+			&& (Cam.bCDCameraSeeBodies || (Host.CombatDifficulty>=4 && !Host.bCustomDifficulty)) )
+			Cam.CheckCarcassVisibility( Host );
+	}
+}
+
+// Characters on Realistic, or with custom difficulty's "AI see laser", notice a laser
+// sight's dot by their face (RevPawnHook.CheckLaserPresence), but only the host's
+// (GetPlayerPawn): here another player's, as that does it.
+function Lasers()
+{
+	local LaserSpot Spot;
+	local Pawn Shiner;
+	local RevPawnHook P;
+	local Human Host;
+	local vector From;
+	local rotator R;
+	local float Yaw, Pitch;
+
+	Host = Human(GetPlayerPawn());
+	if ( Host==None )
+		return;
+	foreach AllActors( class'LaserSpot', Spot )
+	{
+		if ( Spot.Owner==None || Spot.Owner.Owner==None )
+			continue;
+		Shiner = Pawn(Spot.Owner.Owner.Owner);
+		if ( PlayerPawn(Shiner)==None || Shiner==Host )
+			continue;
+		foreach Spot.RadiusActors( class'RevPawnHook', P, 1200 )
+		{
+			if ( !P.bReactPresence || !P.bLookingForEnemy || P.bDeleteMe || P.Health<=0 )
+				continue;
+			if ( !((P.bInCustomDifficulty && P.bCDAISeeLaser) || (!P.bInCustomDifficulty && Host.CombatDifficulty>=4)) )
+				continue;
+			// (As there: measured from eye height below its middle, about its feet.)
+			From = P.Location - vect(0,0,1) * P.BaseEyeHeight;
+			if ( VSize(Spot.Location - From) >= (Host.CombatDifficulty + 6) * 25 )
+				continue;
+			R = rotator(Spot.Location - From);
+			Yaw = Abs( P.Rotation.Yaw - R.Yaw ) % 65536;
+			Pitch = Abs( P.Rotation.Pitch - R.Pitch ) % 65536;
+			if ( Yaw>32767 )
+				Yaw -= 65536;
+			if ( Pitch>32767 )
+				Pitch -= 65536;
+			if ( Abs(Yaw)<4096 && Abs(Pitch)<4096 )
+			{
+				Log( "RevNet:" @ P @ "noticed" @ Shiner.PlayerReplicationInfo.PlayerName $ "'s laser", 'RevNet' );
+				P.HandleSighting( Shiner );
+			}
+		}
+	}
 }
 
 // A player's proximity grenade: deathmatch lets only other players set it off,

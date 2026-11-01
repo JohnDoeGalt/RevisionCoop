@@ -8,11 +8,62 @@
 // off (damage and radius set by CoopMechPlayer.CreateDrone) when it hits a
 // character, a thing or a wall, when it is shot, on the fire button (the player's
 // DroneExplode) and when its battery runs out. However it ends, it switches the
-// module off (Spent).
+// module off (Spent). Flown at level 4 it leads the swarm (bLead, CoopMechAugDrones
+// .Flown): it goes as its pilot's keys say (forward the way it looks, strafe, up,
+// down: CoopMechPlayer.MoveDrone, Steer) and hovers when none are down, while the
+// fire button sends the swarm; a wall stops it. The swarm spent, it goes in as a
+// racer does. Its pilot sees through it with a gun-cam overlay (CoopFPVView: the
+// user, 2026-10-30), from what the host tells the pilot's machine (Look). Its speed is
+// its pilot's to choose (the reload key: CoopMechPlayer.ServerDroneGear, SetGear): slow,
+// medium, or fast at 100 mph, a real FPV racer's (the user, 2026-10-30).
 //=============================================================================
 class CoopFPV extends SpyDrone;
 
+// Its own buzz: a cheap racing quad's (tools/drone_sound.py, from a CC0 recording), not the Spy Drone's hum.
+#exec AUDIO IMPORT FILE="Sounds\FPVBuzz.wav" NAME="FPVBuzz" GROUP="MechDrone"
+
 var float Battery, ArmTime;
+var bool bLead;
+var vector Wish;            // the way its pilot's keys send it (a lead), and when they last did
+var float WishAt;
+var float LeadSpeed;
+var Actor Seen[8];          // the hostiles in lock range and in its sight
+var Actor LockOn;           // the one the fire button would send the swarm's next at (a lead with drones left)
+var Actor Marked[4];        // the ones the swarm's sent drones are after, by their slot
+var byte Ready, Charge;     // the swarm's drones still with the lead; the battery left, percent
+var byte Gear;              // its speed (SetGear): 0 slow, 1 medium, 2 fast
+var float GearSpeed[3];     // a racer's speed at each (flat out), units a second (16 a foot: 2347 is 100 mph) ...
+var float LeadGear[3];      // ... and a lead's top speed (on its pilot's keys)
+var byte GearPitch[3];      // its buzz's pitch at each (64: as recorded)
+var string GearNames[3];
+var float FullBattery, NextLook;
+var CoopFPVView View;       // the overlay, on its pilot's own machine
+var Mesh Quad;              // (the class's) the Mech's drones' own quad, once looked for
+var bool bNoQuad;
+
+replication
+{
+	reliable if ( Role==ROLE_Authority && bNetOwner )
+		bLead, Seen, LockOn, Marked, Ready, Charge, Gear;
+}
+
+// Its pilot's keys (a lead): the way to go, world-space, at most one long.
+function Steer( vector Dir )
+{
+	Wish = Dir;
+	WishAt = Level.TimeSeconds;
+}
+
+// Its speed (its pilot's reload key: CoopMechPlayer.ServerDroneGear; at launch, the last chosen): a racer flies flat
+// out at it (Tick), a lead's keys up to it; its buzz pitched to it.
+function SetGear( byte G )
+{
+	Gear = Min( G, 2 );
+	MaxSpeed = GearSpeed[Gear];
+	Speed = MaxSpeed;
+	LeadSpeed = LeadGear[Gear];
+	SoundPitch = GearPitch[Gear];
+}
 
 // The module's: this drone is gone (or going off).
 function Ended()
@@ -35,7 +86,9 @@ auto state Flying
 	}
 	simulated function HitWall( vector HitNormal, actor Wall )
 	{
-		if ( Role==ROLE_Authority && ArmTime<=0 )
+		if ( bLead )
+			Velocity -= HitNormal * (Velocity Dot HitNormal);     // (a lead: along the wall, not into it)
+		else if ( Role==ROLE_Authority && ArmTime<=0 )
 			Explode( Location, HitNormal );
 	}
 	simulated function Explode( vector HitLocation, vector HitNormal )
@@ -61,17 +114,132 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector HitLocation, Vector M
 		Explode( Location, vect(0,0,1) );
 }
 
-function Destroyed()
+simulated function Destroyed()
 {
-	Ended();
+	if ( View!=None )
+	{
+		View.Destroy();
+		View = None;
+	}
+	if ( Role==ROLE_Authority )
+		Ended();
 	Super.Destroyed();
 }
 
-function Tick( float DeltaTime )
+// The Mech's drones' own look (the user, 2026-10-30: a cheap mass-made quad, smaller than the Spy Drone): the quad
+// (RevNetMech.FPVDrone, tools/mech_drone.py), its props spinning, the lead's light green. Each machine its own (RevNetMech
+// is each PC's own build: the host's mesh can't reach a client), so each machine dresses it, and again should the
+// host's look arrive over it. Without RevNetMech: the Spy Drone's look.
+static function Dress( Actor A, bool bLead )
 {
+	if ( default.Quad==None && !default.bNoQuad )
+	{
+		default.Quad = Mesh( DynamicLoadObject( "RevNetMech.FPVDrone", class'Mesh', true ) );
+		default.bNoQuad = default.Quad==None;
+	}
+	if ( default.Quad==None )
+		return;
+	if ( A.Mesh!=default.Quad )
+	{
+		A.Mesh = default.Quad;
+		A.Skin = None;
+		A.DrawScale = 1.0;
+		A.LoopAnim( 'Fly' );
+	}
+	if ( bLead && A.MultiSkins[2]==None )
+		A.MultiSkins[2] = Texture( DynamicLoadObject( "RevNetMech.FPVLightLead", class'Texture', true ) );
+}
+
+// On its pilot's own machine (the only one with the pilot's root window): the gun-cam overlay.
+simulated function OpenView()
+{
+	if ( View==None )
+		View = NewView();
+}
+
+// The overlay over this drone. On a client its pilot keeps it, not this (CoopMechPlayer.WatchFPV): a window
+// the drone held, closed there, was a dead reference when the drone was cleaned up (an engine assertion).
+simulated function CoopFPVView NewView()
+{
+	local DeusExRootWindow Root;
+	local CoopFPVView V;
+
+	if ( DeusExPlayer(Owner)==None )
+		return None;
+	Root = DeusExRootWindow(DeusExPlayer(Owner).rootWindow);
+	if ( Root==None )
+		return None;
+	V = CoopFPVView(Root.NewChild( class'CoopFPVView', false ));
+	if ( V==None )
+		return None;
+	V.Drone = Self;
+	V.Born = Level.TimeSeconds;
+	V.SetWindowAlignments( HALIGN_Full, VALIGN_Full );
+	V.Lower();
+	V.Show();
+	return V;
+}
+
+// (The host) what its pilot's overlay shows: the hostiles in sight and range, the lock the fire button would
+// send the swarm's next at (CoopMechAugDrones.Dispatch's own choice), the sent drones' targets, the battery.
+function Look()
+{
+	local CoopMechAugDrones M;
+	local ScriptedPawn SP;
+	local CoopFPVGuided G;
+	local int n;
+
+	M = CoopMechAugDrones(class'CoopMechAug'.static.Find( Pawn(Owner), class'CoopMechAugDrones' ));
+	if ( M==None )
+		return;
+	if ( FullBattery<=0 )
+		FullBattery = Battery;
+	Charge = byte(FClamp( 100 * Battery / FullBattery, 0, 100 ));
+	foreach RadiusActors( class'ScriptedPawn', SP, M.LockRange, Location )
+		if ( n<ArrayCount(Seen) && SP.Health>0 && !SP.bDeleteMe
+			&& SP.GetPawnAllianceType( Pawn(Owner) )==ALLIANCE_Hostile && FastTrace( SP.Location, Location ) )
+			Seen[n++] = SP;
+	for ( n=n; n<ArrayCount(Seen); n++ )
+		Seen[n] = None;
+	Ready = 0;
+	LockOn = None;
+	if ( bLead )
+	{
+		Ready = M.SwarmLeft();
+		if ( Ready>0 )
+			LockOn = M.Locked( Location, vector(Rotation), true );
+	}
+	for ( n=0; n<ArrayCount(Marked); n++ )
+		Marked[n] = None;
+	foreach AllActors( class'CoopFPVGuided', G )
+		if ( G.Owner==Owner && !G.bHover && !G.bDeleteMe && Pawn(G.Target)!=None && Pawn(G.Target).Health>0 )
+			Marked[G.Slot] = G.Target;
+}
+
+simulated function Tick( float DeltaTime )
+{
+	local vector Want;
+
+	OpenView();
+	Dress( Self, bLead );
+	if ( Role<ROLE_Authority )
+		return;
 	if ( IsInState( 'Exploding' ) )
 		return;
-	if ( Physics==PHYS_Projectile )     // (an EMP'd one falls)
+	if ( Level.TimeSeconds>=NextLook )
+	{
+		NextLook = Level.TimeSeconds + 0.1;
+		Look();
+	}
+	if ( Physics==PHYS_Projectile && bLead )
+	{
+		// Its pilot's keys while they are down (they come every frame), else it slows to a hover.
+		Want = vect(0,0,0);
+		if ( Level.TimeSeconds - WishAt<0.2 )
+			Want = Wish * LeadSpeed;
+		Velocity += (Want - Velocity) * FMin( 1, DeltaTime * 4 );
+	}
+	else if ( Physics==PHYS_Projectile )     // (an EMP'd one falls)
 		Velocity = vector(Rotation) * MaxSpeed;     // (projectile physics holds it to MaxSpeed)
 	ArmTime -= DeltaTime;
 	Battery -= DeltaTime;
@@ -85,5 +253,20 @@ defaultproperties
 	MaxSpeed=1100
 	Battery=25
 	ArmTime=0.15
+	LeadSpeed=700
+	Gear=1
+	GearSpeed(0)=600
+	GearSpeed(1)=1100
+	GearSpeed(2)=2347
+	LeadGear(0)=380
+	LeadGear(1)=700
+	LeadGear(2)=2347
+	GearPitch(0)=54
+	GearPitch(1)=64
+	GearPitch(2)=80
+	GearNames(0)="slow (26 mph)"
+	GearNames(1)="medium (47 mph)"
+	GearNames(2)="fast (100 mph)"
+	AmbientSound=Sound'FPVBuzz'
 	damageType=Exploded
 }

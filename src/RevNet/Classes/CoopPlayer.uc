@@ -10,6 +10,7 @@ class CoopPlayer extends CoopPlayerUI;
 
 var float TestWalkUntil;
 var string MemLevels;      // (MemLine)
+var bool bTestStall;       // (ClientTest "stall") this game sends the host no more moves
 
 replication
 {
@@ -17,6 +18,12 @@ replication
 		ClientTest, ClientWhere;
 	reliable if ( Role<ROLE_Authority )
 		ServerTestReply, ServerWhere;
+}
+
+function ReplicateMove( float DeltaTime, vector NewAccel, eDodgeDir DodgeMove, rotator DeltaRot )
+{
+	if ( !bTestStall )
+		Super.ReplicateMove( DeltaTime, NewAccel, DodgeMove, DeltaRot );
 }
 
 event PlayerInput( float DeltaTime )
@@ -55,6 +62,18 @@ simulated function ClientTest( string Command )
 		ConsoleCommand( "set Rocket mpBlastRadius 124" );
 		ServerTestReply( "client set -> get=" $ ConsoleCommand( "get Rocket mpBlastRadius" ) @ "default=" $ class'Rocket'.default.mpBlastRadius );
 	}
+	else if ( Command=="stall" )
+		bTestStall = true;                      // (CoopTestTwin: a crashed game's, its connection quiet)
+	else if ( Command=="secprops" )
+		ServerTestReply( "security client: cheats=" $ bCheatsEnabled @ "max credits" @ CDMaxCredits );
+	else if ( Command=="customdiff" )
+		ServerTestReply( "customdiff client copy: custom=" $ bCustomDifficulty @ "energy" @ Energy $ "/" $ EnergyMax @ "regen to" @ MaxRegenPoint @ "at" @ RegenRate
+			@ "combat difficulty" @ CombatDifficulty @ "accuracy" @ CDPlayerAccuracy @ "drain" @ CDEnergyDrainRate @ "credits" @ CDMaxCredits
+			@ "checksum" @ class'CoopCustomDifficulty'.static.Checksum( class'CoopCustomDifficulty'.static.Read( Self ) ) );
+	else if ( Command=="switches" && DeusExRootWindow(rootWindow)!=None && DeusExRootWindow(rootWindow).hud!=None && DeusExRootWindow(rootWindow).hud.augDisplay!=None )
+		ServerTestReply( "switches client: aug HUD tracking=" $ DeusExRootWindow(rootWindow).hud.augDisplay.GetPropertyText( "bBioModAugTracking" ) );
+	else if ( Command=="customdiffgun" && DeusExWeapon(Weapon)!=None )
+		ServerTestReply( "customdiff client weapon" @ Weapon.Class.Name @ "accuracy" @ DeusExWeapon(Weapon).CalculateAccuracy() @ "player accuracy" @ CDPlayerAccuracy );
 	else if ( Left( Command, 5 )=="walk " )
 		TestWalkUntil = Level.TimeSeconds + float( Mid( Command, 5 ) );
 	else if ( Command=="inhand" )
@@ -259,6 +278,8 @@ simulated function int OwnBeams()
 
 function ServerTestReply( string Reply )
 {
+	if ( CoopGameInfo(Level.Game)==None || CoopGameInfo(Level.Game).Test==None )
+		return;                                 // (only while a test runs: not a way to fill the host's log)
 	Log( "RevNetTest: reply from" @ PlayerReplicationInfo.PlayerName $ ":" @ Reply, 'RevNet' );
 }
 
@@ -274,6 +295,8 @@ simulated function ClientWhere( Actor A, string Label )
 
 function ServerWhere( Actor A, string Label, vector Loc, rotator Rot, name Anim, string M, bool bHid )
 {
+	if ( CoopGameInfo(Level.Game)==None || CoopGameInfo(Level.Game).Test==None )
+		return;
 	if ( A==None )
 		Log( "RevNetTest: sync" @ Label @ "gone on the host", 'RevNet' );
 	else

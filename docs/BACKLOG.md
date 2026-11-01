@@ -36,3 +36,15 @@ independently, instead of the whole team travelling together?
 - Verdict for now: possible in principle, a large architectural change with real story
   risk; not planned. Today: the team travels together, after the player who walks into
   the exit confirms it (CoopExitGate).
+
+## The heavy Mech's arms to match its first-person gauntlets (asked 2026-10-30: backlog)
+
+The first-person arms (tools/blade_arms.py: the blades' and the cannon's views) are the nanosuit gauntlets: matte
+black hex armour, domed gunmetal plates, blue lights. The third-person body's arms are still the old suit. The user:
+make them look closer, "probably... via texture"; then held: "don't change the heavy mech model yet... put that in
+the backlog" (2026-10-30).
+
+- First: repaint the body's arm regions (BarrettSuit, tools/mech_bake.py) in the gauntlets' materials, judged side
+  by side with third-person stills.
+- If the silhouette still reads thin: forearm plate shells as anchored parts (tools/mech_parts.py, as the blade
+  housings and the cannon ride the forearms).

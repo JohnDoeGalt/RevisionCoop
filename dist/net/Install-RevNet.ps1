@@ -122,7 +122,10 @@ if (-not (Test-Path $user)) {
 	if (Test-Path $mine) { Copy-Item $mine $user; Write-Host "Using your Revision key bindings." }
 	else { Copy-Item (Join-Path $net "RevNetDefUser.ini") $user }
 }
-(Get-Content $user) -replace '^NetSpeed=.*', 'NetSpeed=20000' | Set-Content $user -Encoding Default
+# The Mech's FPV Drones key (F7, "ActivateAugmentation 4", on whatever key the player put it) also holds
+# bExtra3 down while it is down: held, it flies a drone by hand (CoopDroneKey).
+(Get-Content $user) -replace '^NetSpeed=.*', 'NetSpeed=20000' -replace '^([^=;\[]+)=ActivateAugmentation 4$', '$1=ActivateAugmentation 4|Button bExtra3' |
+	Set-Content $user -Encoding Default
 
 # The Steam launcher (host, join, continue): its own steam_api.dll and AppID 480 (Steam's
 # networking test app, which any Steam account can use).

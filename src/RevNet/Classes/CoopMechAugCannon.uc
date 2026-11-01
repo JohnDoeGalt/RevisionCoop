@@ -38,7 +38,7 @@ defaultproperties
 	TreeName="Arsenal"
 	AugmentationName="Arm Cannon"
 	Description="An automatic gun in the forearm, fed with 7.62 mm rounds. Heavy Weapons skill."
-	RoundText="%d damage a round, %d-round magazine."
+	RoundText="%d damage a round, %d-round bricks (and a brick's worth in its hopper)."
 	Icon=Texture'DeusExUI.UserInterface.SkillIconWeaponHeavy'
 	smallIcon=Texture'DeusExUI.UserInterface.SkillIconWeaponHeavy'
 }

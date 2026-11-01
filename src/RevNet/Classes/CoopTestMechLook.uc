@@ -33,6 +33,7 @@ function Run( int t )
 	}
 	if ( t==3 )
 	{
+		PhotoStage();
 		View = Host.ViewRotation;
 		View.Pitch = 63170;
 		DeusExRootWindow(Host.rootWindow).hud.Hide();

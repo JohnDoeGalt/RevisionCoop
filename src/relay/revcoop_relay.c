@@ -46,6 +46,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <intrin.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -60,7 +61,7 @@
 typedef uint64_t u64;
 
 /* Lobbies only match this exact value: bump it when packages or the relay protocol change. */
-#define REVCOOP_PROTOCOL "5"
+#define REVCOOP_PROTOCOL "6"
 
 /* ---------------------------------------------------------------- steam flat api */
 
@@ -607,9 +608,10 @@ static void list_modes(void)
 
 /* The host's game settings; the server decides, so they apply to everyone.
    Kept in Modes\settings.txt. Difficulty goes in the host URL, friendly fire in RevNet.ini. */
-static int g_difficulty = 1;   /* 0 Easy, 1 Medium, 2 Hard, 3 Deus Ex */
+static int g_difficulty = 1;   /* 0 Easy, 1 Medium, 2 Hard, 3 Deus Ex, 4 Custom: Revision's custom difficulty
+                                  screens on the host's game before it starts (RevNet.CoopCustomDifficulty) */
 static int g_friendly_fire = 0; /* index into ff_values */
-static const char *difficulty_names[] = { "Easy", "Medium", "Hard", "Deus Ex" };
+static const char *difficulty_names[] = { "Easy", "Medium", "Hard", "Deus Ex", "Custom (set in game)" };
 static const char *ff_values[] = { "0.000000", "0.500000", "1.000000" };
 static const char *ff_names[] = { "Off", "Half damage", "Full damage" };
 /* CoopGameInfo.DeathRule and SaveRule. */
@@ -622,6 +624,22 @@ static const char *save_names[] = { "Quick saves and autosaves", "Autosaves only
 /* CoopGameInfo.RifleRework: 0 here = on (the rifle as a 7.62 battle rifle with select fire, for everyone). */
 static int g_rifle = 0;
 static const char *rifle_names[] = { "7.62 battle rifle, select fire", "The mode's own" };
+/* The modes' own switches (Revision.RevGameInfo: what Revision's options set; the host's game reads
+   them, for everyone): Biomod has them all, Shifter and HR the skill system. Bit i: switch_keys[i] on. */
+static const char *switch_keys[] = { "bNewSkillSystem", "bBioModAugTracking", "bBioModNoReticleForScopedWeapons",
+    "bShifterEnableRandomInventory", "bShifterEnableOverpoweredUniqueWeapons", "bShifterEnableMiniRocketLauncher",
+    "bShifterEnabledShotgunAmmoPacking", "bShifterEnableWeaponModRateOfFire" };
+static const char *switch_names[] = { "Skill points for subduing enemies (skill system)", "Aug tracking instead of aug targeting",
+    "No reticle on scoped weapons", "Random inventory on enemies", "Unique weapons (Jackhammer, Precision Rifle, Railgun)",
+    "Mini rocket launcher on MJ12 commandos", "Shotgun ammo packing", "Rate-of-fire weapon mod" };
+static int g_switches = 0xFF;  /* Revision's defaults: all on */
+
+static int mode_switches(const char *mode)
+{
+    if (!_stricmp(mode, "Biomod")) return 0xFF;
+    if (!_stricmp(mode, "Shifter") || !_stricmp(mode, "HR")) return 1;
+    return 0;
+}
 
 static void load_settings(void)
 {
@@ -630,7 +648,8 @@ static void load_settings(void)
     FILE *f = fopen(p, "r");
     if (!f) return;
     while (fgets(line, sizeof(line), f)) {
-        if (!strncmp(line, "Difficulty=", 11)) g_difficulty = atoi(line + 11) & 3;
+        if (!strncmp(line, "Difficulty=", 11)) { g_difficulty = atoi(line + 11); if (g_difficulty < 0 || g_difficulty > 4) g_difficulty = 1; }
+        else if (!strncmp(line, "Switches=", 9)) g_switches = atoi(line + 9) & 0xFF;
         else if (!strncmp(line, "FriendlyFire=", 13)) { g_friendly_fire = atoi(line + 13); if (g_friendly_fire < 0 || g_friendly_fire > 2) g_friendly_fire = 0; }
         else if (!strncmp(line, "Death=", 6)) g_death = atoi(line + 6) & 1;
         else if (!strncmp(line, "Saves=", 6)) g_saves = atoi(line + 6) & 1;
@@ -645,7 +664,7 @@ static void save_settings(void)
     char p[MAX_PATH];
     snprintf(p, sizeof(p), "%s\\Modes\\settings.txt", g_game_dir);
     FILE *f = fopen(p, "w");
-    if (f) { fprintf(f, "Difficulty=%d\nFriendlyFire=%d\nDeath=%d\nSaves=%d\nAgent=%d\nRifle=%d\n", g_difficulty, g_friendly_fire, g_death, g_saves, g_agent, g_rifle); fclose(f); }
+    if (f) { fprintf(f, "Difficulty=%d\nFriendlyFire=%d\nDeath=%d\nSaves=%d\nAgent=%d\nRifle=%d\nSwitches=%d\n", g_difficulty, g_friendly_fire, g_death, g_saves, g_agent, g_rifle, g_switches); fclose(f); }
 }
 
 /* Sets Key=Value in [Section] of an ini in the co-op folder (the line is replaced, or added
@@ -691,6 +710,11 @@ static void apply_settings(void)
     snprintf(n, sizeof(n), "%d", g_saves);
     set_ini_key("RevNet.ini", "RevNet.CoopGameInfo", "SaveRule", n);
     set_ini_key("RevNet.ini", "RevNet.CoopGameInfo", "RifleRework", g_rifle ? "0" : "1");
+    /* Both sections: Revision's own, and the co-op game's (a subclass reads inherited settings there). */
+    for (int i = 0; i < 8; i++) {
+        set_ini_key("RevNet.ini", "Revision.RevGameInfo", switch_keys[i], (g_switches >> i) & 1 ? "True" : "False");
+        set_ini_key("RevNet.ini", "RevNet.CoopGameInfo", switch_keys[i], (g_switches >> i) & 1 ? "True" : "False");
+    }
 }
 
 /* "?Name=<Steam name>" for the game URL. Co-op saves give returning players their gear by
@@ -706,7 +730,29 @@ static void name_option(char *out, size_t size)
             clean[k++] = (char)c;
     }
     clean[k] = 0;
-    if (k) snprintf(out, size, "?Name=%s", clean); else out[0] = 0;
+    /* A name of letters this leaves out (Cyrillic, CJK...): one of our own, so two such friends
+       aren't both "Player" (the game keys a player's saved things by name). */
+    if (k) snprintf(out, size, "?Name=%s", clean);
+    else snprintf(out, size, "?Name=Player%04u", (unsigned)(g_me % 10000));
+}
+
+/* The host's game password for this session (the security sweep of 2026-10-31): the game's port
+   is open on the LAN, so it lets in only who has it; it is in the friends-only lobby's data, which
+   only members can read. Mixed from the CPU's counter, the time, a stack address and the ids
+   (no new imports: Smart App Control re-judges the exe on one). */
+static char g_token[17];
+static void make_token(unsigned long long lobby)
+{
+    volatile int here;
+    unsigned long long x = __rdtsc() ^ ((unsigned long long)GetTickCount() << 32) ^ (unsigned long long)(size_t)&here
+        ^ g_me ^ (lobby << 7);
+    for (int i = 0; i < 2; i++) {      /* splitmix64 */
+        x += 0x9E3779B97F4A7C15ULL;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+        x ^= x >> 31;
+    }
+    snprintf(g_token, sizeof(g_token), "%016llx", x);
 }
 
 /* The game opens AutoOpen once from its menu map (RevNet.CoopLaunch), as the player's class
@@ -899,6 +945,8 @@ static void host_cb(int id, void *data)
         if (c->result != 1) { g_lobby_failed = true; break; }
         g_lobby = c->lobby;
         char buf[64];
+        make_token(g_lobby);
+        S.SetLobbyData(g_mm, g_lobby, "pw", g_token);
         S.SetLobbyData(g_mm, g_lobby, "revcoop", REVCOOP_PROTOCOL);
         S.SetLobbyData(g_mm, g_lobby, "mode", g_mode);
         S.SetLobbyData(g_mm, g_lobby, "host", S.GetPersonaName(g_friends));
@@ -963,8 +1011,8 @@ static int run_host(const char *map, bool load)
     apply_mode();
     apply_settings();
     name_option(name, sizeof(name));
-    snprintf(url, sizeof(url), "%s?Listen?Port=%d?Game=%s?Difficulty=%d%s%s%s", map, g_port, g_game_class, g_difficulty,
-             name, load ? "?CoopLoad=1" : "", g_url_extra);
+    snprintf(url, sizeof(url), "%s?Listen?Port=%d?Game=%s?Difficulty=%d%s?GamePassword=%s%s%s%s", map, g_port, g_game_class,
+             g_difficulty == 4 ? 1 : g_difficulty, g_difficulty == 4 ? "?CustomDifficulty=True" : "", g_token, name, load ? "?CoopLoad=1" : "", g_url_extra);
     launch_game(url);
 
     status("Hosting %s. Friends join from their Revision Co-op window, or in Steam: right-click you, Join Game. Close the game to stop.",
@@ -1113,9 +1161,12 @@ static int run_join(u64 lobby)
     SOCKET s = udp_socket(0);
     if (s == INVALID_SOCKET) fail("Could not open a local UDP port.");
     int port = local_port(s);
-    char url[256], name[32];
+    char url[256], name[32], pw[17] = "";
     name_option(name, sizeof(name));
-    snprintf(url, sizeof(url), "127.0.0.1:%d%s", port, name);
+    /* The host's game password (make_token): hex digits only, else none. */
+    const char *lp = S.GetLobbyData(g_mm, g_join_lobby, "pw");
+    if (lp && strlen(lp) == 16 && strspn(lp, "0123456789abcdef") == 16) snprintf(pw, sizeof(pw), "%s", lp);
+    snprintf(url, sizeof(url), "127.0.0.1:%d%s%s%s", port, name, pw[0] ? "?Password=" : "", pw);
     launch_game(url);
     status("Playing in %s's game (%s). Keep this window open; close the game to stop.", friend_name(g_host), g_mode_title);
     say("Relaying 127.0.0.1:%d <-> %s over Steam.", port, friend_name(g_host));
@@ -1270,7 +1321,7 @@ static DWORD WINAPI worker(void *unused)
 /* ---------------------------------------------------------------- window */
 
 enum { ID_ICON = 100, ID_TITLE, ID_WHO, ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES, ID_HOST, ID_CONTINUE,
-       ID_SAVED, ID_FRIENDS, ID_LOBBY, ID_JOIN, ID_STATUS, ID_LOG, ID_AGENT, ID_RIFLE };
+       ID_SAVED, ID_FRIENDS, ID_LOBBY, ID_JOIN, ID_STATUS, ID_LOG, ID_AGENT, ID_RIFLE, ID_MODEOPTS };
 static HFONT g_font, g_bold, g_big;
 static HICON g_icon, g_icon_small;
 static double g_scale = 1;
@@ -1329,8 +1380,8 @@ static void update_enabled(void)
 {
     char saved[128], line[200];
     bool idle = !g_in_session, has = read_saved_map(saved, sizeof(saved));
-    const int settings[] = { ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES, ID_AGENT, ID_RIFLE };
-    for (int i = 0; i < 6; i++) EnableWindow(GetDlgItem(g_wnd, settings[i]), idle);
+    const int settings[] = { ID_MODE, ID_DIFF, ID_FF, ID_DEATH, ID_SAVES, ID_AGENT, ID_RIFLE, ID_MODEOPTS };
+    for (int i = 0; i < (int)(sizeof(settings) / sizeof(settings[0])); i++) EnableWindow(GetDlgItem(g_wnd, settings[i]), idle);
     EnableWindow(GetDlgItem(g_wnd, ID_HOST), idle && g_steam_ready);
     EnableWindow(GetDlgItem(g_wnd, ID_CONTINUE), idle && g_steam_ready && has);
     EnableWindow(GetDlgItem(g_wnd, ID_FRIENDS), idle && g_steam_ready);
@@ -1391,6 +1442,31 @@ static void append_log(const char *utf8)
     free(w);
 }
 
+/* The mode's own switches: a menu of them, ticked when on (one switched a click); the ones the
+   chosen mode hasn't are greyed. */
+static void mode_options_menu(HWND h)
+{
+    int have = mode_switches(g_mode);
+    HMENU m = CreatePopupMenu();
+    for (int i = 0; i < 8; i++) {
+        wchar_t *w = wide(switch_names[i]);
+        AppendMenuW(m, MF_STRING | (((g_switches >> i) & 1) ? MF_CHECKED : 0) | (((have >> i) & 1) ? 0 : MF_GRAYED), 1 + i, w);
+        free(w);
+    }
+    if (!have) {
+        AppendMenuW(m, MF_SEPARATOR, 0, NULL);
+        AppendMenuW(m, MF_STRING | MF_GRAYED, 99, L"This mode has no options of its own");
+    }
+    RECT r;
+    GetWindowRect(GetDlgItem(h, ID_MODEOPTS), &r);
+    int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN, r.left, r.bottom, 0, h, NULL);
+    DestroyMenu(m);
+    if (cmd >= 1 && cmd <= 8) {
+        g_switches ^= 1 << (cmd - 1);
+        save_settings();
+    }
+}
+
 static void create_controls(void)
 {
     int cur = 0;
@@ -1405,8 +1481,10 @@ static void create_controls(void)
     combo(68, "You play as", ID_AGENT, agent_names, 3, g_agent);
 
     ctl(0, WC_BUTTONW, "Your game: everyone who joins plays with these", BS_GROUPBOX, 12, 102, 436, 266, 0, g_font);
-    combo(128, "Mode", ID_MODE, titles, g_modes, cur);
-    combo(158, "Difficulty", ID_DIFF, difficulty_names, 4, g_difficulty);
+    HWND mode = combo(128, "Mode", ID_MODE, titles, g_modes, cur);
+    SetWindowPos(mode, NULL, 0, 0, (int)(198 * g_scale), (int)(200 * g_scale), SWP_NOMOVE | SWP_NOZORDER);
+    ctl(0, WC_BUTTONW, "Options...", BS_PUSHBUTTON | WS_TABSTOP, 338, 127, 96, 25, ID_MODEOPTS, g_font);
+    combo(158, "Difficulty", ID_DIFF, difficulty_names, 5, g_difficulty);
     combo(188, "Friendly fire", ID_FF, ff_names, 3, g_friendly_fire);
     combo(218, "If a player dies", ID_DEATH, death_names, 2, g_death);
     combo(248, "Saves", ID_SAVES, save_names, 2, g_saves);
@@ -1454,13 +1532,15 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             if (g_agent < 0 || g_agent > 2) g_agent = 0;
             save_settings();
         } else if ((id == ID_DIFF || id == ID_FF || id == ID_DEATH || id == ID_SAVES || id == ID_RIFLE) && code == CBN_SELCHANGE) {
-            g_difficulty = cursel(ID_DIFF) & 3;
+            g_difficulty = cursel(ID_DIFF);
+            if (g_difficulty < 0 || g_difficulty > 4) g_difficulty = 1;
             g_friendly_fire = cursel(ID_FF) % 3;
             g_death = cursel(ID_DEATH) & 1;
             g_saves = cursel(ID_SAVES) & 1;
             g_rifle = cursel(ID_RIFLE) & 1;
             save_settings();
-        } else if (id == ID_HOST && code == BN_CLICKED) start(CMD_HOST);
+        } else if (id == ID_MODEOPTS && code == BN_CLICKED) mode_options_menu(h);
+        else if (id == ID_HOST && code == BN_CLICKED) start(CMD_HOST);
         else if (id == ID_CONTINUE && code == BN_CLICKED) start(CMD_CONTINUE);
         else if (id == ID_JOIN && code == BN_CLICKED) join_chosen();
         else if (id == ID_FRIENDS && code == LBN_DBLCLK) join_chosen();

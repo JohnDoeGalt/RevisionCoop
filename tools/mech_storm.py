@@ -8,8 +8,10 @@ Our own design, built from boxes and prisms at the Mech's own scale (a game unit
 slender dark slate barrel block, longer than it is wide (about 5 cm square, 16 cm long), out of the top of
 the wrist and over the back of the hand; nine bores, 3 x 3 (FIVE: as a die shows), the brass nose of each
 bore's next round showing, yellow and black chevrons at the muzzle, a hazard mark, a blue light; the olive
-brick behind it with a handle and a blue round counter; a yoke from the barrel block down to the wrist's
-pin, and the pin's trunnions. (In its view it rides the Mech's own gauntlet: view_mesh, tools/blade_arms.py.) Three
+brick behind it with a handle and a blue round counter; under the block's back a low saddle shaped to the top of the
+forearm and the wrist, the gun seated into the arm like a piece of its armour (the user, 2026-10-29: the yoke and
+trunnions that held it, "the giant clamp thing just looks wrong... more sleek and low profile"); the pin it spins about
+is inside the wrist, unseen. (In its view it rides the Mech's own gauntlet: view_mesh, tools/blade_arms.py.) Three
 512 skins, painted from the 3D surface.
 
 Frame: x forward along the forearm (the elbow at 0, the wrist at WRIST), y to its left, z up; the forearm's
@@ -41,6 +43,12 @@ FIVE = ((0, 0), (2, 0), (1, 1), (0, 2), (2, 2))            # five, as a die show
 DICE = NINE
 BORE_DEPTH, NOSE = 1.0, 0.4                    # a bore's depth; a round's nose
 BREECH, STUB = 0.45, 0.3                       # how far the barrels stand out of the block's back; their outer radius
+SADDLE = dict(x0=12.4, x1=14.6, half=0.36, out=0.2)   # the saddle under the block's back: along the forearm, half its
+                                                 # angle across the arm's top, how far out of the arm's surface (its plates)
+MOUNT = (1.5, 0.26)     # where it is posed, the gun (its brick, its pin) moved back along the forearm and up: 3 cm
+                        # back, off the wrist joint (the user, 2026-10-29: "not mounted over the arm joint"; the
+                        # muzzle about over the knuckles), up as far as the brick then clears the plates (built and
+                        # painted where it was: the numbers here and in the paint are as built)
 GRAB = np.array([10.7, 0.4, BRICK["z1"] + 2.6])  # the left fist's centre, on the brick's handle
 SHARED = ("bore", "cap", "nose", "grip")       # regions sharing one texture cell each
 SMOOTH = ("grip",)                             # regions shaded round in the game (their faces share vertices)
@@ -167,24 +175,45 @@ def spin(P, deg):
 OFF = np.array([-12.0, 20.0, -28.0])           # the left hand (and a thrown brick) out of sight
 
 
-def pose(P, groups, turn=0.0, slide=0.0, brick=(0, 0, 0), lhand=None, kick=0.0):
+ROLL_CLEAR = (0.85, 0.5)  # how far out from the arm the gun swings as it rolls round it: at the side, and under it
+
+
+def rolled(Q, deg):
+    """Points rolled deg about the forearm's axis (x), the outside way (the right arm's: 90 puts the top at its right,
+    180 under it), swung out from the arm as they go so the gun clears the hand's edge and the plates."""
+    a = math.radians(deg)
+    y, z = Q[:, 1].copy(), Q[:, 2].copy()
+    R = Q.copy()
+    R[:, 1] = y * math.cos(a) - z * math.sin(a)
+    R[:, 2] = y * math.sin(a) + z * math.cos(a)
+    out = ROLL_CLEAR[0] * abs(math.sin(a)) + ROLL_CLEAR[1] * max(0.0, -math.cos(a))
+    R[:, 1] += out * -math.sin(a)       # (along the way the gun's top now faces: out from the arm)
+    R[:, 2] += out * math.cos(a)
+    return R
+
+
+def pose(P, groups, turn=0.0, slide=0.0, brick=(0, 0, 0), lhand=None, kick=0.0, roll=0.0):
     """Points P (n, 3) with their groups, from the deployed pose: the gun turned by turn degrees (spin) and
     slid slide units along the forearm, kick units of recoil; the brick moved by brick on top of that; the
-    left hand moved by lhand from the brick's handle (default: out of sight)."""
+    left hand moved by lhand from the brick's handle (default: out of sight). All of it where it is mounted
+    (MOUNT); the gun and the brick rolled roll degrees round the forearm (rolled: the draw)."""
     Q = P.copy()
     g = np.asarray(groups)
+    mount = np.array([-MOUNT[0], 0.0, MOUNT[1]])
     for name in ("gun", "brick"):
         m = g == name
-        Q[m] = spin(P[m], turn)
+        Q[m] = spin(P[m], turn) + mount
+        if roll:
+            Q[m] = rolled(Q[m], roll)
         Q[m, 0] += slide - kick
     Q[g == "brick"] += np.asarray(brick, float)
-    Q[g == "lhand"] += OFF if lhand is None else np.asarray(lhand, float)
+    Q[g == "lhand"] += OFF if lhand is None else np.asarray(lhand, float) + mount
     return Q
 
 
 def build():
-    """The gun on top of the hand and the wrist's trunnions; the faces' groups in p.groups. (The Mech's
-    gauntlets in its view: gauntlets.)"""
+    """The gun on top of the hand, seated in its saddle; the faces' groups in p.groups. (The Mech's gauntlets in
+    its view: gauntlets.)"""
     p = Part("storm", mesh="StormGun")
     p.groups = []
     X = lambda x, yz: np.array([x, yz[0], yz[1]])
@@ -247,24 +276,39 @@ def build():
             face(p, [X(back, inner[k]), X(back + BORE_DEPTH, inner[k]), X(back + BORE_DEPTH, inner[q]), X(back, inner[q])],
                  axis - mid, "bore")
             face(p, [X(back + 0.3, (cy, cz)), X(back + 0.3, base[k]), X(back + 0.3, base[q])], np.array([-1.0, 0, 0]), "nose")
-    # Under it: a spine, and the yoke down to the wrist's pin (outside the trunnions): a short post.
+    # Under it, the saddle: a low shoe from the block's underside down onto the top of the forearm and the wrist,
+    # shaped to them (blade_arms.surface, out past their plates); its top under the block and the brick, its
+    # underside on the arm; its side walls, low, under the block's sides, all that shows.
+    import blade_arms
     zb = zc - h
-    block(p, (12.2, -1.1, zb - 0.4), (14.8, 1.1, zb), "frame")
-    block(p, (13.4, -3.0, zb - 0.4), (14.8, 3.0, zb), "frame")
-    for s in (1, -1):
-        lo, hi = sorted((s * 2.6, s * 3.0))
-        block(p, (13.4, lo, -0.8), (14.8, hi, zb - 0.4), "frame")
+    sd = SADDLE
+    xs, vs = np.linspace(sd["x0"], sd["x1"], 7), np.linspace(-1, 1, 7)
+
+    def under(x, v):     # (the arm where the saddle is posed: MOUNT)
+        q = blade_arms.surface(x - MOUNT[0] - GAUNTLET_X, math.pi / 2 + v * sd["half"])
+        rad = np.array([0.0, q[1], q[2]])
+        q = q + rad / np.linalg.norm(rad) * sd["out"]
+        return np.array([x, q[1], min(q[2] - MOUNT[1], zb - 0.02)])
+    B = [[under(x, v) for v in vs] for x in xs]
+    T = [[np.array([b[0], b[1], zb]) for b in row] for row in B]
+    last = len(vs) - 1
+    for i in range(len(xs) - 1):
+        for j in range(last):
+            q = [B[i][j], B[i][j + 1], B[i + 1][j + 1], B[i + 1][j]]
+            m = np.mean(q, 0)
+            face(p, q, -np.array([0.0, m[1], m[2]]), "frame")
+        for j in (0, last):
+            face(p, [B[i][j], B[i + 1][j], T[i + 1][j], T[i][j]], np.array([0.0, B[i][j][1], 0.0]), "frame")
+    for i, sx in ((0, -1.0), (len(xs) - 1, 1.0)):
+        for j in range(last):
+            face(p, [B[i][j], B[i][j + 1], T[i][j + 1], T[i][j]], np.array([sx, 0.0, 0.0]), "frame")
     tag(p, "gun")
     # The brick: a big box on the barrel block's back, a handle on top.
     b = BRICK
     prism(p, chamfered(b["y"], b["z0"], b["z1"], 0.35), b["x0"], b["x1"], "x", "brick", ("brick", "brick"))
     handle(p)
     tag(p, "brick")
-    # The wrist's trunnions (the pin's bearings): on the body's own arm too.
-    for s in (1, -1):
-        lo, hi = sorted((s * 2.0, s * 2.6))
-        block(p, (PIVOT[0] - 0.7, lo, PIVOT[1] - 0.7), (PIVOT[0] + 0.7, hi, PIVOT[1] + 0.7), "frame")
-    tag(p, "mount")
+    tag(p, "mount")     # (none now: the pin is inside the wrist)
     return p
 
 
@@ -810,10 +854,12 @@ PULLED = np.array([-2.5, 2.0, 2.6])            # the brick lifted off its seat i
 
 
 def draw(t):
-    """Select: the arm comes up; the gun slides in under the forearm, then spins over the hand; settles."""
+    """Select: the arm comes up; the gun, upside down under the forearm, slides up the arm to its place, then rolls
+    round the outside of the forearm onto its top (the user, 2026-10-29: "slide up the wrist, but then rotate around
+    to the top of the forearm rather than flip over the hand... around the outside of the forearm"); settles."""
     up = span(t, 0.0, 0.3)
     return dict(arm=(0, 0, -14 * (1 - up), -25 * (1 - up), 0, 0), slide=-22 * (1 - span(t, 0.1, 0.5)),
-                turn=180 * (1 - span(t, 0.5, 0.85)), kick=0.4 * math.sin(math.pi * span(t, 0.85, 1.0)))
+                roll=180 * (1 - span(t, 0.5, 0.85)), kick=0.4 * math.sin(math.pi * span(t, 0.85, 1.0)))
 
 
 def reload_begin(t):
@@ -832,6 +878,14 @@ def reload_end(t):
                 kick=0.35 * math.sin(math.pi * span(t, 0.55, 0.8)))
 
 
+def hopper(t):
+    """A dry gun's first brick seated (CoopMechCannon's hopper: its rounds stripped into the gun with StormHopper's
+    whirr and clinks): the gun shivers along the forearm as the feed runs, the brick rattling on its seat; still at
+    the end (then ReloadBegin takes the empty brick off)."""
+    on = span(t, 0.05, 0.15) * (1 - span(t, 0.82, 0.95))
+    return dict(kick=0.05 * math.sin(2 * math.pi * 7 * t) * on, brick=(0.0, 0.0, 0.035 * math.sin(2 * math.pi * 11 * t) * on))
+
+
 # The sequences DeusExWeapon plays: (name, frames, rate, pose of t in 0-1).
 SEQS = [("Still", 1, 1, lambda t: {}),
         ("Select", 14, 20, draw),
@@ -840,7 +894,8 @@ SEQS = [("Still", 1, 1, lambda t: {}),
         ("Shoot", 4, 40, lambda t: dict(kick=0.5 * (1 - t), arm=(-0.6 * (1 - t), 0, 0, 1.5 * (1 - t), 0, 0))),
         ("ReloadBegin", 10, 16, reload_begin),
         ("Reload", 6, 8, lambda t: dict(arm=(0, 0, 0.1 * math.sin(2 * math.pi * t), -4, 0, -12), brick=OFF, lhand=OFF)),
-        ("ReloadEnd", 10, 16, reload_end)]
+        ("ReloadEnd", 10, 16, reload_end),
+        ("Hopper", 16, 16, hopper)]
 
 
 GAUNTLET_X = 0.85                     # the gauntlet's wrist joint (blade_arms: 12.6-13.9) onto the gun's pin (PIVOT)
@@ -855,7 +910,8 @@ def gauntlets():
     (group lhand: out of sight but for the reload). (vertices, groups, triangles, skins), wound as built."""
     import blade_arms, blade_view
     a = blade_arms.made()
-    A, _, tris, skins = blade_view.shared(a, drop=("blade", "housing", "portin"))   # (the hatch shut, flush)
+    A, _, tris, skins = blade_view.shared(a, drop=("blade", "housing", "portin") + blade_arms.UPPER_REGIONS)   # (the hatch shut, flush;
+                                                                    # the upper arm off: the gun's view poses the forearm alone)
     right = A + np.array([GAUNTLET_X, 0.0, 0.0])
     u = REACH / np.linalg.norm(REACH)
     w = np.array([0.0, 0, 1]) - u[2] * u

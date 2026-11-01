@@ -9,8 +9,14 @@ section with a point, comes out of the housing's mouth over the fist. One model;
 - Jensen   the Light Mech: Adam Jensen's black prosthetics (Mankind Divided), glossy, gold seams (Human Revolution)
 - Mech     the Mech: the nanosuit's gauntlets (the user's sheet), matte black hex armour, gunmetal plates, blue lights
 
-Frame: the right forearm's: x from the elbow (0) to past the fist, y to its left, z up (the back of the hand: palm
-down); game units (about 2 cm). The left arm is its mirror. tools/blade_view.py poses them in the view.
+Up to the shoulder (the user, 2026-10-30: "honestly just model up to the shoulder"): the upper arm, built straight
+back from the elbow (UPPER long, a little past the shoulder's joint so its end is always behind the eye), muscled as
+the forearm is (the deltoid over its top by the shoulder, the biceps inside, the triceps out), its own domed plates,
+a rounded elbow joint with a guard over it; group "upper", its own skin (sheet 2), posed by tools/blade_view.py's
+two-bone arm (the shoulder fixed by the eye, the elbow where the fist's place puts it).
+
+Frame: the right arm's, built straight: x from the elbow (0) to past the fist (the upper arm behind it, to -UPPER), y
+to its left, z up (the back of the hand: palm down); game units (about 2 cm). The left arm is its mirror.
 
   python -I tools/blade_arms.py preview [Mech|Jensen] [outdir]     (default build/mech/arms: skins, OBJ, a sheet)
 """
@@ -37,8 +43,14 @@ def axis_z(x):
 
 
 BLADE = dict(x1=29.0, tip=2.8, half=0.42, thick=0.11, z=axis_z(MOUTH))
-SHEETS = {"core": 0, "plate": 0, "rim": 0, "housing": 0, "port": 0, "portin": 0, "joint": 0, "slot": 0}   # else 1
-SMOOTH = ("core", "plate", "housing", "port", "joint", "hand", "finger", "hinge")   # shaded round in the game
+UPPER = 15.0                                    # the upper arm: elbow to shoulder joint
+UPPER_PAST = 2.5                                # how far it runs on past the shoulder's joint (its end behind the eye)
+SHEETS = {"core": 0, "plate": 0, "rim": 0, "housing": 0, "port": 0, "portin": 0, "joint": 0, "slot": 0,
+          "ucore": 2, "uplate": 2, "urim": 2, "ujoint": 2, "uslot": 2}   # else 1
+SMOOTH = ("core", "plate", "housing", "port", "joint", "hand", "finger", "hinge", "ucore", "uplate", "urim", "ujoint")   # shaded round
+                                                # (the upper arm's rims too, and its plates coarser: both arms in one
+                                                # view mesh keep under its 8191 vertices)
+UPPER_REGIONS = ("ucore", "uplate", "urim", "ujoint", "uslot")      # painted as core, plate, rim, joint, slot
 
 
 def unit(v):
@@ -116,7 +128,13 @@ def ang(t):
 
 
 def radii(x):
-    """The forearm's (ry, rz) along it: broad by the elbow, slimmer and flatter to the wrist."""
+    """The forearm's (ry, rz) along it: broad by the elbow, slimmer and flatter to the wrist; behind the elbow, the
+    upper arm's (x < 0): fuller to the shoulder, round."""
+    if x < 0:
+        xs = [-UPPER - UPPER_PAST, -UPPER, -12.0, -8.0, -4.0, -1.5, 0.0]
+        ry = [2.35, 2.6, 2.55, 2.38, 2.2, 2.02, 1.95]
+        rz = [2.3, 2.5, 2.42, 2.26, 2.08, 1.92, 1.85]
+        return float(np.interp(x, xs, ry)), float(np.interp(x, xs, rz))
     xs = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 11.5, WRIST]
     ry = [2.0, 2.12, 2.08, 1.95, 1.8, 1.66, 1.57, 1.5]
     rz = [1.82, 1.92, 1.86, 1.72, 1.56, 1.41, 1.31, 1.24]
@@ -128,6 +146,11 @@ def surface(x, th):
     the muscles, the extensors over the top toward the thumb's side and the flexors underneath, both strongest near
     the elbow and gone by the wrist."""
     ry, rz = radii(x)
+    if x < 0:       # the upper arm: the deltoid over the top by the shoulder, the biceps inside (+y), the triceps out
+        m = 1 + 0.1 * math.exp(-((x + UPPER - 1.0) / 3.0) ** 2) * math.exp(-(ang(th - 1.6) / 1.2) ** 2) \
+              + 0.1 * math.exp(-((x + 6.5) / 3.6) ** 2) * math.exp(-(ang(th - 0.2) / 0.8) ** 2) \
+              + 0.08 * math.exp(-((x + 8.0) / 4.0) ** 2) * math.exp(-(ang(th - math.pi) / 0.9) ** 2)
+        return np.array([x, ry * m * math.cos(th), rz * m * math.sin(th)])
     m = 1 + 0.11 * math.exp(-((x - 3.2) / 3.2) ** 2) * math.exp(-(ang(th - 1.3) / 0.75) ** 2) \
           + 0.09 * math.exp(-((x - 4.2) / 3.6) ** 2) * math.exp(-(ang(th - 4.55) / 0.9) ** 2)
     return np.array([x, ry * m * math.cos(th), rz * m * math.sin(th)])
@@ -154,7 +177,7 @@ def hinge():
 PLATES = []                                     # the armour's shells: (x0, x1, centre angle, half width at 0 and 1, scallop)
 
 
-def shell(p, x0, x1, thc, half0, half1, thick, scallop=0.35, nx=10, na=8):
+def shell(p, x0, x1, thc, half0, half1, thick, scallop=0.35, nx=10, na=8, regions=("plate", "rim")):
     """A domed plate over the forearm's skin, shaped as a sheath over the muscle: from x0 to x1, centred at angle thc,
     half0 to half1 radians wide, its ends arched (the leading edge, toward the wrist, a point), its edges a lip of a
     third of its thickness; recorded in PLATES for the paint."""
@@ -175,7 +198,7 @@ def shell(p, x0, x1, thc, half0, half1, thick, scallop=0.35, nx=10, na=8):
         for j in range(na):
             q = [G[i][j], G[i][j + 1], G[i + 1][j + 1], G[i + 1][j]]
             m = np.mean(q, 0)
-            face(p, q, m - np.array([m[0], 0, 0]), "plate")
+            face(p, q, m - np.array([m[0], 0, 0]), regions[0])
     edges = [(G[i][0], G[i + 1][0], B[i + 1][0], B[i][0]) for i in range(nx)] \
         + [(G[i][na], G[i + 1][na], B[i + 1][na], B[i][na]) for i in range(nx)] \
         + [(G[0][j], G[0][j + 1], B[0][j + 1], B[0][j]) for j in range(na)] \
@@ -183,7 +206,7 @@ def shell(p, x0, x1, thc, half0, half1, thick, scallop=0.35, nx=10, na=8):
     centre = at(0.5, 0.0, 0.5)
     for q in edges:
         m = np.mean(q, 0)
-        face(p, list(q), m - centre, "rim")
+        face(p, list(q), m - centre, regions[1])
 
 
 def build():
@@ -202,6 +225,19 @@ def build():
     for side in (1, -1):    # toward the wrist: two side plates along the channel the hatch lies in and the housing runs out
         shell(p, 6.05, 12.55, math.pi / 2 + side * (CHANNEL + 0.31), 0.31, 0.29, 0.17, scallop=0.2)
     shell(p, 1.6, 11.7, 4.62, 0.78, 0.42, 0.14, scallop=0.5, nx=12)
+    tag(p, "arm")
+    # Up to the shoulder: the upper arm (its end a little past the shoulder's joint), plates over the deltoid, the
+    # triceps (out) and the biceps (in), a narrow one along its top; the elbow joint, round, under a guard.
+    up = dict(regions=("uplate", "urim"), nx=6, na=6)
+    loft(p, [np.array([surface(x, t) for t in th]) for x in np.linspace(-UPPER - UPPER_PAST, -0.4, 9)], "ucore", ("uslot", "uslot"))
+    shell(p, -UPPER - UPPER_PAST + 0.2, -UPPER + 3.4, 1.6, 1.25, 1.1, 0.24, **up)
+    shell(p, -UPPER + 2.6, -2.2, math.pi, 0.95, 0.8, 0.2, scallop=0.4, **up)
+    shell(p, -UPPER + 3.2, -2.6, 0.15, 0.7, 0.62, 0.16, scallop=0.45, **up)
+    shell(p, -UPPER + 3.0, -2.4, 1.62, 0.3, 0.26, 0.15, scallop=0.25, **up)
+    loft(p, [ring(x, r, r * 0.97) for x, r in ((-2.25, 1.55), (-1.75, 2.0), (-0.9, 2.22), (0.0, 2.27), (0.9, 2.2),
+                                                (1.6, 1.98), (2.05, 1.62))], "ujoint", ("ujoint", "ujoint"))
+    shell(p, -2.1, 1.4, math.pi, 0.7, 0.55, 0.3, scallop=0.5, **up)      # the elbow's guard, over its point
+    tag(p, "upper")
     # The wrist's collar: rounded, low on top (the housing passes over it).
     loft(p, [ring(x, ry, rz) for x, ry, rz in ((12.45, 1.46, 1.22), (12.75, 1.57, 1.27), (13.05, 1.63, 1.31),
                                                 (13.45, 1.61, 1.3), (13.8, 1.52, 1.25), (13.98, 1.44, 1.2))], "joint")
@@ -272,9 +308,12 @@ def build():
         for j in range(len(ys) - 1):
             face(p, [G[i][j], G[i][j + 1], back(xs[i], ys[j + 1], 0.0), back(xs[i], ys[j], 0.0)],
                  np.array([1.0 if i else -1.0, 0, 0]), "rim")
+    tag(p, "arm")
     # The fingers, curled under (index .. little), each three tapered segments, a metal collar at each joint; the thumb
-    # across them.
-    for y, fwd in ((1.55, 0.0), (0.53, 0.15), (-0.5, 0.05), (-1.48, -0.3)):
+    # across them. Each segment its own group (f<k>a/b/c: from the knuckle; the collar at a joint goes with the segment
+    # after it), the joints kept (p.fingers, p.thumb): tools/blade_view.py curls them (an idle's flexing fingers).
+    p.fingers = []
+    for f, (y, fwd) in enumerate(((1.55, 0.0), (0.53, 0.15), (-0.5, 0.05), (-1.48, -0.3))):
         s = 0.9 if y < -1 else 1.0
         J = [np.array(j) for j in ((16.7 + fwd, y, 0.35), (17.55 + fwd, y, 0.25), (17.72 + fwd, y, -1.05),
                                    (16.55 + fwd, y, -1.42))]
@@ -282,16 +321,20 @@ def build():
         for k in range(3):
             capsule(p, J[k], J[k + 1], R[k] * 0.97, R[k + 1] * 0.97, "finger", n=8, up=(0, 1, 0),
                     rounds=(k == 0, k == 2))
-        for k in (1, 2):
-            d = unit(J[k + 1] - J[k - 1])
-            capsule(p, J[k] - d * 0.09, J[k] + d * 0.09, R[k] * 1.08, R[k] * 1.08, "hinge", n=8, up=(0, 1, 0),
-                    rounds=(False, False))
+            if k > 0:
+                d = unit(J[k + 1] - J[k - 1])
+                capsule(p, J[k] - d * 0.09, J[k] + d * 0.09, R[k] * 1.08, R[k] * 1.08, "hinge", n=8, up=(0, 1, 0),
+                        rounds=(False, False))
+            tag(p, "f%d%s" % (f, "abc"[k]))
+        p.fingers.append(J)
     T = [np.array(t) for t in ((14.6, 2.0, -0.45), (16.75, 2.16, -1.18), (18.1, 0.62, -1.5))]
     capsule(p, T[0], T[1], 0.5, 0.45, "finger", n=8, up=(0, 0, 1), rounds=(True, False))
+    tag(p, "ta")
     capsule(p, T[1], T[2], 0.44, 0.36, "finger", n=8, up=(0, 0, 1), rounds=(False, True))
     d = unit(T[2] - T[0])
     capsule(p, T[1] - d * 0.1, T[1] + d * 0.1, 0.5, 0.5, "hinge", n=8, up=(0, 0, 1), rounds=(False, False))
-    tag(p, "arm")
+    tag(p, "tb")
+    p.thumb = T
     # The blade: a flat diamond (its flats up and down, an edge each side), out of the mouth along the housing's line,
     # a point.
     b = BLADE
@@ -314,10 +357,11 @@ def tag(p, group):
 
 
 def layout(p):
-    """Each face its cell in its skin's 256-unit UV square: two skins (the forearm; the hand and the blade)."""
+    """Each face its cell in its skin's 256-unit UV square: three skins (the forearm; the hand and the blade; the upper
+    arm and the elbow)."""
     p.cells = [None] * len(p.faces)
     p.sheets = [SHEETS.get(r, 1) for _, r in p.faces]
-    for sheet in (0, 1):
+    for sheet in (0, 1, 2):
         own = [k for k in range(len(p.faces)) if p.sheets[k] == sheet]
         density = 60.0
         while True:
@@ -364,6 +408,8 @@ def paint(cls, region, pos, n, ao, edge, mats):
     """(points (k, 3), the face's normal, occlusion (k,), distance to the face's edge (k,)) -> colours (k, 3)."""
     k = len(pos)
     nn = np.repeat(n[None], k, 0)
+    if region in UPPER_REGIONS:
+        region = region[1:]
     if region == "rim":
         region = "plate"
         rim = True
@@ -524,7 +570,7 @@ def main():
         os.makedirs(out, exist_ok=True)
         p = made()
         texs = []
-        for s in (0, 1):
+        for s in (0, 1, 2):
             name = "%sArm%d.png" % (cls, s + 1)
             bake(p, cls, s, os.path.join(out, name))
             texs.append(name)

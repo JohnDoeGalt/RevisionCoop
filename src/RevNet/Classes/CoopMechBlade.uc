@@ -4,8 +4,11 @@
 // The Mech's arm blades (CoopMechPlayer; the Light Mech's too): heavy, fast melee
 // built into the arm. Its owner sees its blade arms, the blades sliding out of their
 // housings (RevNetMech: tools/blade_arms.py, tools/blade_view.py; by its class, the Mech's
-// armoured gauntlets or the Light Mech's Jensen prosthetics), three cuts; without it the
-// combat knife's model in a mechanical hand. Part of the body, never left lying about.
+// armoured gauntlets or the Light Mech's Jensen prosthetics), three punches; without it the
+// combat knife's model in a mechanical hand. Two modes on the ammo key (the user, 2026-10-30):
+// tendon, the blades out only as far as the arm is, hitting twice as hard (the arm's and the
+// blade's drive at once); out all the way, a guard: melee hurts its owner a quarter as much
+// (CoopMechPlayer.TakeDamage). Part of the body, never left lying about.
 //=============================================================================
 class CoopMechBlade extends WeaponCombatKnife;
 
@@ -17,6 +20,18 @@ class CoopMechBlade extends WeaponCombatKnife;
 var Texture MechHandTex;
 var Mesh BladeView;             // its owner's view of its blade arms
 var int Cuts;                   // cuts it has made (its view model's notify: CoopTestMechLook)
+var travel byte Mode;           // 0: tendon (out as far as the arm is: <cls>BladeView), 1: out all the way, a guard (<cls>BladeViewA)
+var float TendonMult;           // the tendon's hits, so much harder
+var float GuardMult;            // melee its owner takes in the guard, of what it would (CoopMechPlayer.TakeDamage)
+var float NextSwitch;           // (host) the next switch, once the blades have run
+var bool bSwapView;             // (its owner's machine) its view to the mode's once the blades have run (Tick)
+var localized string ModeText[2];
+
+replication
+{
+	reliable if ( Role==ROLE_Authority )
+		ClientBladeMode;
+}
 
 function texture GetWeaponHandTex()
 {
@@ -40,6 +55,8 @@ simulated function ProcessTraceHit( Actor Other, Vector HitLocation, Vector HitN
 			Mult = 10;
 		else if ( DeusExMover(Other)!=None )
 			Mult = CoopMechPlayer(Owner).BladeDoorMult();
+		if ( Mode==0 && DeusExMover(Other)==None )
+			Mult *= TendonMult;         // (the tendon's: the arm's drive and the blade's at once)
 	}
 	Damage = HitDamage;
 	HitDamage = int(HitDamage * Mult);
@@ -60,7 +77,10 @@ simulated function bool OwnView()
 	Who = "Mech";
 	if ( CoopLightMechPlayer(Owner)!=None )
 		Who = "Jensen";
-	BladeView = Mesh( DynamicLoadObject( "RevNetMech." $ Who $ "BladeView", class'Mesh', true ) );
+	if ( Mode==1 )
+		BladeView = Mesh( DynamicLoadObject( "RevNetMech." $ Who $ "BladeViewA", class'Mesh', true ) );
+	if ( BladeView==None )
+		BladeView = Mesh( DynamicLoadObject( "RevNetMech." $ Who $ "BladeView", class'Mesh', true ) );
 	if ( BladeView==None )
 		return false;
 	PlayerViewMesh = BladeView;
@@ -76,6 +96,76 @@ simulated function UseOwnView()
 		Mesh = BladeView;
 		DrawScale = PlayerViewScale;
 	}
+}
+
+// Its hands never quite still (the user, 2026-10-30: "not 100% static"): an idle whenever nothing else plays on its
+// own view (the stock weapon plays one now and then); each starts and ends in the guard, so they follow on.
+simulated function PlayIdleAnim()
+{
+	local float r;
+
+	if ( Mesh!=BladeView || BladeView==None )
+	{
+		Super.PlayIdleAnim();
+		return;
+	}
+	if ( bNearWall || IsAnimating() )
+		return;
+	r = FRand();
+	if ( r<0.4 )
+		PlayAnim( 'Idle1',, 0.2 );
+	else if ( r<0.7 )
+		PlayAnim( 'Idle2',, 0.2 );
+	else
+		PlayAnim( 'Idle3',, 0.2 );
+}
+
+simulated function Tick( float DeltaTime )
+{
+	Super.Tick( DeltaTime );
+	if ( bSwapView && !IsAnimating() )
+	{
+		bSwapView = false;          // the blades have run: the mode's own view
+		BladeView = None;
+		UseOwnView();
+	}
+	if ( Mesh==BladeView && BladeView!=None && !IsAnimating() && (IsInState( 'Idle' ) || IsInState( 'SimIdle' )) )
+		PlayIdleAnim();
+}
+
+// The ammo key (CoopPlayerCore.SwitchAmmo): the other mode, while it is held and still.
+function CycleMode()
+{
+	if ( !IsInState( 'Idle' ) || Level.TimeSeconds<NextSwitch )
+		return;
+	NextSwitch = Level.TimeSeconds + 0.45;
+	Mode = 1 - Mode;
+	ClientBladeMode( Mode );
+	if ( Owner!=None )
+	{
+		if ( Mode==1 )
+			Owner.PlaySound( Sound'BladeOut', SLOT_None, 0.8,, 1024 );
+		else
+			Owner.PlaySound( Sound'BladeIn', SLOT_None, 0.8,, 1024 );
+		if ( Pawn(Owner)!=None )
+			Pawn(Owner).ClientMessage( ModeText[Mode] );
+	}
+}
+
+// On its owner's machine: the blades run out to full or back (ToFull, ToTendon), then its view is the mode's.
+simulated function ClientBladeMode( byte M )
+{
+	Mode = M;
+	if ( BladeView!=None && Mesh==BladeView )
+	{
+		if ( M==1 )
+			PlayAnim( 'ToFull',, 0.05 );
+		else
+			PlayAnim( 'ToTendon',, 0.05 );
+		bSwapView = true;
+	}
+	else
+		BladeView = None;           // (the mode's, next drawn)
 }
 
 // Drawn (its sequences are its own: the slide out plays from the start).
@@ -142,6 +232,10 @@ function DropFrom( vector StartLocation )
 defaultproperties
 {
 	MechHandTex=Texture'DeusExCharacters.Skins.MilitaryBotTex1'
+	TendonMult=2.0
+	GuardMult=0.25
+	ModeText(0)="Arm Blades: tendon. Out as far as the arm is, hitting twice as hard."
+	ModeText(1)="Arm Blades: out. A guard: melee hurts a quarter as much."
 	HitDamage=16
 	SelectSound=Sound'BladeOut'
 	FireSound=Sound'BladeSwing'
@@ -149,5 +243,6 @@ defaultproperties
 	ItemName="Arm Blades"
 	ItemArticle="the"
 	beltDescription="BLADES"
-	Description="Blades of hardened alloy folded into both forearms, driven by the arm's own hydraulics. Crude, loud and very effective."
+	Description="Blades of hardened alloy folded into both forearms, driven by the arm's own hydraulics. The ammo key switches them: tendon, out only as far as the arm is, the blade's drive on top of the arm's (twice the damage); or out all the way, a guard (melee does a quarter of its damage)."
+
 }

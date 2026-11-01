@@ -71,8 +71,10 @@ def main(version):
     for m in make_net_ini.MODES:
         write(os.path.join(net, 'Modes', m + '.mode'), make_net_ini.mode_file(rev_ini, m))
     user = open(os.path.join(REV, 'System', 'RevisionDefUser.ini'), encoding='latin1').read().splitlines()
+    # (the FPV Drones key also holds bExtra3 down: held, it flies a drone by hand, CoopDroneKey)
     write(os.path.join(net, 'RevNetDefUser.ini'),
-          '\n'.join('NetSpeed=20000' if l.startswith('NetSpeed=') else l for l in user) + '\n')
+          '\n'.join('NetSpeed=20000' if l.startswith('NetSpeed=') else
+                    l + '|Button bExtra3' if l.endswith('=ActivateAugmentation 4') else l for l in user) + '\n')
 
     relay = os.path.join(pay, 'Relay')
     shutil.copy(os.path.join(here, 'src', 'relay', 'RevCoop.exe'), relay)

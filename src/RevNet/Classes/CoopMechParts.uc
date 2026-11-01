@@ -3,8 +3,10 @@
 //
 // The Mech's own parts (RevNetMech, docs/MECH_CLASS.md phase 3) drawn over its body:
 // BarrettParts always (shoulder plates, vest, steel jaw, forearm housings that end at the
-// wrists); BarrettCannon while it holds its arm cannon (BarrettCannonBack, the same gun behind
-// its shoulder blade, while it doesn't: bUnless), BarrettBlade while it holds its arm blades (When);
+// wrists); the arm cannon, behind its collarbone while it isn't in hand (BarrettCannonBack), slid
+// down and round its right arm onto the forearm as it is drawn (BarrettCannon1-4) and back up as it is
+// put away (Path, MountPath: the user, 2026-10-30, "animate it when it gets equipped... so other
+// players can see"), BarrettCannon in hand; BarrettBlade while it holds its arm blades (When);
 // the blades slide out of the forearms as they are drawn and back in as they are put away
 // (Stages). A parts mesh has the body's animations frame for frame (its vertices ride the
 // body's: tools/mech_parts.py), so the parts follow the body by copying its animation every
@@ -24,8 +26,10 @@ var Texture Skins[8];       // (the always-drawn parts) the body's own skins, pu
                             // host's can't reach clients (RevNetMech, each PC's own, isn't sent)
 var Mesh Full, Stages[2];   // (the blades) out, and in steps out of the forearms (<name>1, <name>2:
                             // tools/blade_view.py STAGES)
-var float Out;              // how far out they are (0 in the forearms, 1 out)
+var float Out;              // how far out they are (0 in the forearms, 1 out); the cannon: how far drawn
 var float OutTime, InTime;  // seconds to slide out, back in
+var Mesh Path[8];           // (the cannon) along its draw: stowed first, in hand last
+var int Ways;
 
 static function CoopMechParts Mount( Actor Body, Mesh Fits, string MeshName, optional class<Weapon> When, optional bool bUnless )
 {
@@ -58,6 +62,36 @@ static function CoopMechParts Mount( Actor Body, Mesh Fits, string MeshName, opt
 	return P;
 }
 
+// A part drawn from where it is stowed (Stowed) through Steps steps (<MeshName>1, 2...) to in hand (MeshName)
+// as When is drawn (over DrawTime), back as it is put away (AwayTime). A step missing (an older RevNetMech): left out.
+static function CoopMechParts MountPath( Actor Body, Mesh Fits, string MeshName, string Stowed, class<Weapon> When,
+	int Steps, float DrawTime, float AwayTime )
+{
+	local CoopMechParts P;
+	local Mesh M;
+	local int i;
+
+	P = Mount( Body, Fits, MeshName, When );
+	if ( P==None )
+		return None;
+	P.Stages[0] = None;
+	P.Stages[1] = None;
+	for ( i=0; i<=Steps && P.Ways<ArrayCount(P.Path) - 1; i++ )
+	{
+		if ( i==0 )
+			M = Mesh( DynamicLoadObject( "RevNetMech." $ Stowed, class'Mesh', true ) );
+		else
+			M = Mesh( DynamicLoadObject( "RevNetMech." $ MeshName $ i, class'Mesh', true ) );
+		if ( M!=None )
+			P.Path[P.Ways++] = M;
+	}
+	P.Path[P.Ways++] = P.Full;
+	P.OutTime = DrawTime;
+	P.InTime = AwayTime;
+	P.Follow();
+	return P;
+}
+
 simulated function Tick( float DeltaTime )
 {
 	if ( Body==None || Body.bDeleteMe )
@@ -65,7 +99,7 @@ simulated function Tick( float DeltaTime )
 		Destroy();
 		return;
 	}
-	if ( Stages[1]!=None )
+	if ( Stages[1]!=None || Ways>0 )
 	{
 		if ( Held() )
 			Out = FMin( 1.0, Out + DeltaTime / OutTime );
@@ -114,14 +148,21 @@ simulated function Follow()
 	ScaleGlow = Body.ScaleGlow;
 	AmbientGlow = Body.AmbientGlow;
 	// Off while it doesn't hold When (or does: bUnless); blades in steps: while any of them is out.
-	if ( When!=None && !bShow )
+	if ( When!=None && !bShow && Ways==0 )
 	{
 		if ( Stages[1]!=None )
 			bOff = Out<=0;
 		else
 			bOff = bUnless == Held();
 	}
-	if ( Stages[1]!=None )
+	if ( Ways>0 )           // the cannon: where it is along its draw, always drawn
+	{
+		if ( bShow )
+			Mesh = Full;
+		else
+			Mesh = Path[Clamp( int(Out * (Ways - 1) + 0.5), 0, Ways - 1 )];
+	}
+	else if ( Stages[1]!=None )
 	{
 		if ( bShow || Out>=0.75 )
 			Mesh = Full;

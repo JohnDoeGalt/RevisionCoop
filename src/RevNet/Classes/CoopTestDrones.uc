@@ -55,6 +55,7 @@ function LookAt( Actor A, optional int YawOff )
 function SetLevel( int L )
 {
 	Drones.bHasIt = true;
+	Drones.HotKeyNum = Drones.Key;      // (its F-key, as bought: ServerUpgradeModule)
 	Drones.CurrentLevel = L;
 	Drones.ReadyAt = 0;
 	Mech.RefreshModules();

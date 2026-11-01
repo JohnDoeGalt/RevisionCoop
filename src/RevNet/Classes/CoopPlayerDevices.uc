@@ -271,10 +271,10 @@ function ServerDoor( ComputerSecurity C, name DoorTag, bool bOpen )
 // ComputerScreenATMWithdraw.WithdrawCredits (the screen changed the copies there).
 function ServerWithdraw( ATM M, int UserIndex, int Amount, bool bDry )
 {
-	if ( M==None || Amount<=0 || VSize(M.Location - Location)>400 )
+	if ( M==None || Amount<=0 || VSize(M.Location - Location)>400 || UserIndex<-1 || UserIndex>=M.NumUsers() )
 		return;
-	if ( UserIndex>=0 )
-		Amount = Min( Amount, M.GetBalance( UserIndex, 1.0 ) );
+	// (-1: hacked, every account's: never more than there is.)
+	Amount = Min( Amount, M.GetBalance( UserIndex, 1.0 ) );
 	M.ModBalance( UserIndex, Amount, True );
 	Credits += Amount;
 	if ( bCustomDifficulty )

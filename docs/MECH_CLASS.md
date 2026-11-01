@@ -92,11 +92,13 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
 - **Collision:** JC's.
 - **First person, the arm cannon:** `StormView` (`tools/mech_storm.py`: the gun, and the Mech's
   own armoured gauntlets from `tools/blade_arms.py` in the Mech's paint, the blades' arms
-  without blade and housing). The gun rides the right gauntlet, its yoke on the wrist joint; the
+  without blade and housing). The gun rides the right gauntlet 3 cm back off the wrist joint (its muzzle about over the knuckles), seated in a low saddle shaped to the forearm (no clamp: the pin it spins about is inside the arm); the
   arm is held as a shooter's gun is, low on the right and seen three-quarters from its left
   (`BASE`), so its side shows (the hazard mark, the chevrons, the light strip, the brick's band and
   round counter) with the fist under its muzzle end. Drawn, it slides from behind the shoulder
-  down the back of the arm and spins over the hand like a flipped revolver; reloading, the left
+  down the back of the arm under the forearm, upside down, and rolls round the outside of the
+  forearm onto its top (`mech_storm.rolled`: the user, 2026-10-29, "rotate around the outside of the
+  forearm" rather than flip over the hand); reloading, the left
   gauntlet comes up from the lower left, pulls the brick magazine off its back and puts a new one
   on; with the brick off, the nine barrels' ends stand out of the block's back, a round's brass base
   in each (`BREECH`: the user saw a flat face there, the brick feeding "empty space"). (First it was seen from just behind and above, the brick's back filling the view, over the
@@ -112,12 +114,18 @@ replacing. A Mech player is another unit of that kind, not Gunther or Anna thems
   housing's mouth over the fist; painted per class from the 3D surface (the Mech: gunmetal plates,
   matte black hex, a blue light; the Light Mech: Jensen's glossy black, gold seams), its curved
   shells lit as curves (flat facets had each caught the gloss whole). `MechBladeView` (ours, kept
-  whole) holds both arms, the left the right's mirror. The right leads from the lower right, its
+  whole) holds both arms up to the shoulder (the user, 2026-10-30: "add elbows and the arm below the
+  shoulder... just model up to the shoulder": the upper arm, its plates, the elbow joint and its guard
+  in `blade_arms`, a third skin, `<cls>Arm3`), posed as two-bone arms (`blade_view.solve`: the shoulder's
+  joint by the eye, the elbow where the wrist's place puts it), the left the right's mirror; the upper
+  arms coarser so both stay under the mesh's 8191 vertices. The right leads from the lower right, its
   blade toward the middle; the left waits lower in its corner. Drawn, both come up and the blades
-  slide out of the housings, a little past and home (a jolt); three cuts as the knife's code
-  picks them (`Attack`: a slash from the right, `Attack2` from the left, `Attack3` a thrust with
-  both), each lasting as the knife's does with its `HandToHandAttack` notify at the middle, when
-  the cut lands; put away, the blades slide back in and the arms drop. The view is picked by the owner's class (`OwnView`: the Light
+  slide out of the housings, a little past and home (a jolt); three punches as the knife's
+  code picks them, the blade leading point first at the crosshair (the user: "punching animations
+  instead of the swipes": `Attack` a straight right, `Attack2` a straight left, `Attack3` a cross, the rear hand thrown with the body's whole turn for the long reach; never both at once;
+  from a low guard, the fists turned 45 degrees, palms in and down),
+  each lasting as the knife's does with its `HandToHandAttack` notify at the middle, when the
+  punch lands; put away, the blades slide back in and the arms drop. The view is picked by the owner's class (`OwnView`: the Light
   Mech's is Jensen's) when the blades are brought up and again where they are drawn (they are
   made without an owner). Without `RevNetMech.u` the combat knife's, in the military bot's
   plating (`GetWeaponHandTex`). Other weapons the Mech picks up show JC's hands.
@@ -160,6 +168,16 @@ Given at every login and load if missing (`GiveArsenal`), on belt slots 1 and 2,
 dropped (`DropItem`, `DropFrom`); saved as weapons (`W` lines) like any other; a nano player
 loading a Mech's record doesn't get them.
 
+- **Arm Blades' two modes** (the user, 2026-10-30), on the ammo key (`CoopPlayerCore.SwitchAmmo`,
+  `CoopMechBlade.CycleMode`, kept over travel): **tendon** (at rest the housing out over the hand, the
+  blade all inside it; a punch draws the housing back, runs it out, then fires the blade, all the way at
+  the impact, and back in: `blade_view.punch`, `blade_view.tendon` none at the guard's reach; `<cls>BladeView`) hits
+  twice as hard (`TendonMult`: the blade's drive on top of the arm's); **out all the way** (`<cls>BladeViewA`)
+  is a guard: a melee hit on the Mech (its weapon a hand-to-hand one) does a quarter (`GuardMult`,
+  `CoopMechPlayer.TakeDamage`). Switching, the blades run out or back (`ToFull`, `ToTendon`) and the owner's
+  view is the mode's. The hands are never still (`CoopMechBlade.PlayIdleAnim`, `Tick`): three 3 s idles
+  (breathing with the hand opening a little and closing, a flex, a shake-out; the blades held still in
+  them: the fingers jointed in `blade_arms`, curled in `blade_view.gripped`).
 - **Arm Blades** (`CoopMechBlade`, a combat knife underneath): 16 damage a cut at level 1, up
   to 34; from level 3 a character that has noticed nobody (`Enemy==None`) dies in one cut;
   Servo Arms multiply its damage against doors. Low-Tech skill applies. Its own sounds
@@ -178,7 +196,15 @@ loading a Mech's record doesn't get them.
   behind the right shoulder blade. It sits low, its underside on the back of the hand and a short post
   down to the wrist's pin (less leverage in the recoil: the user's ask); level when aimed, seated on
   the arm as low as it goes and sinking a little into the fist (the arm points up as he shoots). 7.62 mm rounds, the assault rifle's ammo;
-  Heavy Weapons skill; 5 damage and a 40-round magazine at level 1, up to 9 and 80. Three fire
+  Heavy Weapons skill; 5 damage and a 40-round brick at level 1, up to 9 and 80. **The hopper** (the
+  user's, after Helldivers 2's autocannon: "half the ammo is internal and the other half is external"):
+  the gun holds a brick's worth of its own as well (`CoopMechCannon.Hopper`, `SetBrick`: twice a brick
+  loaded), the brick firing first; a reload with rounds left swaps the brick and the hopper keeps what it
+  has (a lossy reload drops the old brick's rounds only); run dry (auto-reload too) the long reload:
+  the brick off, a new one on, its rounds stripped into the hopper (`Hopper` in `StormView`: the gun
+  shivers, the brick rattles; `StormHopper`: a geared whirr under real metal clicks, faster as they go, a
+  clunk), off, a new one on: twice a brick. For a client its machine plays it (`SimReload`, told by
+  `ClientHopper`) and the host waits it out. Three fire
   modes on the ammo key (`CoopMechCannon.CycleMode`, `CoopPlayerCore.SwitchAmmo`; kept over travel):
   full auto (10 rounds a second, a third of the gun's recoil: the user found it kicking hardest of the
   three); Storm, at a minigun's rate (0.03 s a round, 0.6 of the damage,
@@ -195,7 +221,7 @@ loading a Mech's record doesn't get them.
   pitched down for weight; "crunchy and mechanical", "clunky and chunky"); the swap in two halves
   on its animation, the brick dragged off with ReloadBegin (`CockingSound`) and the new one slammed
   home with ReloadEnd (`AltFireSound`), 2 s apart (one sound for the whole reload ran ahead of the
-  hand). Putting it away, a dry click and the mode switch's chirp are synthesized
+  hand); the hopper's whirr and clicks with `Hopper`. Putting it away, a dry click and the mode switch's chirp are synthesized
   (`tools/storm_sounds.py`).
 
 ## The trees
@@ -218,9 +244,9 @@ canister is worth more to a nano teammate. Not yet: salvage from turrets and cam
 | Tree | Module | Start | Key | Levels (salvage: 4/6/8 for a starter's levels 2-4; 6/6/8/10 to buy and raise the others) |
 |---|---|---|---|---|
 | Arsenal | Arm Blades | L1 | | 16 / 22 / 28 / 34 damage; from L3 an unaware target dies in one cut |
-| Arsenal | Arm Cannon | L1 | | 5 / 6 / 7 / 9 damage (with the host's battle rifle setting, on by default: 18 / 22 / 25 / 32, a rifle round at level 1; the Mech screen shows the damage as fired, `CoopMechAugCannon.LevelInfo`); 40 / 50 / 60 / 80 rounds |
+| Arsenal | Arm Cannon | L1 | | 5 / 6 / 7 / 9 damage (with the host's battle rifle setting, on by default: 18 / 22 / 25 / 32, a rifle round at level 1; the Mech screen shows the damage as fired, `CoopMechAugCannon.LevelInfo`); 40 / 50 / 60 / 80-round bricks, as many again in its hopper |
 | Arsenal | Active Protection (was Shrapnel Burst; class `CoopMechAugBurst`, so saves keep it) | needs Arm Blades 2 | F5 (on/off) | while on: a 20 mm charge at any rocket or grenade coming in (hostile, explosive, in sight: found as `AugDefense` does) within 30 / 35 / 40 / 45 feet, set off where it is when the Mech is out of reach of its blast, else shredded without it; and a blast in a 30-degree cone at the nearest hostile within 12 / 14 / 16 / 18 feet: 40 / 60 / 80 / 100 damage to hostile characters and things in the cone (never players or non-hostile characters); one 20 mm round (the assault rifle's grenades) a shot, no energy; reloads in 3 / 2.5 / 2 / 1.5 s |
-| Arsenal | FPV Drones (`CoopMechAugDrones`) | needs Arm Cannon 2 | F7 | small explosive drones from the Mech's back, 12 energy each, the next built in 6 / 5 / 4 s. L1: one the player flies and sees through (the Spy Drone's view, the Mech standing still meanwhile; `CoopFPV`): it flies flat out (1100) the way the player looks, is armed after 0.15 s and goes off on a character, a thing or a wall, on the fire button, when shot, or after 25 s; F7 again calls it back; 120 damage within 14 feet. L2 aim and launch: straight to what is under the crosshair (`CoopFPVGuided`), 130. L3 lock and launch: locks on the hostile nearest the crosshair (within 20 degrees and 200 feet) and chases it, 140. L4: a swarm of four (36 energy, the next swarm in 24 s) hovers over the shoulders for 90 s; each F7 sends one at the hostile nearest the crosshair (else where it points), 140 each |
+| Arsenal | FPV Drones (`CoopMechAugDrones`) | needs Arm Cannon 2 | F7 | small explosive drones from the Mech's back, 12 energy each, the next built in 6 / 5 / 4 s. L1: one the player flies and sees through (the Spy Drone's view, the Mech standing still meanwhile; `CoopFPV`): it flies flat out the way the player looks at its speed, is armed after 0.15 s and goes off on a character, a thing or a wall, on the fire button, when shot, or after 25 s; F7 again calls it back; 120 damage within 14 feet. L2 aim and launch: straight to what is under the crosshair (`CoopFPVGuided`), 130. L3 lock and launch: locks on the hostile nearest the crosshair (within 20 degrees and 200 feet) and chases it, 140. L4: a swarm of four (36 energy, the next swarm in 24 s) hovers over the shoulders for 90 s; each F7 sends one at the hostile nearest the crosshair that no other is after (else where it points), 140 each. **F7 held** (0.35 s; `CoopDroneKey`: the key's binding holds `bExtra3` down with it, added by the installer; `FlyDrone` does the same from a key of its own) flies one by hand at any level, with the level's damage (the user: "hold the key to go into fly mode manually"); at L4 it is the swarm's lead (`CoopFPV.bLead`; 12 energy, the swarm launched with it for 36 more when none is up): it goes as the movement keys say, up to its speed (forward the way it looks, strafe, jump up, crouch down), hovers when none are down, slides along walls, 60 s battery; the swarm flies in a wedge ahead and below it where its pilot sees them (back round the Mech if it is lost); fire sends them one at a time from the lead, each at another hostile, then the lead goes in flat out and the next press sets it off. **Speed** (the user, 2026-10-30: "a button you press for the different speed modes", fast at a real racer's 100 mph): the reload key while flying (or `DroneSpeed` from a key of its own) steps slow, medium, fast, kept for the next drone (`CoopMechPlayer.DroneGear`, `CoopFPV.SetGear`): a racer flat out at 600 / 1100 / 2347 (26 / 47 / 100 mph), a lead up to 380 / 700 / 2347, its buzz pitched to it, GEAR on the overlay; the swarm keeps up with a fast lead |
 | Chassis | Dermal Plating | L1 | | damage taken x0.70 / 0.60 / 0.50 / 0.40 |
 | Chassis | Hydraulic Legs | L1 | | no fall damage; L2 a hard landing (falling faster than 600) hurts and throws back everyone within 16 feet; L3 jumps a quarter higher; L4 no speed penalty |
 | Chassis | Bulwark | needs Plating 2 | F6 | damage taken x0.4 / 0.3 / 0.25 / 0.2 on top of the plating, moves at 60%, 60 energy a minute |
@@ -257,7 +283,8 @@ canisters, and the salvage count. Upgrades happen anywhere: bolted on in the fie
   RevNet's `AugLocs`: left alone.
 - **Tests:** `CoopTestMech` (class, rules, arms, save and rejoin), `CoopTestMechTree` (every
   module, salvage, the client's screen and keys, rejoin), `CoopTestDrones` (FPV Drones at
-  every level, flown and steered from the client), `travel` with `-ClientAgent Mech` or
+  every level, flown and steered from the client), `CoopTestDroneLead` (F7 held: flown by hand,
+  the lead drone and its swarm, each sent at another hostile), `travel` with `-ClientAgent Mech` or
   `-HostAgent Mech` (class, modules and salvage across a map change), and `CoopTestLook`
   (screenshots: `run_net_live.ps1 -Visible -Renderer OpenGLDrv.OpenGLRenderDevice`; the default
   renderer's shot reads the screen, the lock screen when the PC is locked).
