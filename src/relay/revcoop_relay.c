@@ -46,7 +46,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
-#include <intrin.h>
+#include <bcrypt.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -738,20 +738,15 @@ static void name_option(char *out, size_t size)
 
 /* The host's game password for this session (the security sweep of 2026-10-31): the game's port
    is open on the LAN, so it lets in only who has it; it is in the friends-only lobby's data, which
-   only members can read. Mixed from the CPU's counter, the time, a stack address and the ids
-   (no new imports: Smart App Control re-judges the exe on one). */
+   only members can read. From Windows' own random numbers (BCryptGenRandom): the first build mixed
+   the CPU's counter (__rdtsc), and virus scanners read that as a debugger check (VirusTotal: 14/71
+   on 0.6.0's RevCoop.exe, the same scanners flagged HXCoop.exe 3/71). */
 static char g_token[17];
 static void make_token(unsigned long long lobby)
 {
-    volatile int here;
-    unsigned long long x = __rdtsc() ^ ((unsigned long long)GetTickCount() << 32) ^ (unsigned long long)(size_t)&here
-        ^ g_me ^ (lobby << 7);
-    for (int i = 0; i < 2; i++) {      /* splitmix64 */
-        x += 0x9E3779B97F4A7C15ULL;
-        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
-        x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
-        x ^= x >> 31;
-    }
+    unsigned long long x = 0;
+    if (!BCRYPT_SUCCESS(BCryptGenRandom(NULL, (PUCHAR)&x, sizeof(x), BCRYPT_USE_SYSTEM_PREFERRED_RNG)) || !x)
+        x = ((unsigned long long)GetTickCount() << 32) ^ g_me ^ (lobby << 7);
     snprintf(g_token, sizeof(g_token), "%016llx", x);
 }
 
@@ -1616,6 +1611,8 @@ static int run_window(void)
     char exe[MAX_PATH];  /* Revision's own icon, as on the desktop shortcut */
     snprintf(exe, sizeof(exe), "%s\\Revision.exe", g_game_dir);
     ExtractIconExA(exe, 0, &g_icon, &g_icon_small, 1);
+    if (!g_icon) g_icon = LoadIconW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(1));  /* our own (revcoop.rc) */
+    if (!g_icon_small) g_icon_small = g_icon;
 
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = wnd_proc;

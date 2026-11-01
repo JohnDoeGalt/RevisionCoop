@@ -11,5 +11,6 @@ rem "build.bat fake": RevCoopFake.exe, the test build with Steam faked (tools/ru
 set OUT=RevCoop.exe
 set DEF=
 if "%1"=="fake" (set OUT=RevCoopFake.exe& set DEF=/DREVCOOP_FAKE_STEAM)
-cl /nologo /O2 /W3 /MT /D_CRT_SECURE_NO_WARNINGS %DEF% revcoop_relay.c /Fe:%OUT% ws2_32.lib user32.lib gdi32.lib comctl32.lib shell32.lib /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup /MANIFEST:EMBED
-del /q revcoop_relay.obj 2>nul
+rc /nologo revcoop.rc || exit /b 1
+cl /nologo /O2 /W3 /MT /D_CRT_SECURE_NO_WARNINGS %DEF% revcoop_relay.c revcoop.res /Fe:%OUT% ws2_32.lib user32.lib gdi32.lib comctl32.lib shell32.lib bcrypt.lib /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup /MANIFEST:EMBED
+del /q revcoop_relay.obj revcoop.res 2>nul

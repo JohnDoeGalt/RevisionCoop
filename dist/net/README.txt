@@ -142,6 +142,10 @@ Known limits
 Troubleshooting
   - "Windows protected your PC" when starting Install.bat or Revision Co-op: click
     "More info", then "Run anyway" (the files are not signed by a company).
+  - An antivirus program quarantines Relay\RevCoop.exe (the launcher): a few scanners'
+    guesswork flags small unsigned programs that open network connections and start a
+    game. Its source is src/relay/revcoop_relay.c in the project. Restore it, or add the
+    Revision\CoopNet folder to the antivirus's exclusions.
   - "Your Revision files differ from the version this release was tested with":
     Revision got an update. It will probably still work; if co-op doesn't start, get the
     newest Revision Co-op release.
