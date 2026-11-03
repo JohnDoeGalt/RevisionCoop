@@ -47,6 +47,7 @@ var bool bNoQuad;
 var byte Kind;              // its payload (CoopMechAugDrones.Payloads, 1 up; 0 none: an empty kit), for every machine's look
 var class<Projectile> Payload;
 var CoopKitCargo Cargo;     // (each machine's own) the payload's look under it
+var CoopKitLook Flight;     // (each machine's own) the kit in flight: body, tilting ducts (docs/FLY_KITS.md)
 
 replication
 {
@@ -156,6 +157,8 @@ simulated function Destroyed()
 {
 	if ( Cargo!=None )
 		Cargo.Destroy();
+	if ( Flight!=None )
+		Flight.Destroy();
 	if ( View!=None )
 	{
 		View.Destroy();
@@ -188,6 +191,14 @@ static function Dress( Actor A, bool bLead )
 	}
 	if ( bLead && A.MultiSkins[3]==None )
 		A.MultiSkins[3] = Texture( DynamicLoadObject( "RevNetMech.FlyKitLightLead", class'Texture', true ) );
+}
+
+// What its payload rides under: its in-flight look's body (CoopKitLook), else itself.
+simulated function Actor Carrier()
+{
+	if ( Flight!=None )
+		return Flight;
+	return Self;
 }
 
 // On its pilot's own machine (the only one with the pilot's root window): the gun-cam overlay.
@@ -262,7 +273,12 @@ simulated function Tick( float DeltaTime )
 
 	OpenView();
 	Dress( Self, bLead );
-	Cargo = class'CoopKitCargo'.static.Keep( Self, Cargo, Kind );
+	Flight = class'CoopKitLook'.static.Keep( Self, Flight );
+	if ( Flight!=None )
+		DrawType = DT_None;         // (the look draws it: every machine has one)
+	Cargo = class'CoopKitCargo'.static.Keep( Carrier(), Cargo, Kind );
+	if ( Flight!=None )
+		Flight.bLead = bLead;
 	if ( Role<ROLE_Authority )
 		return;
 	if ( IsInState( 'Exploding' ) )

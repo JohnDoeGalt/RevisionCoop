@@ -58,7 +58,8 @@ simulated function Follow()
 		foreach AllActors( class'DeusExPlayer', Viewer )
 			if ( Viewport(Viewer.Player)!=None )
 				break;
-	bHidden = Kit.bHidden || (Viewer!=None && Viewport(Viewer.Player)!=None && Viewer.bSpyDroneActive && Viewer.aDrone==Kit);
+	bHidden = Kit.bHidden || (Viewer!=None && Viewport(Viewer.Player)!=None && Viewer.bSpyDroneActive && Viewer.aDrone==Kit
+		&& !(CoopPlayerTalk(Viewer)!=None && CoopPlayerTalk(Viewer).FilmCam!=None));
 	SetLocation( Kit.Location + (Offset >> Kit.Rotation) );
 	SetRotation( Kit.Rotation + Turn );
 }
@@ -71,6 +72,7 @@ simulated function Tick( float DeltaTime )
 defaultproperties
 {
 	RemoteRole=ROLE_None
+	AmbientGlow=72
 	DrawType=DT_Mesh
 	Physics=PHYS_None
 	bCollideActors=False

@@ -153,9 +153,19 @@ prototype that was never written: only the renders and the promo existed):
   by `tools/mech_parts.py`, kept whole in the template; its fans turning in `Fly`, their blur discs translucent, the
   lights their own skin, a swarm lead's green); the payload under it in the explosive's own game look on every machine
   (`CoopKitCargo`, from the kit's replicated `Kind`); `LOAD` on the gun-cam overlay.
+- **In flight** (2026-11-03, the user: "it should show the drone maneuver"): `CoopKitLook`, each machine's own look of
+  a kit from its own movement there (nothing replicated): the body (`RevNetMech.FlyKitBody`) and its two ducts
+  (`FlyKitDuctL/R`, each its own piece about its pylon's pivot: `CoopKitDuct`; `tools/flykit.py` `game` writes them
+  beside the whole `FlyKit`), the ducts tilting together with speed and push (38-40 degrees flat out) and apart with a
+  turn's acceleration (up to 32), the body pitching with them, banking into turns and strafes, bobbing and jittering in
+  a hover, all on stiff springs that overshoot a little; a guided kit's body keeps its own tilt (`Follow`). A modest
+  glow (`AmbientGlow`) so a kit reads at night. Hidden from its own pilot's view through it.
 - **Tested** (`CoopTestFlyKit`, TEST_MATRIX MECH-33): every payload at a target, the explosive taken, the client's view.
-  **Filmed** (`CoopTestFlyKitShow`, `tools/drone_video.py --kits`).
+  **Filmed** (`CoopTestFlyKitShow`, about two minutes, `tools/flykit_show_video.py`): the kit up close, the swarm, the
+  lead held (climb, hover, snap turns, strafes, three speeds with the formation, the swarm sent from the air, the lead
+  going in), racers at the three speeds, a maneuvering flight, the pilot's view, levels 2 and 3, each other payload; its
+  own camera (`CoopPlayerTalk.FilmCam`: DeusExPlayer's view goes by the ViewRotation, which steers a flown kit).
 
-Not yet in the game: the fans tilting on their pylons, the body's twitchy hover and the Doppler rush (the in-flight
-section above: still the preview's); one kit model for every payload (its clamps set for a LAM's width); the payloads
-under the kits in the classes' own looks (not HDTP's, which Revision puts on each projectile when it is made).
+Not yet in the game: the Doppler rush (the in-flight section above: still the preview's); one kit model for every
+payload (its clamps set for a LAM's width); the payloads under the kits in the classes' own looks (not HDTP's, which
+Revision puts on each projectile when it is made).

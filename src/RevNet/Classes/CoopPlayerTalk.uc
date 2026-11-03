@@ -17,6 +17,7 @@ class CoopPlayerTalk extends CoopPlayerDevices;
 
 var CoopConClient ClientCon;            // client: the conversation shown here
 var CoopDataLinkClient ClientInfolink;  // client: the host's infolink shown here
+var Actor FilmCam;                      // (tests only: CoopTestFlyKitShow) the picture from this actor, its own way
 
 replication
 {
@@ -119,6 +120,14 @@ function bool StartConversation( Actor invokeActor, EInvokeMethod invokeMethod, 
 // doesn't check (an Accessed None every frame): the plain player's view.
 event PlayerCalcView( out actor ViewActor, out vector CameraLocation, out rotator CameraRotation )
 {
+	// A filmed show's own camera (DeusExPlayer's view goes by the player's ViewRotation, which steers a flown kit).
+	if ( FilmCam!=None && !FilmCam.bDeleteMe )
+	{
+		ViewActor = FilmCam;
+		CameraLocation = FilmCam.Location;
+		CameraRotation = FilmCam.Rotation;
+		return;
+	}
 	if ( CoopConPlay(conPlay)!=None )
 		Super(PlayerPawn).PlayerCalcView( ViewActor, CameraLocation, CameraRotation );
 	else

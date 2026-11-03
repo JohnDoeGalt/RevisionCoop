@@ -24,6 +24,7 @@ var float Seed[6];          // its drift's own phases
 var byte Kind;              // its payload (CoopMechAugDrones.Payloads, 1 up), for every machine's look
 var class<Projectile> Payload;
 var CoopKitCargo Cargo;     // (each machine's own) the payload's look under it
+var CoopKitLook Flight;     // (each machine's own) the kit in flight: body, tilting ducts (docs/FLY_KITS.md)
 
 replication
 {
@@ -60,6 +61,8 @@ simulated function Destroyed()
 
 	if ( Cargo!=None )
 		Cargo.Destroy();
+	if ( Flight!=None )
+		Flight.Destroy();
 	// A swarm's never sent (its time up, its Mech gone off): the explosive back in the rack.
 	if ( Role==ROLE_Authority && bHover && Kind>0 )
 	{
@@ -77,6 +80,14 @@ simulated function PostBeginPlay()
 	Skin = class'SpyDrone'.default.Skin;
 	AmbientSound = Sound'FPVBuzz';
 	class'CoopFPV'.static.Dress( Self, false );
+}
+
+// What its payload rides under: its in-flight look's body (CoopKitLook), else itself.
+simulated function Actor Carrier()
+{
+	if ( Flight!=None )
+		return Flight;
+	return Self;
 }
 
 // A swarm drone: hover in place Slot (0-3) round the Mech until sent, or until When.
@@ -110,7 +121,10 @@ simulated function Tick( float DeltaTime )
 	local vector Want;
 
 	class'CoopFPV'.static.Dress( Self, false );
-	Cargo = class'CoopKitCargo'.static.Keep( Self, Cargo, Kind );
+	Flight = class'CoopKitLook'.static.Keep( Self, Flight );
+	if ( Flight!=None )
+		DrawType = DT_None;         // (the look draws it: every machine has one)
+	Cargo = class'CoopKitCargo'.static.Keep( Carrier(), Cargo, Kind );
 
 	if ( !bHover )
 	{
