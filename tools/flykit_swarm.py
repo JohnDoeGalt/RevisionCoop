@@ -5,7 +5,7 @@ the four are sent one at a time at hostiles, each going
 off with its payload's own sound, and the lead goes in last, its feed to static. The targets are NSF terrorists (the
 game's own model and skins), UNATCO's open enemy in 2052: the footage serves the in-setting promo too.
   python -I tools/flykit_swarm.py frames [out dir]      the frames' OBJs and swarm.json (default build/mech/flykit)
-  build/tools/blender-4.2.23-windows-x64/blender.exe -b --factory-startup --python tools/flykit_render.py -- <swarm.json> <png dir>
+  blender -b --factory-startup --python tools/flykit_render.py -- <swarm.json> <png dir>
   python -I tools/flykit_swarm.py video <swarm.json> <png dir> <out.mp4>     the overlay, the soundtrack, the cut
 """
 import json, math, os, subprocess, sys

@@ -4,7 +4,7 @@ pick) over the fly-kit preview's flight, the swarm on Liberty Island with its gu
 here (the kit turning on each payload, the bonding pads close up), with the script's title card, lower thirds and
 capability cards, a quiet synthesized bed (no licence to clear) and the footage's own sounds low under the voice.
   python -I tools/flykit_promo.py shots [out dir]          the product shots' OBJs and shots.json (default build/mech/flykit)
-  build/tools/blender-4.2.23-windows-x64/blender.exe -b --factory-startup --python tools/flykit_render.py -- <shots.json> <png dir>
+  blender -b --factory-startup --python tools/flykit_render.py -- <shots.json> <png dir>
   python -I tools/flykit_promo.py cut <out.mp4>            the edit (frames from the three renders), the mix, the cards
 """
 import json, math, os, subprocess, sys

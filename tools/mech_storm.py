@@ -985,7 +985,7 @@ def main():
         write_obj(p, os.path.join(out, "storm_%s.obj" % name), os.path.join(out, "storm.mtl"), texs, pose(P, vg, **kw))
     if sys.argv[1] == "preview":
         here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        blender = os.environ.get("BLENDER", os.path.join(here, "build", "tools", "blender-4.2.23-windows-x64", "blender.exe"))
+        blender = os.environ.get("BLENDER", "blender")
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "blender_storm.py")
         subprocess.run([blender, "-b", "--factory-startup", "--python", script, "--",
                         os.path.abspath(os.path.join(out, "storm_sheet.png"))]

@@ -4,7 +4,7 @@
 # shutter) is the mean of their renders (motion blur). A frame may also give (tools/flykit_swarm.py) several OBJs, the
 # camera's place ("eye") and lens, flashes ("fx": x, y, z, radius, strength) and scorch marks ("scorch": x, y, radius),
 # or be "blank" (black: a picture laid over it later); the spec its "floor_z".
-#   build/tools/blender-4.2.23-windows-x64/blender.exe -b --factory-startup --python tools/flykit_render.py -- <motion.json> <out dir>
+#   blender -b --factory-startup --python tools/flykit_render.py -- <motion.json> <out dir>
 # (absolute paths: Blender reads relative ones against no file)
 import json, math, os, sys
 import bpy

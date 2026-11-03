@@ -577,7 +577,7 @@ def main():
         obj = os.path.join(out, cls + "_arm.obj")
         write_obj(p, obj, os.path.join(out, cls + "_arm.mtl"), texs)
         print("%s arm: %d faces, %d tris" % (cls, len(p.faces), len(p.tris)))
-        blender = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "build", "tools", "blender-4.2.23-windows-x64", "blender.exe")
+        blender = os.environ.get("BLENDER", "blender")
         subprocess.run([blender, "-b", "--factory-startup", "--python", os.path.join(os.path.dirname(os.path.abspath(__file__)), "blender_arm.py"),
                         "--", os.path.join(out, cls + "_sheet.png"), obj], check=True, stdout=subprocess.DEVNULL)
         print("sheet", os.path.join(out, cls + "_sheet.png"))
