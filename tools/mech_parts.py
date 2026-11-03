@@ -404,9 +404,10 @@ def main():
         blade_meshes += blade_view.build(cls, out, b=False, suffix="A")[1]
     for f, pose in previews:
         mech_art.write_obj(os.path.join(out, "body_%s.obj" % pose), m, pkg.frames(m)[f])
-    # (The FPV drones' own model: tools/mech_drone.py's improvised quad, turned down by the user 2026-10-30, "way too
-    # modern... this is a retro future cyberpunk setting": left out until its new design; the drones keep the Spy
-    # Drone's look meanwhile, CoopFPV.Dress.)
+    # The Mech's drones' own model: the fly kit (tools/flykit.py, the user's design; CoopFPV.Dress). (tools/mech_drone.py's
+    # improvised quad was turned down by the user 2026-10-30, "way too modern... this is a retro future cyberpunk setting".)
+    import flykit
+    blade_meshes += flykit.game(out)
     write_uc(os.path.join(out, "Classes", "MechArt.uc"), m, list(meshes), seqs, blade_tex, blade_meshes)
     os.makedirs(os.path.join(out, "Textures"), exist_ok=True)
     bake_atlas([p for p in parts if p.mesh == "BarrettParts"] + [p for p in parts if p.mesh != "BarrettParts"],

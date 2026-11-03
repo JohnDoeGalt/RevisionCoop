@@ -911,6 +911,79 @@ def motion(name, out, fps=60):
     return paths, caps, states, subs
 
 
+# ---- in the game (CoopFPV, CoopFPVGuided: CoopFPV.Dress; the user chose to build it, 2026-11-02): the kit alone, its
+# clamps set for a LAM (each payload rides under it in its own game look: CoopKitCargo), its fans' blades and hubs turned
+# in the mesh's Fly sequence (five blades: 72 degrees a loop in GAME_FRAMES steps, so the engine's straight blends between
+# frames don't shrink them), the blur discs over them translucent (skin 2), the lights their own skin (3: amber; a lead's
+# green, FlyKitLightLead). Written mirrored into the game's left-handed frame (y to the right), wound back.
+GAME_FRAMES = 6
+
+
+def game(out):
+    """FlyKit into out (Models, Textures) for tools/mech_parts.py (its skins from build's, in out/flykit); its import lines."""
+    import mech_parts
+    from PIL import Image
+    tex = os.path.join(out, "Textures")
+    os.makedirs(tex, exist_ok=True)
+    os.makedirs(os.path.join(out, "Models"), exist_ok=True)
+    work = os.path.join(out, "flykit")
+    os.makedirs(work, exist_ok=True)
+    st = build("LAM", work)
+    p = st["p"]
+    for s in (0, 1):
+        im = np.asarray(Image.open(os.path.join(work, st["skins"][s] + ".png")).convert("RGB"), float)
+        mech_bake.save_pcx(im, os.path.join(tex, "FlyKit%d.pcx" % s))
+    blur = blur_skin().astype(float)
+    mech_bake.save_pcx(blur[..., :3] * blur[..., 3:] / 255.0, os.path.join(tex, "FlyKitBlur.pcx"))   # (additive: dark is clear)
+    for name, rgb in (("FlyKitLight", COLOURS["light"]), ("FlyKitLightLead", (0.2, 1.0, 0.35))):
+        mech_bake.save_pcx(np.ones((16, 16, 3)) * np.array(rgb) * 255, os.path.join(tex, name + ".pcx"))
+    verts, tris, skins, types = [], [], [], []
+    for (pts, region), cell, s in zip(p.faces, p.cells, p.sheets):
+        i = len(verts)
+        verts += pts
+        if region == "blur":                    # its disc's own ring round the fan's axis
+            c = np.asarray(pts[0])
+            ax = unit(np.cross(pts[1] - c, pts[2] - c))
+            e1 = unit(pts[1] - c - ax * ((pts[1] - c) @ ax))
+            e2 = np.cross(ax, e1)
+            rr = np.linalg.norm(pts[1] - c)
+            uv = [(int(round(128 + 127 * ((q - c) @ e1) / rr)), int(round(128 - 127 * ((q - c) @ e2) / rr))) for q in pts]
+            s, kind = 2, 2
+        else:
+            u0, v0, u1, v1 = cell
+            uv = [(u0, v1), (u1, v1), (u1, v0), (u0, v0)] if len(pts) == 4 else [(u0, v1), (u1, v1), (u0, v0)]
+            s, kind = (3 if region == "light" else s), 0
+        for a, b, c in ([(0, 1, 2)] if len(pts) == 3 else [(0, 1, 2), (0, 2, 3)]):
+            tris.append((i + a, i + c, i + b, uv[a], uv[c], uv[b]))         # wound back for the mirror
+            skins.append(s)
+            types.append(kind)
+    F = []
+    for fr in range(GAME_FRAMES):
+        Q = np.array([q for pts, _ in spun(p, 72.0 * fr / GAME_FRAMES) for q in pts], float)
+        Q[:, 1] *= -1                           # into the game's frame: y to the right
+        F.append(Q)
+    F = np.array(F)
+    mech_parts.write_d3d(os.path.join(out, "Models", "FlyKit_d.3d"), F.shape[1], tris, skins, types)
+    mech_parts.write_a3d(os.path.join(out, "Models", "FlyKit_a.3d"), np.rint(F * 256).astype(np.int16))
+    print("FlyKit: %d verts, %d tris, %d frames" % (F.shape[1], len(tris), F.shape[0]))
+    return ["",
+            "// The fly kit (tools/flykit.py; CoopFPV, CoopFPVGuided): its fans turned in Fly, their blur translucent.",
+            "#exec TEXTURE IMPORT NAME=FlyKit0 FILE=Textures\\FlyKit0.pcx GROUP=Skins",
+            "#exec TEXTURE IMPORT NAME=FlyKit1 FILE=Textures\\FlyKit1.pcx GROUP=Skins",
+            "#exec TEXTURE IMPORT NAME=FlyKitBlur FILE=Textures\\FlyKitBlur.pcx GROUP=Skins",
+            "#exec TEXTURE IMPORT NAME=FlyKitLight FILE=Textures\\FlyKitLight.pcx GROUP=Skins",
+            "#exec TEXTURE IMPORT NAME=FlyKitLightLead FILE=Textures\\FlyKitLightLead.pcx GROUP=Skins",
+            "#exec MESH IMPORT MESH=FlyKit ANIVFILE=Models\\FlyKit_a.3d DATAFILE=Models\\FlyKit_d.3d X=0 Y=0 Z=0 MLOD=0",
+            "#exec MESH ORIGIN MESH=FlyKit X=0 Y=0 Z=0 PITCH=0 YAW=0 ROLL=0",
+            "#exec MESH SEQUENCE MESH=FlyKit SEQ=All STARTFRAME=0 NUMFRAMES=%d RATE=60" % GAME_FRAMES,
+            "#exec MESH SEQUENCE MESH=FlyKit SEQ=Fly STARTFRAME=0 NUMFRAMES=%d RATE=60" % GAME_FRAMES,
+            "#exec MESHMAP SCALE MESHMAP=FlyKit X=0.00390625 Y=0.00390625 Z=0.00390625",
+            "#exec MESHMAP SETTEXTURE MESHMAP=FlyKit NUM=0 TEXTURE=FlyKit0",
+            "#exec MESHMAP SETTEXTURE MESHMAP=FlyKit NUM=1 TEXTURE=FlyKit1",
+            "#exec MESHMAP SETTEXTURE MESHMAP=FlyKit NUM=2 TEXTURE=FlyKitBlur",
+            "#exec MESHMAP SETTEXTURE MESHMAP=FlyKit NUM=3 TEXTURE=FlyKitLight"]
+
+
 def main():
     out = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else os.path.join("build", "mech", "flykit"))
     os.makedirs(out, exist_ok=True)

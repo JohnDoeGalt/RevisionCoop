@@ -11,6 +11,7 @@ class CoopPlayer extends CoopPlayerUI;
 var float TestWalkUntil;
 var string MemLevels;      // (MemLine)
 var bool bTestStall;       // (ClientTest "stall") this game sends the host no more moves
+var CoopTestSeen Watch;    // (ClientTest "watch", "seen": CoopTestFlyKit) what this machine saw
 
 replication
 {
@@ -62,6 +63,15 @@ simulated function ClientTest( string Command )
 		ConsoleCommand( "set Rocket mpBlastRadius 124" );
 		ServerTestReply( "client set -> get=" $ ConsoleCommand( "get Rocket mpBlastRadius" ) @ "default=" $ class'Rocket'.default.mpBlastRadius );
 	}
+	else if ( Command=="watch" )
+	{
+		if ( Watch==None )
+			Watch = Spawn( class'CoopTestSeen', Self );
+		else
+			Watch.Clear();
+	}
+	else if ( Command=="seen" && Watch!=None )
+		ServerTestReply( "client saw:" $ Watch.Seen @ "| most fly-kit cargo at once" @ Watch.MostCargo @ "looks" $ Watch.CargoLooks );
 	else if ( Command=="stall" )
 		bTestStall = true;                      // (CoopTestTwin: a crashed game's, its connection quiet)
 	else if ( Command=="secprops" )

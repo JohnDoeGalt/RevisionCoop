@@ -15,7 +15,11 @@
 // racer does. Its pilot sees through it with a gun-cam overlay (CoopFPVView: the
 // user, 2026-10-30), from what the host tells the pilot's machine (Look). Its speed is
 // its pilot's to choose (the reload key: CoopMechPlayer.ServerDroneGear, SetGear): slow,
-// medium, or fast at 100 mph, a real FPV racer's (the user, 2026-10-30).
+// medium, or fast at 100 mph, a real FPV racer's (the user, 2026-10-30). It is a fly kit
+// (docs/FLY_KITS.md): it carries an explosive from the Mech's things (Arm; its own look under
+// it, CoopKitCargo) and, wherever it ends, lets it go (LetGo: CoopMechAugDrones.Release), so it
+// goes off as that explosive does; called back, the explosive goes back to the Mech. An empty
+// kit (nothing to carry) is a scout: it only pops.
 //=============================================================================
 class CoopFPV extends SpyDrone;
 
@@ -40,11 +44,39 @@ var float FullBattery, NextLook;
 var CoopFPVView View;       // the overlay, on its pilot's own machine
 var Mesh Quad;              // (the class's) the Mech's drones' own quad, once looked for
 var bool bNoQuad;
+var byte Kind;              // its payload (CoopMechAugDrones.Payloads, 1 up; 0 none: an empty kit), for every machine's look
+var class<Projectile> Payload;
+var CoopKitCargo Cargo;     // (each machine's own) the payload's look under it
 
 replication
 {
 	reliable if ( Role==ROLE_Authority && bNetOwner )
 		bLead, Seen, LockOn, Marked, Ready, Charge, Gear;
+	reliable if ( Role==ROLE_Authority )
+		Kind;
+}
+
+// Its payload (CoopMechAugDrones.Load: 1 up by Payloads; 0, none: an empty kit, a scout).
+function Arm( byte K )
+{
+	Kind = K;
+	Payload = None;
+	if ( K>0 )
+		Payload = class'CoopMechAugDrones'.default.Payloads[K - 1];
+}
+
+// Its payload let go here, going the way it flies (the way it looks, hovering): the kit is spent.
+function LetGo( vector At )
+{
+	local vector Dir;
+
+	Dir = Normal(Velocity);
+	if ( VSize(Velocity)<100 )
+		Dir = vector(Rotation);
+	class'CoopMechAugDrones'.static.Release( Self, Payload, At, Dir );
+	Kind = 0;
+	Payload = None;
+	Destroy();
 }
 
 // Its pilot's keys (a lead): the way to go, world-space, at most one long.
@@ -93,6 +125,12 @@ auto state Flying
 	}
 	simulated function Explode( vector HitLocation, vector HitNormal )
 	{
+		if ( Kind>0 )
+		{
+			if ( Role==ROLE_Authority )
+				LetGo( HitLocation );       // (the payload does the rest, on every machine)
+			return;
+		}
 		Super.Explode( HitLocation, HitNormal );
 		Ended();
 	}
@@ -116,6 +154,8 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector HitLocation, Vector M
 
 simulated function Destroyed()
 {
+	if ( Cargo!=None )
+		Cargo.Destroy();
 	if ( View!=None )
 	{
 		View.Destroy();
@@ -126,15 +166,15 @@ simulated function Destroyed()
 	Super.Destroyed();
 }
 
-// The Mech's drones' own look (the user, 2026-10-30: a cheap mass-made quad, smaller than the Spy Drone): the quad
-// (RevNetMech.FPVDrone, tools/mech_drone.py), its props spinning, the lead's light green. Each machine its own (RevNetMech
-// is each PC's own build: the host's mesh can't reach a client), so each machine dresses it, and again should the
-// host's look arrive over it. Without RevNetMech: the Spy Drone's look.
+// The Mech's drones' own look: the fly kit (the user's design, docs/FLY_KITS.md; RevNetMech.FlyKit, tools/flykit.py),
+// its fans spinning, the lead's lights green. Each machine its own (RevNetMech is each PC's own build: the host's mesh
+// can't reach a client), so each machine dresses it, and again should the host's look arrive over it. Without
+// RevNetMech: the Spy Drone's look.
 static function Dress( Actor A, bool bLead )
 {
 	if ( default.Quad==None && !default.bNoQuad )
 	{
-		default.Quad = Mesh( DynamicLoadObject( "RevNetMech.FPVDrone", class'Mesh', true ) );
+		default.Quad = Mesh( DynamicLoadObject( "RevNetMech.FlyKit", class'Mesh', true ) );
 		default.bNoQuad = default.Quad==None;
 	}
 	if ( default.Quad==None )
@@ -146,8 +186,8 @@ static function Dress( Actor A, bool bLead )
 		A.DrawScale = 1.0;
 		A.LoopAnim( 'Fly' );
 	}
-	if ( bLead && A.MultiSkins[2]==None )
-		A.MultiSkins[2] = Texture( DynamicLoadObject( "RevNetMech.FPVLightLead", class'Texture', true ) );
+	if ( bLead && A.MultiSkins[3]==None )
+		A.MultiSkins[3] = Texture( DynamicLoadObject( "RevNetMech.FlyKitLightLead", class'Texture', true ) );
 }
 
 // On its pilot's own machine (the only one with the pilot's root window): the gun-cam overlay.
@@ -222,6 +262,7 @@ simulated function Tick( float DeltaTime )
 
 	OpenView();
 	Dress( Self, bLead );
+	Cargo = class'CoopKitCargo'.static.Keep( Self, Cargo, Kind );
 	if ( Role<ROLE_Authority )
 		return;
 	if ( IsInState( 'Exploding' ) )

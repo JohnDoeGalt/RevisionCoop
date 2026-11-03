@@ -23,6 +23,7 @@ $suite = [ordered]@{
 	Throw = @("-Seconds", 200); Twin = @("-Seconds", 180, "-Clients", 2, "-SameName", "-ClientGap", 25)
 	UI = @("-Seconds", 300); Weapons = @("-Seconds", 420)
 	Security = @("-Seconds", 90); CustomDiff = @("-Seconds", 320, "-Url", "?CustomDifficulty=True?CustomAuto=A")
+	FlyKit = @("-Seconds", 120, "-ClientAgent", "Mech")
 }
 $pass = 0; $fail = 0
 foreach ($name in $suite.Keys) {

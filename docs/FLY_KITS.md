@@ -136,5 +136,26 @@ for the 20 mm, exported from DeusExSounds.u with `HCC.exe batchexport`).
 
 ## Status
 
-Prototype: CoopMechAugDrones (payloads, cycling, taking, partial swarms), CoopFPV / CoopFPVGuided (Release),
-CoopTestFlyKit (each payload at a trooper: damage, the ammo taken, what the client saw).
+Built in the game 2026-11-02 (the user: "demo gameplay of the fly kits being used"; until then this section listed a
+prototype that was never written: only the renders and the promo existed):
+
+- **The rack** (`CoopMechAugDrones`, the module now "Fly Kits"): `Payloads` (LAM, GEP rocket, GEP WP rocket, 20 mm HE,
+  gas, EMP, scramble) and the ammunition each takes (`PayloadAmmo`; a mode's own subclass counts unless it is another
+  kind's); `Load` takes the chosen kind, else the next carried; `Cycle` chooses (the `FlyKit` command, the ammo key
+  while flying: `CoopMechPlayer.SwitchAmmo`); energy 5 a kit, 15 a full swarm (pro rata a partial one); a tap needs an
+  explosive, a held key flies an empty kit; a kit called back, or a swarm's never sent, gives its explosive back
+  (`Unload`).
+- **Letting go** (`CoopMechAugDrones.Release`, from `CoopFPV.LetGo` / `CoopFPVGuided.LetGo` wherever a kit ends: contact,
+  the fire button, shot down, its battery out): a grenade or LAM still where it is, its fuse 0.1 s (`Fuse`: a moment, so
+  it reaches every machine); a rocket or 20 mm round 40 units back (`RunUp`), flying on into what the kit hit. With a
+  rocket aboard, the fire button in mid-air sends the rocket on the way the kit points.
+- **The look**: the kit's own model in the game (`tools/flykit.py` `game`: `RevNetMech.FlyKit`, built with the Mech's art
+  by `tools/mech_parts.py`, kept whole in the template; its fans turning in `Fly`, their blur discs translucent, the
+  lights their own skin, a swarm lead's green); the payload under it in the explosive's own game look on every machine
+  (`CoopKitCargo`, from the kit's replicated `Kind`); `LOAD` on the gun-cam overlay.
+- **Tested** (`CoopTestFlyKit`, TEST_MATRIX MECH-33): every payload at a target, the explosive taken, the client's view.
+  **Filmed** (`CoopTestFlyKitShow`, `tools/drone_video.py --kits`).
+
+Not yet in the game: the fans tilting on their pylons, the body's twitchy hover and the Doppler rush (the in-flight
+section above: still the preview's); one kit model for every payload (its clamps set for a LAM's width); the payloads
+under the kits in the classes' own looks (not HDTP's, which Revision puts on each projectile when it is made).

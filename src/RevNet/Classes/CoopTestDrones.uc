@@ -20,6 +20,7 @@ var int FoeHealth[6];
 var string Act;
 var float ActAt;
 var bool bSteer;
+var vector DroneAt;          // the flown kit's last place (where it ended)
 
 function ScriptedPawn Foe( int i, float Dist, int Yaw )
 {
@@ -52,6 +53,16 @@ function LookAt( Actor A, optional int YawOff )
 	Remote.ClientSetRotation( R );
 }
 
+// The client looks level toward A (a kit flown then goes on level: not into the ground at once).
+function LevelAt( Actor A )
+{
+	local rotator R;
+
+	R = rotator(A.Location - Remote.Location);
+	R.Pitch = 0;
+	Remote.ClientSetRotation( R );
+}
+
 function SetLevel( int L )
 {
 	Drones.bHasIt = true;
@@ -79,6 +90,8 @@ function Later( string What, float Seconds )
 function Tick( float DeltaTime )
 {
 	Super.Tick( DeltaTime );
+	if ( Remote!=None && Remote.aDrone!=None )
+		DroneAt = Remote.aDrone.Location;
 	// Steering: the client keeps its view on foe 5 from the drone, as a player would.
 	if ( bSteer && Remote!=None && Remote.aDrone!=None && Foes[5]!=None )
 		Remote.ClientSetRotation( rotator(Foes[5].Location - Remote.aDrone.Location) );
@@ -127,6 +140,10 @@ function Run( int t )
 	if ( t==2 )
 	{
 		SetLevel( 1 );
+		// The kits' explosives (fly kits, docs/FLY_KITS.md: a tap needs one): GEP rockets, whose blast keeps
+		// clear of the Mech at these ranges (a 20 mm round's reaches 500).
+		Give( class'AmmoRocket' );
+		Ammo(Remote.FindInventoryType( class'AmmoRocket' )).AmmoAmount = 20;
 		Foe( 0, 420, 0 );
 		LookAt( Foes[0] );
 	}
@@ -178,9 +195,13 @@ function Run( int t )
 		Drones.Activate();
 		Later( "steer", 0.45 );
 	}
+	else if ( t==16 )
+		LevelAt( Foes[5] );          // (the steering left the view down at it, from the air)
 	else if ( t==17 )
 	{
-		Log( "RevNetTest: drones level 1 (steered into it):" @ Hurt2( 5 ) @ "| drone out" @ Remote.bSpyDroneActive @ "module on" @ Drones.bIsActive, 'RevNet' );
+		// (A rocket's blast is small: a near miss leaves it; where the kit ended says the steering.)
+		Log( "RevNetTest: drones level 1 (steered into it):" @ Hurt2( 5 ) @ "| the kit ended" @ int(VSize(DroneAt - Foes[5].Location)) @ "from it"
+			@ "| drone out" @ Remote.bSpyDroneActive @ "module on" @ Drones.bIsActive, 'RevNet' );
 		SetLevel( 0 );
 		Drones.Activate();
 		Later( "fire", 0.4 );

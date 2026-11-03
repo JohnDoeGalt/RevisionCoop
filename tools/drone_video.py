@@ -1,7 +1,10 @@
 # The FPV Drones show's video (CoopTestDroneShow): its frames (tools/shot_take.py) on the game's clock as its log has
 # them, cut and captioned, with a soundtrack mixed from the game's own sounds on the show's logged events, through
 # tools/shot_video.py.
-#   python -I tools/drone_video.py <NetHost.log> <frames dir> <sounds dir> <out.mp4> [music.ogg]
+#   python -I tools/drone_video.py [--kits] <NetHost.log> <frames dir> <sounds dir> <out.mp4> [music.ogg]
+# --kits: the fly kits' show (CoopTestFlyKitShow, docs/FLY_KITS.md): its captions; each payload's blast its own sound
+# ("payload boom ... sound S": the projectile's ImpactSound, LAMExplode and the rest) instead of the drones' stand-ins;
+# the kits' own buzz (src/RevNet/Sounds/FPVBuzz.wav, CoopFPV's AmbientSound).
 # Sounds dir: DeusExSounds exported to WAV (HCC batchexport ..\System\DeusExSounds.u sound wav <dir>): the module's
 # AugActivate/AugDeactivate, the drones' AugDroneLoop (each drone's AmbientSound, by its logged distance from the
 # camera, frame by frame), the flown drone's blast SmallExplosion2 (CoopFPV's ImpactSound) and the hostiles' MaleDeath.
@@ -61,8 +64,10 @@ def load(sdir, name):
 
 
 def main():
-    log, frames, sdir, out = sys.argv[1:5]
-    music = sys.argv[5] if len(sys.argv) > 5 else REV_MUSIC
+    args = [a for a in sys.argv[1:] if a != "--kits"]
+    kits = "--kits" in sys.argv
+    log, frames, sdir, out = args[:4]
+    music = args[4] if len(args) > 4 else REV_MUSIC
     out = os.path.abspath(out)
     shots, ev = parse(log)
     times = [t for t, f, g in shots]
@@ -106,20 +111,33 @@ def main():
         caps.append(dict(t0=t0, t1=t1, text=title, size=big, x=56, y="h-160"))
         caps.append(dict(t0=t0 + 0.15, t1=t1, text=sub, size=small, x=56, y="h-112"))
 
-    caps.append(dict(t0=0.3, t1=e(l1) - 0.1, text="FPV DRONES", size=64, x=56, y="h-214"))
-    caps.append(dict(t0=0.5, t1=e(l1) - 0.1, size=small, x=56, y="h-112",
-                     text="the Mech's Arsenal module  ·  Deus Ex: Revision co-op (RevNet)"))
-    card(e(l1) + 0.1, e(booms[0]) + 0.15, "Level 1  ·  an FPV drone, flown by the player",
-         "seen from the drone; steered by the view, it goes off on contact")
-    if l1b is not None and len(booms) > 1:
-        card(e(l1b) + 0.1, e(booms[1]) + 0.15, "Level 1  ·  or set off with the fire button", "over two hostiles: one blast takes both")
-    card(e(l2) + 0.05, e(l3) - 0.15, "Level 2  ·  guided to the crosshair", "aim and launch: it flies to what the crosshair is on")
-    card(e(l3) + 0.05, e(l4) - 0.15, "Level 3  ·  lock-on", "aimed 12° off the target: it locks on and chases it")
-    card(e(l4) + 0.1, e(done) - 0.2, "Level 4  ·  a swarm of four",
-         "they hover over the Mech; each press sends one at the hostile nearest the crosshair")
+    if kits:
+        caps.append(dict(t0=0.3, t1=e(l1) - 0.1, text="FK-7 FLY KITS", size=64, x=56, y="h-214"))
+        caps.append(dict(t0=0.5, t1=e(l1) - 0.1, size=small, x=56, y="h-112",
+                         text="the Mech's own explosives, flown in  ·  Deus Ex: Revision co-op (RevNet)"))
+        card(e(l1) + 0.1, e(booms[0]) + 0.15, "Level 1  ·  a fly kit flown by the player, a LAM aboard",
+             "seen from the kit; on contact it lets the LAM go")
+        if l1b is not None and len(booms) > 1:
+            card(e(l1b) + 0.1, e(booms[1]) + 0.15, "Level 1  ·  or let go with the fire button", "a LAM over two hostiles: one blast takes both")
+        card(e(l2) + 0.05, e(l3) - 0.15, "Level 2  ·  a GEP rocket, guided to the crosshair", "the kit lets the rocket go: it flies on into its target")
+        card(e(l3) + 0.05, e(l4) - 0.15, "Level 3  ·  a 20 mm HE round, locked on", "aimed 12° off the target: the kit locks on and chases it")
+        card(e(l4) + 0.1, e(done) - 0.2, "Level 4  ·  a swarm of four, four explosives",
+             "a LAM, a GEP rocket, a WP rocket, a 20 mm round: each goes off as itself")
+    else:
+        caps.append(dict(t0=0.3, t1=e(l1) - 0.1, text="FPV DRONES", size=64, x=56, y="h-214"))
+        caps.append(dict(t0=0.5, t1=e(l1) - 0.1, size=small, x=56, y="h-112",
+                         text="the Mech's Arsenal module  ·  Deus Ex: Revision co-op (RevNet)"))
+        card(e(l1) + 0.1, e(booms[0]) + 0.15, "Level 1  ·  an FPV drone, flown by the player",
+             "seen from the drone; steered by the view, it goes off on contact")
+        if l1b is not None and len(booms) > 1:
+            card(e(l1b) + 0.1, e(booms[1]) + 0.15, "Level 1  ·  or set off with the fire button", "over two hostiles: one blast takes both")
+        card(e(l2) + 0.05, e(l3) - 0.15, "Level 2  ·  guided to the crosshair", "aim and launch: it flies to what the crosshair is on")
+        card(e(l3) + 0.05, e(l4) - 0.15, "Level 3  ·  lock-on", "aimed 12° off the target: it locks on and chases it")
+        card(e(l4) + 0.1, e(done) - 0.2, "Level 4  ·  a swarm of four",
+             "they hover over the Mech; each press sends one at the hostile nearest the crosshair")
     end = starts[-1]
     caps.append(dict(t0=end + 0.2, t1=total - 0.2, text="RevNet  ·  Deus Ex: Revision co-op", size=46, x="(w-tw)/2", y="h/2-60", box=False))
-    caps.append(dict(t0=end + 0.4, t1=total - 0.2, text="the Mech's FPV Drones  ·  in-game footage",
+    caps.append(dict(t0=end + 0.4, t1=total - 0.2, text=("the Mech's FK-7 Fly Kits" if kits else "the Mech's FPV Drones") + "  ·  in-game footage",
                      size=small, x="(w-tw)/2", y="h/2+10", box=False))
 
     # The soundtrack on the edited timeline.
@@ -137,15 +155,36 @@ def main():
             placed.append((round(float(t), 3), gain))
 
     blasts = [load(sdir, "SmallExplosion2"), load(sdir, "SmallExplosion1")]
+    # Each payload's blast once: its first "payload boom" after a real "payload let go" (an early take's show logged an
+    # exploding payload, still there, as let go again in the same instant; a rocket lingers, hidden, for seconds).
+    real_booms = set()
+    booms_at = {}
+    for t, w in ev:
+        m = re.match(r"payload boom (.*) sound ", w)
+        if m:
+            booms_at.setdefault(m.group(1), []).append((t, w))
+    for t, w in ev:
+        m = re.match(r"payload let go (.*) dist ", w)
+        if not m or any(bt == t for bt, _ in booms_at.get(m.group(1), [])):
+            continue
+        nxt = [b for b in booms_at.get(m.group(1), []) if b[0] >= t]
+        if nxt:
+            real_booms.add(nxt[0])
     cry = load(sdir, "MaleDeath")
     k = 0
     for t, w in ev:
         if w == "aug on":
             put(e(t), load(sdir, "AugActivate"), 0.6)
         elif w.startswith("boom fpv"):
-            put(e(t), blasts[0], 1.0)                                       # the flown drone's own ImpactSound
+            if not kits:
+                put(e(t), blasts[0], 1.0)                                   # the flown drone's own ImpactSound
             put(e(t) + 0.05, load(sdir, "AugDeactivate"), 0.45)            # the module off (Spent)
-        elif w.startswith("boom guided"):
+        elif w.startswith("payload boom") and (t, w) in real_booms:         # a kit's payload, its own sound
+            m = re.search(r"sound (\S+) dist (\d+)", w)
+            name = m.group(1) if m else "none"
+            x = load(sdir, name) if os.path.exists(os.path.join(sdir, name + ".wav")) else blasts[1]
+            put(e(t), x, 0.35 + 0.65 * max(0.0, 1 - dist(w) / 3000))
+        elif w.startswith("boom guided") and not kits:
             put(e(t), blasts[k % 2], 0.3 + 0.7 * max(0.0, 1 - dist(w) / 3000))
             k += 1
         elif w.startswith("foe") and "down" in w and "dist" in w:
@@ -167,7 +206,7 @@ def main():
         for d in guided:
             g2 += (VOL * max(0.0, 1 - d / GUIDED_R) ** 1.5) ** 2
         env[f] = np.sqrt(g2)
-    loop = load(sdir, "AugDroneLoop")
+    loop = load(sdir, "AugDroneLoop") if not kits else load(os.path.join(HERE, "..", "src", "RevNet", "Sounds"), "FPVBuzz")
     buzz = np.tile(loop, n // len(loop) + 1)[:n]
     mix += buzz * np.interp(np.arange(n) / RATE, np.arange(len(env)) / FPS, env) * 0.42
     # Revision's music for the level under it all, faded in and out.

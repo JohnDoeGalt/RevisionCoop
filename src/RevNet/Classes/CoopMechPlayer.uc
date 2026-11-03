@@ -52,7 +52,7 @@ replication
 	reliable if ( Role==ROLE_Authority )
 		ClientOptics;
 	reliable if ( Role<ROLE_Authority )
-		ServerUpgradeModule, ServerScrapCanisters, ServerTurnPage, ServerFlyDrone, ServerDroneGear;
+		ServerUpgradeModule, ServerScrapCanisters, ServerTurnPage, ServerFlyDrone, ServerDroneGear, ServerFlyKit;
 }
 
 // ----------------------------------------------------------------------
@@ -830,13 +830,40 @@ exec function DroneSpeed()
 	ServerDroneGear();
 }
 
+// The ammo key while flying a fly kit: the next kits' payload (FlyKit); else as ever.
+exec function SwitchAmmo()
+{
+	if ( bSpyDroneActive )
+	{
+		ServerFlyKit();
+		return;
+	}
+	Super.SwitchAmmo();
+}
+
+// The fly kits' next payload, any time ("set input X FlyKit"): the next explosive kind the Mech carries
+// (CoopMechAugDrones.Cycle).
+exec function FlyKit()
+{
+	ServerFlyKit();
+}
+
+function ServerFlyKit()
+{
+	local CoopMechAug M;
+
+	M = class'CoopMechAug'.static.Find( Self, class'CoopMechAugDrones' );
+	if ( M!=None && M.bHasIt )
+		CoopMechAugDrones(M).Cycle();
+}
+
 // The FPV drone's next speed, slow, medium, fast (100 mph, a real racer's), for the one in the air and the next.
 function ServerDroneGear()
 {
 	DroneGear = (DroneGear + 1) % 3;
 	if ( CoopFPV(aDrone)!=None )
 		CoopFPV(aDrone).SetGear( DroneGear );
-	ClientMessage( "FPV drone speed:" @ class'CoopFPV'.default.GearNames[DroneGear] );
+	ClientMessage( "Fly kit speed:" @ class'CoopFPV'.default.GearNames[DroneGear] );
 	PlaySound( Sound'StormMode', SLOT_None,,, 512 );
 }
 

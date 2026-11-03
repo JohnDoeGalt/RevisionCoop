@@ -199,6 +199,7 @@ event DrawWindow( GC gc )
 	Say( gc, width - 40 * s, 102 * s, "REC", Ink, true );
 	if ( P.Trace( HitLoc, HitNormal, From - vect(0,0,8000), From, false )==None )
 		HitLoc = From - vect(0,0,8000);
+	Say( gc, 40 * s, height - 132 * s, "LOAD" @ Caps( class'CoopMechAugDrones'.static.KindName( Drone.Kind ) ), Ink );
 	Say( gc, 40 * s, height - 118 * s, "GEAR" @ Gears[Min( Drone.Gear, 2 )], Ink );
 	Say( gc, 40 * s, height - 104 * s, "BAT" @ Drone.Charge $ "%", Ink );
 	Say( gc, 40 * s, height - 90 * s, "ALT" @ Meters( From.Z - HitLoc.Z ) $ "M", Ink );
