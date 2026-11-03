@@ -10,7 +10,9 @@
 // client's last, so its weapon goes with it), and what the client saw in the air. Then the
 // choice going round (Cycle); a kit flown with no explosives at a trooper (empty, a scout: no
 // harm); a swarm with two explosives (two kits, the payloads' looks on the client), taken
-// down unsent (their explosives back); the client's view of it all (CoopTestSeen).
+// down unsent (their explosives back); a kit flown with a GEP rocket, then one with a LAM, set off
+// with the fire button in mid-air: the explosive gone off where the kit was (no rocket flying on,
+// no LAM left behind: never launched or dropped); the client's view of it all (CoopTestSeen).
 //=============================================================================
 class CoopTestFlyKit extends CoopTestKit;
 
@@ -20,6 +22,50 @@ var ScriptedPawn Foe;
 var name FoeClass;
 var int FoeHealth, Before;
 var class<DeusExWeapon> Thrower[7];     // a grenade kind's weapon (else none)
+var float FireAt, CheckAt;              // the fire button in mid-air, then the look for what is left
+var string Midair;
+
+// Which of the kits' explosives P is (-1: none of them; an explosion's debris is projectiles too).
+function int Kind( Projectile P )
+{
+	local int K;
+
+	for ( K=0; K<ArrayCount(Drones.Payloads); K++ )
+		if ( P.Class==Drones.Payloads[K] )
+			return K;
+	return -1;
+}
+
+// In mid-air: the fire button (as ParseLeftClick's DroneExplode on the host), then what of its explosive is left.
+function Tick( float DeltaTime )
+{
+	local Projectile P;
+	local int Flying, Left;
+
+	Super.Tick( DeltaTime );
+	if ( FireAt>0 && Level.TimeSeconds>=FireAt )
+	{
+		FireAt = 0;
+		Log( "RevNetTest: fly kits: fire button in mid-air (" $ Midair $ "): out" @ Remote.bSpyDroneActive
+			@ "at" @ int(VSize(Remote.aDrone.Location - Remote.Location)) @ "from the Mech", 'RevNet' );
+		Mech.DroneExplode();
+		CheckAt = Level.TimeSeconds + 0.5;
+	}
+	if ( CheckAt>0 && Level.TimeSeconds>=CheckAt )
+	{
+		CheckAt = 0;
+		foreach AllActors( class'Projectile', P )
+			if ( P.Instigator==Remote && !P.bDeleteMe && Kind( P )>=0 )
+			{
+				if ( VSize(P.Velocity)>50 )
+					Flying++;
+				else if ( !P.IsInState( 'Exploding' ) && !P.bHidden )
+					Left++;
+			}
+		Log( "RevNetTest: fly kits: set off in mid-air (" $ Midair $ "):" @ Flying @ "flying on," @ Left @ "left behind | out"
+			@ Remote.bSpyDroneActive @ "| carried" @ Counts(), 'RevNet' );
+	}
+}
 
 function ScriptedPawn Target( class<ScriptedPawn> C, int Yaw )
 {
@@ -202,12 +248,32 @@ function Run( int t )
 			if ( Drones.Swarm[i]!=None )
 				Drones.Swarm[i].Destroy();      // (as its time up does)
 	}
-	else if ( t==31 )
+	else if ( t==31 || t==33 )
 	{
-		Log( "RevNetTest: fly kits: the swarm taken down unsent, its explosives back:" @ Counts(), 'RevNet' );
-		Remote.ClientTest( "seen" );
+		if ( t==31 )
+			Log( "RevNetTest: fly kits: the swarm taken down unsent, its explosives back:" @ Counts(), 'RevNet' );
+		// A kit flown level, its explosive set off with the fire button 0.35 s out: a GEP rocket, then a LAM.
+		SetLevel( 0 );
+		if ( t==31 )
+		{
+			Stock( 1, 1 );
+			Drones.Chosen = 1;
+			Midair = "a GEP rocket";
+		}
+		else
+		{
+			Stock( 0, 1 );
+			Drones.Chosen = 0;
+			Midair = "a LAM";
+		}
+		Remote.ClientSetRotation( rot(0,1,0) * Remote.Rotation.Yaw );
+		Drones.ReadyAt = 0;
+		Drones.Activate();
+		FireAt = Level.TimeSeconds + 0.35;
 	}
-	else if ( t==33 )
+	else if ( t==35 )
+		Remote.ClientTest( "seen" );
+	else if ( t==37 )
 	{
 		Remote.ReducedDamageType = '';
 		Done();

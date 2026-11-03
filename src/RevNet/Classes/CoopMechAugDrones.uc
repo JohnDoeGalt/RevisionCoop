@@ -4,7 +4,8 @@
 // Arsenal: Fly Kits (docs/FLY_KITS.md; the user's design, 2026-10-30): cheap, factory-made
 // guidance-and-flight kits racked on the Mech's back, each clamped to an explosive from the
 // Mech's own things (a LAM, a GEP rocket, a 20 mm round, a grenade: Payloads), which it
-// flies in and lets go of (Release), so it goes off exactly as that explosive does. The
+// flies in: it crashes into its target and the explosive goes off there, or wherever the kit
+// ends (Release), exactly as that explosive does; never launched or dropped. The
 // explosive is the ammunition (Load: the chosen kind, else the next carried; FlyKit and
 // the ammo key while flying choose: Cycle), energy the fuel (a little a kit), and a kit
 // with nothing to carry flies empty, to scout (held key only). Level 1: one kit the player
@@ -35,8 +36,7 @@ var class<Projectile> Payloads[7];  // what a kit can carry, in the order the ch
 var class<Ammo> PayloadAmmo[7];     // what a kit of each takes one of
 var localized string PayloadNames[7];
 var byte Chosen;               // the kind chosen (Cycle)
-var float Fuse;                // a grenade or LAM let go: seconds to it going off (a moment, to reach every machine)
-var float RunUp;               // a rocket or 20 mm round let go: this far back, flying on into what the kit hit
+var float Fuse;                // a grenade or LAM set off: seconds to it going off (a moment, to reach every machine)
 var localized string RebuildingText, NoEnergyText, AwayText, LockedText, SwarmText, SentText, LeadText, DiveText;
 var localized string NoneText, ChoiceText, NoChoiceText, EmptyText;
 
@@ -183,43 +183,72 @@ function Cycle()
 	Player.ClientMessage( NoChoiceText );
 }
 
-// A kit's payload let go at At, the kit going Dir: the game's own projectile, the Mech's, so it goes off exactly as
-// that explosive does (docs/FLY_KITS.md): a grenade or LAM where it is, still, on a short fuse (ThrownProjectile.Timer
-// sets it off); a rocket or 20 mm round a little back, flying on into what the kit hit (it goes off on contact).
-static function Projectile Release( Actor Kit, class<Projectile> P, vector At, vector Dir )
+// A kit's payload set off where the kit is, at At (N: the way out of what it struck, else up): the game's own
+// projectile, the Mech's, made there and gone off there as that explosive does (docs/FLY_KITS.md). A kit never launches
+// or drops its explosive (the user, 2026-11-03: "it's not a GEP gun launcher... it just crashes into things with the
+// GEP munition"): a grenade or LAM unseen at the kit on a moment's fuse (ThrownProjectile.Timer: so it reaches every
+// machine; the kit stays put with it till then, the seconds returned); a rocket or 20 mm round gone off at once on the
+// host, on contact or in mid-air (the fire button, shot down, its battery out), every other machine shown its blast
+// (CoopPlayerCore.ClientBlast). (Made a hair back moving into what the kit struck, a rocket was made touching it already
+// and never touched it: it went on through, measured.)
+static function float Release( Actor Kit, class<Projectile> P, vector At, vector N, bool bContact )
 {
 	local Projectile R;
 	local ThrownProjectile G;
 	local Pawn Mech;
+	local CoopPlayerCore C;
+	local vector Dir;
+	local float Linger;
 
 	if ( P==None )
-		return None;
+		return 0;
 	Mech = Pawn(Kit.Owner);
 	Kit.SetCollision( false, false, false );
+	Dir = -N;
+	if ( VSize(Dir)<0.5 )
+		Dir = vector(Kit.Rotation);
 	if ( ClassIsChildOf( P, class'ThrownProjectile' ) )
 	{
-		R = Kit.Spawn( P, Mech,, At - Dir * 4, rotator(Dir) );
+		R = Kit.Spawn( P, Mech,, At, Kit.Rotation );
 		G = ThrownProjectile(R);
 		if ( G!=None )
 		{
 			G.Velocity = vect(0,0,0);
 			G.SetPhysics( PHYS_None );
+			G.bHidden = true;               // (the one seen is under the kit: CoopKitCargo)
 			G.bProximityTriggered = false;
 			G.fuseLength = default.Fuse;
 			G.SetTimer( default.Fuse, false );
+			Linger = default.Fuse;
 		}
 	}
 	else
 	{
-		R = Kit.Spawn( P, Mech,, At - Dir * default.RunUp, rotator(Dir) );
+		R = Kit.Spawn( P, Mech,, At, rotator(Dir) );
 		if ( R!=None )
-			R.Velocity = Dir * R.Speed;
+		{
+			R.Instigator = Mech;
+			R.bHidden = true;
+			R.Explode( At, -Dir );
+			foreach Kit.AllActors( class'CoopPlayerCore', C )
+				C.ClientBlast( At, BlastSize( P ) );
+		}
 	}
 	if ( R!=None )
 		R.Instigator = Mech;
 	if ( Mech!=None )
-		Log( "RevNet:" @ Mech.PlayerReplicationInfo.PlayerName @ "fly kit let go" @ P.Name @ "->" @ R, 'RevNet' );
-	return R;
+		Log( "RevNet:" @ Mech.PlayerReplicationInfo.PlayerName @ "fly kit set off" @ P.Name @ "contact" @ bContact @ "->" @ R, 'RevNet' );
+	return Linger;
+}
+
+// A mid-air rocket's or round's blast as drawn on the other machines (CoopPlayerCore.ClientBlast's size).
+static function float BlastSize( class<Projectile> P )
+{
+	if ( ClassIsChildOf( P, class'RocketWP' ) )
+		return 2.0;
+	if ( ClassIsChildOf( P, class'Rocket' ) )
+		return 1.5;
+	return 1.2;
 }
 
 // ----------------------------------------------------------------------
@@ -343,7 +372,7 @@ function Flown( CoopFPV D )
 
 // The fire button while flying (CoopMechPlayer.DroneExplode): from the lead, the next of the swarm at the
 // hostile nearest its crosshair that no other is after; the swarm spent, the lead itself goes in flat out
-// the way it looks (the next press lets its payload go). False: not a lead (the kit lets go).
+// the way it looks (the next press sets it off). False: not a lead (the kit goes off).
 function bool FromLead()
 {
 	local CoopFPV D;
@@ -375,7 +404,7 @@ function Deactivate()
 		ReadyAt = FMax( ReadyAt, Level.TimeSeconds + Rebuild[0] );
 		if ( D!=None && !D.IsInState( 'Exploding' ) )
 		{
-			if ( CoopFPV(D)!=None )
+			if ( CoopFPV(D)!=None && !CoopFPV(D).bSettingOff )
 				Unload( CoopFPV(D).Kind );
 			D.Destroy();
 		}
@@ -600,11 +629,10 @@ defaultproperties
 	PayloadNames(5)="EMP grenade"
 	PayloadNames(6)="scramble grenade"
 	Fuse=0.1
-	RunUp=40
 	TreeName="Arsenal"
 	AugmentationName="Fly Kits"
 	Description="Cheap, factory-made guidance-and-flight kits racked on the Mech's back. Each clamps an explosive from your pack (a LAM, a GEP rocket, a 20 mm round, a grenade) and flies it in on two ducted fans, so it goes off exactly as that explosive would. The clamp pads hold by electro-bonding: a current that never leaves the pad drives a reaction in the first few molecular layers where pad meets casing, a grip no glue can match, with no current or heat to reach the fuze. Charging a kit takes a little energy; with no explosive aboard it flies empty, to scout. Choose the explosive with the ammo key while flying, or the FlyKit command."
-	LevelText(0)="A kit you fly yourself (look and move to steer, fire to let its payload go; it also lets go on contact)."
+	LevelText(0)="A kit you fly yourself (look and move to steer, fire to set it off; it also goes off on contact)."
 	LevelText(1)="Tap: a kit that flies straight to whatever is under the crosshair. Hold: fly one yourself."
 	LevelText(2)="Tap: lock and launch, it locks on the enemy nearest the crosshair and chases it. Hold: fly one yourself."
 	LevelText(3)="Tap: a swarm of up to four (one an explosive) hovers round the Mech; each tap sends one at a different enemy near the crosshair. Hold: fly the lead kit with the swarm round it (it hovers when you stop); fire sends them one at a time from the air, each at a different enemy, then the lead itself."
@@ -615,7 +643,7 @@ defaultproperties
 	SwarmText="Fly kit swarm up: %d."
 	SentText="Fly kit sent (%s): %d left."
 	LeadText="Fly kit lead up (%s), %d with it: fire sends one at a time."
-	DiveText="Fly kit lead going in: fire lets its payload go."
+	DiveText="Fly kit lead going in: fire sets it off."
 	NoneText="Fly Kits: no explosives to kit (hold the key to fly one empty, to scout)."
 	ChoiceText="Fly Kits: %s next (%d of them; %d explosives in all)."
 	NoChoiceText="Fly Kits: no explosives to choose from: kits fly empty, to scout."

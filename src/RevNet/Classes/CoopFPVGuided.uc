@@ -10,8 +10,9 @@
 // "attempting to hold some sort of formation... variable movement that you would expect
 // from a drone"): lagging, overshooting a little, drifting, tilted into its push. It looks
 // and sounds like the Mech's own cheap quad (CoopFPV.Dress, FPVBuzz), not the Spy Drone. A fly
-// kit (docs/FLY_KITS.md): it carries an explosive (Arm, CoopKitCargo) and lets it go where it
-// ends (LetGo: CoopMechAugDrones.Release); a swarm's that hovered its time gives it back.
+// kit (docs/FLY_KITS.md): it carries an explosive (Arm, CoopKitCargo) and crashes into its target
+// with it, setting it off there (LetGo: CoopMechAugDrones.Release; never launched or dropped); a
+// swarm's that hovered its time gives it back.
 //=============================================================================
 class CoopFPVGuided extends DeusExProjectile;
 
@@ -25,6 +26,8 @@ var byte Kind;              // its payload (CoopMechAugDrones.Payloads, 1 up), f
 var class<Projectile> Payload;
 var CoopKitCargo Cargo;     // (each machine's own) the payload's look under it
 var CoopKitLook Flight;     // (each machine's own) the kit in flight: body, tilting ducts (docs/FLY_KITS.md)
+var bool bStruck;            // (the host's) it struck something: what goes off is set off on contact
+var bool bSettingOff;        // (the host's) its explosive going off where it is (LetGo)
 
 replication
 {
@@ -41,18 +44,26 @@ function Arm( byte K )
 		Payload = class'CoopMechAugDrones'.default.Payloads[K - 1];
 }
 
-// Its payload let go here, going the way it flies (the way it looks, hovering): the kit is spent.
-function LetGo( vector At )
+// Its payload set off here (N: the way out of what it struck: bStruck), the kit spent with it: gone at once, or
+// held where it is with the explosive aboard for a grenade's moment (CoopMechAugDrones.Release).
+function LetGo( vector At, vector N )
 {
-	local vector Dir;
+	local float Linger;
 
-	Dir = Normal(Velocity);
-	if ( VSize(Velocity)<100 )
-		Dir = vector(Rotation);
-	class'CoopMechAugDrones'.static.Release( Self, Payload, At, Dir );
-	Kind = 0;
+	Linger = class'CoopMechAugDrones'.static.Release( Self, Payload, At, N, bStruck );
+	bStruck = false;
 	Payload = None;
-	Destroy();
+	if ( Linger<=0 )
+	{
+		Kind = 0;
+		Destroy();
+		return;
+	}
+	bSettingOff = true;
+	SetPhysics( PHYS_None );
+	Velocity = vect(0,0,0);
+	SetCollision( false, false, false );
+	LifeSpan = Linger + 0.02;
 }
 
 simulated function Destroyed()
@@ -125,6 +136,8 @@ simulated function Tick( float DeltaTime )
 	if ( Flight!=None )
 		DrawType = DT_None;         // (the look draws it: every machine has one)
 	Cargo = class'CoopKitCargo'.static.Keep( Carrier(), Cargo, Kind );
+	if ( bSettingOff )
+		return;
 
 	if ( !bHover )
 	{
@@ -184,20 +197,26 @@ auto simulated state Flying
 	{
 		if ( bHover || Other==Owner || PlayerPawn(Other)!=None || CoopFPVGuided(Other)!=None || CoopFPV(Other)!=None )
 			return;
+		bStruck = true;
 		Super.ProcessTouch( Other, HitLocation );
+		bStruck = false;
 	}
 	simulated function HitWall( vector HitNormal, actor Wall )
 	{
 		if ( bHover )
 			return;
+		bStruck = true;
 		Super.HitWall( HitNormal, Wall );
+		bStruck = false;
 	}
 	simulated function Explode( vector HitLocation, vector HitNormal )
 	{
+		if ( bSettingOff )
+			return;
 		if ( Kind>0 )
 		{
 			if ( Role==ROLE_Authority )
-				LetGo( HitLocation );       // (the payload does the rest, on every machine)
+				LetGo( HitLocation, HitNormal );       // (the payload does the rest, on every machine)
 			return;
 		}
 		Super.Explode( HitLocation, HitNormal );

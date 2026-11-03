@@ -31,14 +31,15 @@ limited by loot, grounded, and each payload a tactical choice (EMP for bots, a L
 
 Every one of these explodes through the game's own code: `ThrownProjectile.Explode` (LAM, gas, EMP, scramble: flash,
 gas clouds, effects) and `DeusExProjectile`'s `Exploding` state (five damage rings, about twice Damage at the middle,
-nothing at blastRadius). So a kit does not imitate a payload: on impact it **releases** the real projectile, owned and
-instigated by the Mech, and the game does the rest:
+nothing at blastRadius). So a kit does not imitate a payload: where it ends it **sets off** the real projectile, owned
+and instigated by the Mech, right there, and the game does the rest. A kit never launches or drops its explosive (the
+user, 2026-11-03: "it's not a GEP gun launcher. It's like it just crashes into things with the GEP munition"):
 
-- a grenade or LAM: spawned at the spot, no velocity, its fuse timer set to 0.05 s (`ThrownProjectile.Timer` sets it off);
-- a rocket or 20 mm round: spawned just behind the impact, flying into what the kit hit (it goes off on contact).
-
-Both are the game's ordinary paths for a thrown grenade or a fired rocket, which already replicate in multiplayer (the
-risk of a payload made and destroyed in one tick on the host, never reaching clients, is avoided by giving it a moment).
+- a grenade or LAM: made unseen at the kit, no velocity, its fuse timer a moment (0.1 s, `ThrownProjectile.Timer` sets it
+  off: so it reaches every machine); the kit stays where it struck, the explosive under it, till it goes;
+- a rocket or 20 mm round: made at the kit and gone off at once on the host (`Explode`: the damage rings, point blank on
+  what it struck), every other machine shown its blast (`CoopPlayerCore.ClientBlast`). (First made a hair back moving
+  into what the kit struck, a rocket was made touching it already and never touched it: it went on through, measured.)
 
 ## Numbers (the game's own, CoopExplosiveFacts)
 
@@ -145,10 +146,9 @@ prototype that was never written: only the renders and the promo existed):
   while flying: `CoopMechPlayer.SwitchAmmo`); energy 5 a kit, 15 a full swarm (pro rata a partial one); a tap needs an
   explosive, a held key flies an empty kit; a kit called back, or a swarm's never sent, gives its explosive back
   (`Unload`).
-- **Letting go** (`CoopMechAugDrones.Release`, from `CoopFPV.LetGo` / `CoopFPVGuided.LetGo` wherever a kit ends: contact,
-  the fire button, shot down, its battery out): a grenade or LAM still where it is, its fuse 0.1 s (`Fuse`: a moment, so
-  it reaches every machine); a rocket or 20 mm round 40 units back (`RunUp`), flying on into what the kit hit. With a
-  rocket aboard, the fire button in mid-air sends the rocket on the way the kit points.
+- **Setting off** (`CoopMechAugDrones.Release`, from `CoopFPV.LetGo` / `CoopFPVGuided.LetGo` wherever a kit ends: it
+  crashes into what it hits, the fire button, shot down, its battery out): the explosive goes off where the kit is, never
+  launched or dropped (above); the fire button in mid-air sets it off there.
 - **The look**: the kit's own model in the game (`tools/flykit.py` `game`: `RevNetMech.FlyKit`, built with the Mech's art
   by `tools/mech_parts.py`, kept whole in the template; its fans turning in `Fly`, their blur discs translucent, the
   lights their own skin, a swarm lead's green); the payload under it in the explosive's own game look on every machine

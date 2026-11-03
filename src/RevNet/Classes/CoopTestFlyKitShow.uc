@@ -793,7 +793,7 @@ function Beat()
 			KBack = 85;
 			KUp = 20;
 			KSide = 25;
-			Cap( "Then the lead itself", "flat out into the last one, its LAM let go on contact" );
+			Cap( "Then the lead itself", "flat out into the last one: it crashes in, its LAM goes off" );
 			Go( 31, 0.1 );
 			break;
 		case 31:
@@ -940,7 +940,7 @@ function Beat()
 			Go( 62, 0.9 );
 			break;
 		case 62:
-			Cap( "Fire lets its payload go", "a LAM over two enemies: one blast takes both" );
+			Cap( "Fire sets it off", "a LAM over two enemies, where the kit is: one blast takes both" );
 			Go( 63, 0.05 );
 			break;
 		case 63:
