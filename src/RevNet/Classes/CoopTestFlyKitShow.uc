@@ -24,6 +24,7 @@ var vector LoadAt[16];
 var string LoadSay[16];
 var Projectile Gone[32];     // logged as gone (an exploding one, or a rocket lingering hidden, stays a while)
 var int nGone;
+var bool bAnyOwner;          // anyone's payloads logged, not only the host's (CoopTestKitThreat: characters' kits)
 
 // The camera.
 var name KCam;               // Fixed, Dolly, Orbit, Chase, Track, Pilot (the kit's own view), '' (the Mech's own)
@@ -101,7 +102,7 @@ function Payloads()
 	}
 	foreach AllActors( class'Projectile', P )
 	{
-		if ( P.bDeleteMe || P.Instigator!=Host || P.bHidden || P.IsInState( 'Exploding' ) )
+		if ( P.bDeleteMe || (P.Instigator!=Host && !bAnyOwner) )
 			continue;
 		for ( i=0; i<ArrayCount(Gone); i++ )
 			if ( Gone[i]==P )

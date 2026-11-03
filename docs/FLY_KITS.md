@@ -169,3 +169,33 @@ prototype that was never written: only the renders and the promo existed):
 Not yet in the game: the Doppler rush (the in-flight section above: still the preview's); one kit model for every
 payload (its clamps set for a LAM's width); the payloads under the kits in the classes' own looks (not HDTP's, which
 Revision puts on each projectile when it is made).
+
+## Kits against players (a playtest, 2026-11-03)
+
+The user is weighing fly kits as "a general inventory item for both players and NPCs", and wanted to see one "coming after"
+a player against JC's Aggressive Defense System (AugDefense) and the Mech's Active Protection (CoopMechAugBurst): in the
+base game the defense "doesn't really do anything particularly useful... the projectile speed is so slow on the missiles"
+(rockets can be walked away from; a guided kit at 1100-1300 a second, chasing, can't).
+
+For it: `CoopMechAugDrones.Sic` sends anyone's kit (a character's: lock-on, its explosive made for it); a character's kits
+hit players (a player's pass players, as before); a kit's `blastRadius` is its explosive's (what Active Protection judges a
+safe set-off by: a LAM kit had the drone's 224 against the LAM's 384). Both defenses take a guided kit for what it is, a
+projectile coming in, and setting it off sets its explosive off there. `CoopTestKitThreat` filmed it (build/video/
+kit_playtest.mp4; both players took no harm so the show went on), the distance from its target where each kit went off:
+
+| Defense | Kits | Went off |
+|---|---|---|
+| none | one, GEP rocket | on him (48 from him) |
+| Aggressive Defense tech 1 (160) | one, LAM | 82 out: a LAM's blast reaches 384, it still catches him |
+| tech 2 (320) | one, GEP rocket | 311 out (its blast 195: clear) |
+| tech 3 (480) | one, 20 mm | 438 out (its blast 515: just inside it) |
+| tech 4 (800) | four at once, 0.3 s apart | all four, 701-768 out |
+| Active Protection, top level (720, 1.5 s reload) | one, LAM | 682 out |
+| | two, 1.7 s apart | both, 657 and 685 out |
+| | four at once, 0.3 s apart | the first 692 out; three on the Mech (34-43) |
+
+So against kits the nano defense is strong once upgraded (tech 4 stopped a four-kit swarm; tech 1's reach is inside every
+payload's blast but a GEP rocket's), and Active Protection is a one-shot-per-reload system: a swarm saturates it. Each
+defense setting a kit off where it is uses the kit's own path (CoopFPVGuided.Explode, CoopMechAugDrones.Release).
+Open for the design: an inventory kit item for players and characters (the AI using it), what a kit costs, a defense's
+energy and charges against a swarm, whether a kit should evade (jink) a defense's first try.

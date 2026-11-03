@@ -35,13 +35,16 @@ replication
 		bHover, Kind;
 }
 
-// Its payload (CoopMechAugDrones.Load: 1 up by Payloads; 0, none: an empty kit, a scout).
+// Its payload (CoopMechAugDrones.Load: 1 up by Payloads; 0, none: an empty kit, a scout), its blast radius the
+// explosive's (Active Protection sets a kit off only out of reach of it: CoopMechAugBurst.Intercepted).
 function Arm( byte K )
 {
 	Kind = K;
 	Payload = None;
 	if ( K>0 )
 		Payload = class'CoopMechAugDrones'.default.Payloads[K - 1];
+	if ( class<DeusExProjectile>(Payload)!=None )
+		blastRadius = class<DeusExProjectile>(Payload).default.blastRadius;
 }
 
 // Its payload set off here (N: the way out of what it struck: bStruck), the kit spent with it: gone at once, or
@@ -195,7 +198,8 @@ auto simulated state Flying
 {
 	simulated function ProcessTouch( Actor Other, vector HitLocation )
 	{
-		if ( bHover || Other==Owner || PlayerPawn(Other)!=None || CoopFPVGuided(Other)!=None || CoopFPV(Other)!=None )
+		if ( bHover || Other==Owner || (PlayerPawn(Other)!=None && PlayerPawn(Owner)!=None) || CoopFPVGuided(Other)!=None
+			|| CoopFPV(Other)!=None )
 			return;
 		bStruck = true;
 		Super.ProcessTouch( Other, HitLocation );

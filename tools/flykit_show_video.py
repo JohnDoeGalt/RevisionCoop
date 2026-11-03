@@ -115,6 +115,8 @@ def main():
     for t, w in ev:
         if w == "aug on":
             put(e(t), load(sdir, "AugActivate"), 0.5)
+        elif w.startswith("aps shot"):                                      # Active Protection's 20 mm charge
+            put(e(t), load(sdir, "AssaultGunFire20mm"), 0.7)
         elif w.startswith("boom fpv"):
             put(e(t) + 0.05 if e(t) is not None else None, load(sdir, "AugDeactivate"), 0.35)
         elif w.startswith("payload boom") and (t, w) in real:

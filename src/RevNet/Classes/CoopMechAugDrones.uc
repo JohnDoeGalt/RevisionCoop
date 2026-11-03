@@ -236,9 +236,30 @@ static function float Release( Actor Kit, class<Projectile> P, vector At, vector
 	}
 	if ( R!=None )
 		R.Instigator = Mech;
-	if ( Mech!=None )
+	if ( Mech!=None && Mech.PlayerReplicationInfo!=None )
 		Log( "RevNet:" @ Mech.PlayerReplicationInfo.PlayerName @ "fly kit set off" @ P.Name @ "contact" @ bContact @ "->" @ R, 'RevNet' );
+	else
+		Log( "RevNet:" @ Mech @ "fly kit set off" @ P.Name @ "contact" @ bContact @ "->" @ R, 'RevNet' );
 	return Linger;
+}
+
+// A fly kit sent by anyone (From: a character too, docs/FLY_KITS.md), from over its head at T, chasing it as a lock-on
+// kit does, carrying kind Kind (1 up, by Payloads; the explosive made for it, not taken from From's things).
+static function CoopFPVGuided Sic( Pawn From, Actor T, byte Kind )
+{
+	local CoopFPVGuided D;
+	local vector At;
+
+	if ( From==None || T==None )
+		return None;
+	At = From.Location + vect(0,0,1) * (From.CollisionHeight + 14);
+	D = From.Spawn( class'CoopFPVGuided', From,, At, rotator(T.Location - At) );
+	if ( D==None )
+		return None;
+	D.Instigator = From;
+	D.Arm( Kind );
+	D.Send( T, T.Location );
+	return D;
 }
 
 // A mid-air rocket's or round's blast as drawn on the other machines (CoopPlayerCore.ClientBlast's size).
