@@ -205,16 +205,19 @@ energy and charges against a swarm, whether a kit should evade (jink) a defense'
 A nest holds kits for a level's security and launches them when the alarm trips (one or two armed kits at a time, after
 a spotter goes red); kits in a nest taken out drop inert and can be looted. Concept art: `tools/nest_concept.py` (the
 first designs, the KR-7 modular rack), `tools/nest_riffs.py` (the line-up below). Every nest is powered by the game's own
-bio cells (the BioCell mesh and skin, unchanged, face-out so the gauge shows). The line-up, as the user set it:
+bio cells (the BioCell mesh and skin, unchanged, face-out so the gauge shows). The catalogue, all Corvane Ordnance,
+named "letters, number, nickname" (only the fly kit keeps its 7), the uses as the user set them:
 
-| Nest | What it is | Its place |
+| Corvane | What it is | Where it's best |
 |---|---|---|
-| KP-7 pads | landing tiles joined edge to edge, a kit sitting on each, a cell to a kit | the cheapest; each pad its own use |
-| KR-7 rack | the shared box, open: a gimbal arm on its back wall holds each kit level; out of the front; a cell bank that grows with the rack | cheap and modular |
-| KL-7 lockers | the box's module boxed one by one, a roll-up shutter, a cell and a console in the sill | indoors; each one hardened |
-| KV-7 vertical cells | the KR-7's box in armour, a cell in each; three stacked make one tube, out of its top; on a wall (the hive format) out of the front | modular and hardened |
-| KF-7 field case | a hard case for two kits in foam, three cells in its lid, fold-out legs | the man-portable vertical launcher |
-| KC-7 carousel | tiers of six kits round a core of cells, every kit's camera always on | the dearest: a camera and a launcher at once, it launches the second it sees you |
+| FK-7 fly kit | the kit | the flagship |
+| SP-2 Burr | the sensor puck: a fixed fisheye dome, 20 mm sized; thrown, it sticks and watches; on a kit, a flying camera | players and NPCs: players throw it to watch a room or a corner (the feed shared in co-op); NPCs fly it on spotter kits that hunt for you (going red sets off the alarm and the nests) |
+| LP-1 Perch | landing tiles, a kit and a cell each | cheap scattered pickets: low-budget outfits (NSF, gangs, Triads) dot them on rooftops, ledges and alleys, each covering one approach; easy to sneak past or wreck one at a time, but everywhere |
+| MR-3 Trellis | the open rack, kits level on gimbal arms out of the front, a cell bank that grows with it | a mass swarm from secure bases: depots and compounds behind the wire (UNATCO's island, military bases, hangars); the most kits for the money, all launching at once; exposed if reached (wreck it or loot it) |
+| SL-4 Warden | lockers, each hardened on its own, a roll-up shutter, a cell and a console in the sill | indoor corridors (launching straight down them, no room overhead), often at security desks too; physically secure and tamper resistant, the console the way in (hack it, like a turret's security computer, to shut it down or turn its kits) |
+| FC-5 Valise | a hard case for two kits in foam, three cells in its lid, fold-out legs | squads and elite troops (MJ12 commandos, men in black) carry one and set it up on contact (kill the carrier, the case is yours); and a player's own portable nest |
+| VC-6 Quiver | the Trellis's box in armour, a cell in each; three stacked make one capped tube; the hive format on a wall | hardened against weather and attack: sites that expect a fight (bases, silos, HQ roofs, Area 51), a stacked tube keeping kits coming for as long as the alarm lasts; and sealed places (ships, subs, the ocean lab) |
+| WC-9 Argus | tiers of six kits round a core of cells, every kit's camera always on | crown-jewel sites only, and rare (MJ12, Area 51, Versalife): atriums, courtyards and helipads it sees all round; no gap between camera and nest, so a priority target you plan for |
 
 The box and its arm (the user: "the back is always the same solid piece where the arm is mounted"; "think of the
 mounting arm... to be like a gimbal... it's gonna be mounted normally... holding it from a different position so that you

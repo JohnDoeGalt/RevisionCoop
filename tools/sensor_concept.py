@@ -422,9 +422,9 @@ import mech_storm
 
 # The fly kit's own maker's (the user, 2026-11-03: "it should be by the same manufacturer as the fly kit"): Corvane Ordnance
 # (docs/FK7_PROMO.md), its -7 family and lot style (tools/flykit.py: "FK-7  FLY KIT", "LOT 52-0318   MFD 03/2052").
-TEX_NAME, TEX_LOT, TEX_WARN = "MS-7  MOBILE SENSOR", "LOT 52-0611   MFD 05/2052", "OPTICAL DOME - DO NOT OBSTRUCT"
+TEX_NAME, TEX_LOT, TEX_WARN = "SP-2  BURR SENSOR", "LOT 52-0611   MFD 05/2052", "OPTICAL DOME - DO NOT OBSTRUCT"
 TEX_MAKER = "CORVANE ORDNANCE"
-TEX_PLATE = ("CORVANE", "MS-7 / 0611")
+TEX_PLATE = ("CORVANE", "SP-2 / 0611")
 
 
 def layout_one(p, A=1024):
@@ -625,7 +625,7 @@ def tex_sheet(out):
             "under the FK-7, side on", "under the FK-7, from below in front", "stuck to a wall")
     S = Image.new("RGB", (2 * tw, 80 + 3 * th), (24, 26, 30))
     d = ImageDraw.Draw(S)
-    d.text((24, 16), "Mobile sensor D1: painted skin", fill=(240, 200, 120), font=font(38))
+    d.text((24, 16), "Corvane SP-2 Burr: the sensor", fill=(240, 200, 120), font=font(38))
     for i, cap in enumerate(caps):
         im = Image.open(os.path.join(rd, "r%04d.png" % i)).convert("RGB").resize((tw, th), Image.LANCZOS)
         x, y = (i % 2) * tw, 80 + (i // 2) * th

@@ -13,13 +13,16 @@ gauge shows. Kits are always mounted level, as they fly, held by the tail in a g
 The designs, cheapest first, six views each (one module; scaling; free-standing; on a wall; on the game's own van;
 launching):
 
-  KP-7  pads: landing tiles joined edge to edge, a kit sitting on each, a cell in each
-  KR-7  the rack: the shared box, open, its kits going out of the front; a cell bank that grows with the rack
-  KL-7  lockers: hardened one by one, a roll-up shutter, a cell and a console in the sill; for indoors
-  KV-7  vertical cells: the rack's box in armour, a cell in each; three stacked make one tube, its kits out of its top
-        one at a time, top first (cheaper a kit); on a wall, the hive format, out of the front
-  KF-7  field case: a hard case for two kits, cells strapped in its lid, fold-out legs: the man-portable launcher
-  KC-7  carousel: tiers of six kits round a core of cells, their cameras always on: it sees, and it launches
+  LP-1 Perch    pads: single landing tiles, a kit and a cell each; cheap scattered pickets (rooftops, ledges, alleys)
+  MR-3 Trellis  the rack: the shared box, open, kits out of the front; a cell bank that grows with it; a mass swarm from
+                secure bases
+  SL-4 Warden   lockers: hardened one by one, a shutter, a cell and a console in the sill; corridors and security desks,
+                physically secure and tamper resistant, the console the way in
+  FC-5 Valise   field case: two kits in foam, cells in its lid, fold-out legs; carried by squads (lootable), or a player's
+                own portable nest
+  VC-6 Quiver   vertical cells: the rack's box in armour; three stacked make one tube, out of its top one at a time; on a
+                wall, the hive format, out of the front; hardened against weather and attack (bases, ships, subs)
+  WC-9 Argus    carousel: tiers of six kits round a core of cells, cameras always on; crown-jewel sites only
 
   python -I tools/nest_riffs.py build <outdir, absolute>   (Blender writes renders relative to itself otherwise)
   blender -b --factory-startup --python tools/flykit_render.py -- <outdir>/spec.json <outdir>/render
@@ -836,37 +839,38 @@ def kf_van(p, c, V):
 # ---- the designs, their views, the sheets ------------------------------------------------------------------------------
 VIEWS = ("one", "scale", "free", "wall", "van", "launch")
 DESIGNS = [  # tag, name, line, its place in the line-up, its views
-    ("KP-7", "pads", "the cheapest: landing tiles joined edge to edge, a kit sitting on each, a bio cell set behind it", "the cheapest",
+    ("LP-1", "Perch", "the cheapest: single landing tiles, a kit and a cell each, dotted on rooftops, ledges and alleys by low-budget outfits",
+     "cheap scattered pickets",
      dict(one=kp_one, scale=kp_scale, free=kp_free, wall=kp_wall, van=kp_van, launch=(7, (0, 0, 32), ((-24, 0, 32), 205, 30, 16)),
           caps=("one tile: a kit on its cradle, a cell behind it", "scalable: one, two, three by three",
                 "free-standing: decks stepping up and back, open sky above each", "wall-mounted: ledges climbing the wall",
                 "vehicle-mounted: two by five tiles on the roof", "launching: straight up off its tile"))),
-    ("KR-7", "rack", "cheap and modular: the shared box, open; a gimbal arm on its back wall holds each kit level, facing out; a cell bank grows with it",
-     "cheap, open, modular",
+    ("MR-3", "Trellis", "cheap and modular: the open rack, kits level on gimbal arms; the most kits for the money, a mass swarm from secure bases",
+     "a mass swarm, secure bases",
      dict(one=kr_one, scale=kr_scale, free=kr_free, wall=kr_wall, van=kr_van, launch=kr_launch,
           caps=("one box and its cell pack: a kit level in its gimbal arm", "scalable: the cell bank grows with the rack",
                 "free-standing: three by two on feet", "wall-mounted: four and a cell pack, on the rail",
                 "vehicle-mounted: two rows of four, back to back", "launching: let go, straight out of the front"))),
-    ("KL-7", "lockers", "for indoors: each locker hardened on its own, a roll-up shutter, a bio cell and a console in its sill",
-     "indoors, each one hardened",
+    ("SL-4", "Warden", "physically secure, tamper resistant: hardened lockers for corridors and security desks; the console is the way in",
+     "indoors, tamper resistant",
      dict(one=kl_one, scale=kl_scale, free=kl_free, wall=kl_wall, van=kl_van, launch=(0, (24, 0, -3), ((10, 0, 34), 195, 28, 12)),
           caps=("one locker, open: a kit on its claw; a cell and a console", "scalable: one, two, three by two (a cell each)",
                 "free-standing: four by two on a plinth, two open", "wall-mounted: three by two, rail above, braces below",
                 "vehicle-mounted: two rows of three, back to back", "launching: out from under the shutter"))),
-    ("KV-7", "vertical cells", "the rack's box in armour; three stacked make one tube (cheaper a kit): out of its top one at a time, top first",
-     "the rack, hardened",
+    ("VC-6", "Quiver", "hardened against weather and attack: bases that expect a fight, ships, subs; three stacked make one tube, out of its top",
+     "hardened: weather and attack",
      dict(one=kv_one, scale=kv_scale, free=kv_free, wall=kv_wall, van=kv_van, launch=kv_launch,
           caps=("one box, its cap open: the kit going up out of the top", "scalable: boxes stack into one tube, a cap on top",
                 "free-standing: three tubes three high, one launching", "wall-mounted, the hive format: on their sides, out of the front",
                 "vehicle-mounted: two rows of three, capped", "cutaway: three kits level in one tube; top one first, the next after it"))),
-    ("KF-7", "field case", "the man-portable launcher: a hard case for two kits in foam, cells strapped in its lid, fold-out legs",
-     "man-portable",
+    ("FC-5", "Valise", "the man-portable launcher: carried by squads and elite troops (lootable), or a player's own portable nest",
+     "man-portable: squads, players",
      dict(one=kf_one, scale=kf_scale, free=kf_free, wall=kf_wall, van=kf_van, launch=(2, (0, 0, 30), ((0, 0, 30), 195, 30, 16)),
           caps=("one case, open: two kits in foam, cells in the lid", "scalable: one, two latched, a stack of six",
                 "free-standing: three on their fold-out legs", "wall-mounted: cases on braced brackets, lids up",
                 "vehicle-mounted: eight strapped on the roof, two open", "launching: straight up out of its case"))),
-    ("KC-7", "carousel", "the dearest: six kits a tier round a core of bio cells, every kit's camera always on: it sees you, and it launches",
-     "the dearest: always watching",
+    ("WC-9", "Argus", "the dearest, crown-jewel sites only: six kits a tier, every camera always on; it sees you and launches the same second",
+     "crown jewels, always watching",
      dict(one=kc_one, scale=kc_scale, free=kc_free, wall=kc_wall, van=kc_van, launch=(11, (28, 0, 4), ((10, 0, 36), 170, 30, 12)),
           caps=("one tier on its tripod: six kits watching, four cells in the core", "scalable: one, two, three tiers",
                 "free-standing: two tiers, a beacon on top", "wall-mounted: half tiers on a wall plate, cells between",
@@ -956,7 +960,7 @@ def sheet(out):
     nests = [(d, s) for d, s in zip(DESIGNS, starts) if d[0] != "FK-7"]
     O = Image.new("RGB", (3 * tw, 80 + 2 * (th + 44)), (24, 26, 30))
     d = ImageDraw.Draw(O)
-    d.text((24, 16), "Kit nests, cheapest first, all on the game's bio cells", fill=(240, 200, 120), font=font(38))
+    d.text((24, 16), "Corvane kit nests, cheapest first, all on the game's bio cells", fill=(240, 200, 120), font=font(38))
     for k, ((tag, name, line, role, fn), (n0, views)) in enumerate(nests):
         im = Image.open(os.path.join(rd, "r%04d.png" % (n0 + views.index("free")))).convert("RGB").resize((tw, th), Image.LANCZOS)
         x, y = (k % 3) * tw, 80 + (k // 3) * (th + 44)
