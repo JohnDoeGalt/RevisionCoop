@@ -38,7 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flykit
 from mech_parts import Part
 from sensor_concept import eye, game_obj, moved, write_obj
-from nest_concept import BW, TH, arm, claw, hazard_strip, kit_obj, kr_vehicle_frame, obj_bounds, place, rot_z
+from nest_concept import BW, TH, arm, claw, kit_obj, kr_vehicle_frame, obj_bounds, place, rot_z
 from nest_skin import write_tex
 
 X, Y, Z = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
@@ -217,13 +217,13 @@ def frame(p, cells, o, hard=False, cut=False):
     hx, hy = VD / 2 - 0.6, BW / 2 - 0.6
     for sx in (1, -1):
         for sy in (1, -1):
-            bx(p, o + [sx * hx, sy * hy, TH / 2], (1.2, 1.2, TH), "duct" if hard else ("hull", "panel"))
+            bx(p, o + [sx * hx, sy * hy, TH / 2], (1.2, 1.2, TH), "rack")
             p.prism(o + [sx * hx, sy * hy, TH], o + [sx * hx, sy * hy, TH + 0.5], X, 0.35, 6, "steel", None, "steel")
         for z in (0.6, TH - 0.6):
-            bx(p, o + [sx * hx, 0, z], (1.2, BW - 2.4, 1.2))
+            bx(p, o + [sx * hx, 0, z], (1.2, BW - 2.4, 1.2), "rail")
     for sy in (1, -1):
         for z in (0.6, TH - 0.6):
-            bx(p, o + [0, sy * hy, z], (VD - 2.4, 1.2, 1.2))
+            bx(p, o + [0, sy * hy, z], (VD - 2.4, 1.2, 1.2), "rail")
     bx(p, o + [-(VD / 2 - 0.7), 0, TH / 2], (0.8, BW - 1.2, TH - 1.2))                # the back wall
     if hard:
         for sy in (1, -1):
@@ -233,7 +233,6 @@ def frame(p, cells, o, hard=False, cut=False):
         if not cut:
             bx(p, o + [VD / 2 - 0.7, 0, TH / 2], (0.8, BW - 1.2, TH - 1.2))
             cell_bank(p, cells, o + [VD / 2 + 1.0, 0, TH / 2 - 0.8], X, 1, 1, depth=1.2)
-            hazard_strip(p, o + [VD / 2 + 0.05, 0, TH - 2.0], Y, Z, X, (BW - 6, 1.2, 0.08))
             bx(p, o + [VD / 2 + 0.06, BW / 2 - 2.0, TH - 2.0], (0.1, 1.0, 0.6), "light")
             plate(p, o + [VD / 2 - 0.25, 0, 13.75], X, 9.0, 0.9, "VC-6 QUIVER")
     else:
@@ -257,7 +256,6 @@ def cap(p, top, state, lid_deg=-105.0):
     """A tube's cap, hinged at the back of its top: "closed" or "open"."""
     lid_ = Part("cap")
     bx(lid_, top + [0, 0, 0.6], (VD, BW, 1.2), ("panel", "hull"))
-    hazard_strip(lid_, top + [VD / 2 + 0.05, 0, 0.6], Y, Z, X, (BW - 4, 1.0, 0.08))
     bx(lid_, top + [VD / 2 - 1.5, 0, 1.5], (1.0, 6.0, 0.6), "rim")
     R = np.eye(3) if state == "closed" else rot(Y, lid_deg)
     hinge = top + [-VD / 2, 0, 0.6]
@@ -310,7 +308,6 @@ def frame_power(p, cells, o, nz):
     flykit.chamfer_box(p, tuple(o + [-VD / 2, -BW / 2, 0]), tuple(o + [VD / 2, BW / 2, h]), 0.5, "hull", "panel")
     rows = max(1, int((h - 5.0) // CP))
     cell_bank(p, cells, o + [VD / 2 + 1.0, 0, 2.0 + (rows * CP + 1.4) / 2], X, 2, rows)
-    hazard_strip(p, o + [VD / 2 + 0.05, 0, h - 1.6], Y, Z, X, (BW - 3, 1.2, 0.08))
     plate(p, o + [VD / 2 + 0.04, 0, 1.0], X, 9.0, 1.0, "MR-3 CELL BANK")
     p.prism(o + [0, 0, h], o + [0, 0, h + 1.6], X, 1.0, 10, "light", None, "light")
     p.prism(o + [-VD / 2 + 2, BW / 2 - 3, h], o + [-VD / 2 + 2, BW / 2 - 3, h + 24], X, 0.9, 10, "duct", None, None)
@@ -329,8 +326,6 @@ def feet(p, o, width, depth=VD):
 def skids(p, width):
     for x in (-VD / 2 + 2, VD / 2 - 2):
         bx(p, (x, 0, 1.0), (3.0, width + 6, 2.0), "duct")
-        for y in (-width / 2 - 3, width / 2 + 3):
-            hazard_strip(p, (x, y, 2.05), X, Y, Z, (2.8, 1.0, 0.08))
 
 
 def rack(p, cells, y0, nx, nz, gone=(), base=True):
@@ -355,7 +350,6 @@ def wall_mount(p, n, top, bottom, back, depth, hooks=True):
     """On a wall (x = 0): a rail above n boxes (a hook over each), a knee brace under every joint."""
     width = n * BW
     bx(p, (1.2, 0, top + 2.6), (2.4, width + 6, 3.6))
-    hazard_strip(p, (2.45, 0, top + 2.6), Y, Z, X, (width + 2, 1.2, 0.08))
     for k in range(n if hooks else 0):
         y = -width / 2 + (k + 0.5) * BW
         bx(p, ((back + 1.6) / 2, y, top + 0.4), (back + 1.6, 3.0, 0.8), "duct")
@@ -477,16 +471,8 @@ LW, LD, LH, SILL = 22.0, 16.0, 33.0, 12.0
 
 
 def console(p, c):
-    """A small console on a sill: a screen with a few lit lines, a keypad, a red key."""
-    c = np.asarray(c, float)
-    bx(p, c + [0.6, 0, 0], (1.2, 9.4, 10.0))
-    bx(p, c + [1.25, 0, 2.2], (0.1, 7.0, 4.0), "glass")
-    for k, w in enumerate((5.0, 3.6, 4.4)):
-        bx(p, c + [1.32, -3.5 + 0.6 + w / 2, 3.5 - k * 0.9], (0.04, w, 0.35), "light")
-    for i in range(3):
-        for j in range(3):
-            bx(p, c + [1.4, -1.6 + i * 1.2, -1.2 - j * 1.1], (0.4, 0.9, 0.8), "steel")
-    bx(p, c + [1.4, 2.6, -2.3], (0.4, 1.4, 1.4), "latch")
+    """A console on a sill: Revision's own control panel (a keypad, a screen) on its housing."""
+    p.box(np.asarray(c, float) + [0.6, 0, 0], X, Y, Z, (1.2, 9.4, 10.0), ("duct", "face:ClenCntrlPanl_4A"))
 
 
 def locker(p, cells, o, open_=False):
@@ -508,7 +494,6 @@ def locker(p, cells, o, open_=False):
     bx(p, o + [LD / 2 - 0.5, 0, LH - 1.6], (1.0, LW, 2.2))
     cell_bank(p, cells, o + [LD / 2 + 1.0, -LW / 4, SILL / 2], X, 1, 1)
     console(p, o + [LD / 2, LW / 4, SILL / 2])
-    hazard_strip(p, o + [LD / 2 + 0.05, 0, LH - 1.6], Y, Z, X, (LW - 4, 1.2, 0.08))
     plate(p, o + [0, LW / 2 + 0.04, LH - 6.0], Y, 8.0, 1.6, "SL-4 WARDEN")
     if open_:
         p.prism(o + [LD / 2 - 2.0, -(LW / 2 - 1.0), LH - 4.2], o + [LD / 2 - 2.0, LW / 2 - 1.0, LH - 4.2], Z, 1.5, 10, "panel",
@@ -532,7 +517,6 @@ def lockers(p, cells, o, nx, nz, opened=()):
 
 def plinth(p, y, width, depth):
     bx(p, (0, y, 1.0), (depth + 4, width + 2, 2.0), "duct")
-    hazard_strip(p, (depth / 2 + 2.05, y, 1.0), Y, Z, X, (width - 2, 1.0, 0.08))
 
 
 def kl_one(p, c):
@@ -562,7 +546,6 @@ def kl_wall(p, c):
     s = lockers(p, c, (0.6 + LD / 2, 0, bottom), 3, 2, (2, 5))
     top = bottom + 2 * (LH + 0.5)
     bx(p, (1.2, 0, top + 2.4), (2.4, 3 * LW + 6, 3.6))
-    hazard_strip(p, (2.45, 0, top + 2.4), Y, Z, X, (3 * LW + 2, 1.2, 0.08))
     for y in (-1.5 * LW + 0.8, -0.5 * LW, 0.5 * LW, 1.5 * LW - 0.8):
         knee(p, y, bottom, LD + 0.6)
     return s, ((10, 0, 50), 195, 36, 10)
@@ -582,8 +565,14 @@ TT, RK = 22.0, 20.0                                     # a tier's height, the k
 ANG6 = [30.0 + 60 * k for k in range(6)]
 
 
+def paged(p, n0):
+    """The faces from n0 on in Bob Page's white panelling (the Argus guards the crown jewels: MJ12's own sites)."""
+    p.faces[n0:] = [(pts, {"hull": "page", "panel": "page2"}.get(r, r)) for pts, r in p.faces[n0:]]
+
+
 def carousel_tier(p, cells, o, angles, core=True):
     """Kits hanging on arms round a hub, facing out; the core under the hub faced with bio cells on all four sides."""
+    n0 = len(p.faces)
     o = np.asarray(o, float)
     if core:
         bx(p, o + [0, 0, TT / 2], (12.0, 12.0, TT))
@@ -592,7 +581,6 @@ def carousel_tier(p, cells, o, angles, core=True):
             cell_bank(p, cells, o + n * 7.0 + [0, 0, 8.0], n, 1, 1)
         p.prism(o, o + [0, 0, 1.6], X, 8.5, 8, "duct", "duct", "duct")
         p.prism(o + [0, 0, TT - 2.6], o + [0, 0, TT - 0.6], X, 9.0, 6, "duct", "duct", "duct")
-        hazard_strip(p, o + [0, 0, TT - 0.55], X, Y, Z, (10.0, 1.4, 0.08))
     else:
         bx(p, o + [4.75, 0, TT - 1.6], (9.5, 18.0, 2.0), "duct")
     s = []
@@ -603,19 +591,21 @@ def carousel_tier(p, cells, o, angles, core=True):
         claw(p, tip)
         p.box(o + d * 14.0 + [0, 0, TT + 0.1], d, np.cross(Z, d), Z, (0.8, 0.8, 0.4), ("light", "light"))
         s.append((hang(tip), a))
+    paged(p, n0)
     return s
 
 
 def tripod(p, o, h=10.0):
+    n0 = len(p.faces)
     o = np.asarray(o, float)
     bx(p, o + [0, 0, h / 2], (14.0, 14.0, h))
-    hazard_strip(p, o + [7.05, 0, h - 2], Y, Z, X, (12.0, 1.2, 0.08))
     plate(p, o + [7.04, 0, h - 4.5], X, 10.0, 1.4, "WC-9 ARGUS")
     for a in (90, 210, 330):
         d = rot_z(a) @ np.array(X)
         foot = o + d * 26 + [0, 0, 0.6]
         p.prism(o + d * 5 + [0, 0, h * 0.6], foot, Z, 1.0, 8, "steel", None, None)
         p.prism(foot - [0, 0, 0.6], foot + [0, 0, 0.6], X, 2.0, 8, "band", "band", "band")
+    paged(p, n0)
 
 
 def carousel(p, cells, o, tiers):
@@ -706,7 +696,6 @@ def pad_tower(p, cells, o, tiers=3, wide=3):
     for k in range(tiers):
         z, x = 4.0 + 16.0 * k, -PX * k
         bx(p, o + [x, 0, z - 0.8], (PX, wide * PY + 2, 1.6), "duct")
-        hazard_strip(p, o + [x + PX / 2 + 0.05, 0, z - 0.8], Y, Z, X, (wide * PY, 1.2, 0.08))
         for sx in (1, -1):
             for sy in (1, -1):
                 bx(p, o + [x + sx * (PX / 2 - 1), sy * (wide * PY / 2), (z - 1.6) / 2], (1.6, 1.6, z - 1.6))
@@ -774,7 +763,6 @@ def case(p, cells, o, open_=True, lid_deg=-100.0, strap=False):
     for s in (1, -1):
         for sx in (1, -1):
             bx(lid, o + [sx * (CX / 2 - 0.7), s * (CY / 2 - 0.7), CB + CL / 2], (1.8, 1.8, CL + 0.2), "band")
-    hazard_strip(lid, o + [CX / 2 + 0.05, 0, CB + CL / 2], Y, Z, X, (CY - 10, 1.0, 0.08))
     cell_bank(lid, lc, o + [0, 0, CB], -np.array(Z), 3, 1, up=X, depth=1.0)
     bx(lid, o + [3.8, 0, CB - 2.05], (1.0, 3 * CP + 2, 0.15), "band")
     if not open_:

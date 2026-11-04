@@ -1,111 +1,123 @@
-"""Painted skins for the kit nests (the user, 2026-11-03: "all the nests need textures"). A tileable texture for each
-material region (Corvane's slate paint in panels, its composite, steel, rubber, hazard amber, copper contacts, a screen,
-lit amber), painted the base game's way (panel seams with a lip, rivets, chipped edges, grime streaks), laid on each face
-by planar projection, so any nest made of boxes and prisms takes them as it is. The tiles repeat seamlessly (their
-noise is periodic), so they would serve the game's own meshes too. A nameplate face (region "plate:<text>") gets a
-plate of its own: CORVANE ORDNANCE over the model's name.
+"""Skins for the kit nests out of Revision's own textures (the user, 2026-11-03: "all the nests need textures"; then "you
+didn't give them new textures that fit better with Revision"; "leave out the hazard stripes"). Each material region
+takes a texture from the game as installed: Revision's own RevTex packages (DXT1, decoded here; its Area 51 clean-room
+metal panels, its control panel, its orange glass light, its terminal screen, Bob Page's white panelling) and the base
+game's metals that Revision's maps use (8-bit). Tiling ones are laid on each face by planar projection, repeating over
+their own world size; "whole" ones (a light, a screen, "face:<texture>", a "plate:<text>" nameplate) fill their face.
+Rubber, copper contacts and the red key are painted here (the game has none to suit).
 
-  write_tex(part, path, out): the part as OBJ + MTL, its tiles and plates written into out.
+  write_tex(part, path, out): the part as OBJ + MTL, the textures it uses written into out as PNG.
 """
 import math, os, re
 
 import numpy as np
 
-import flykit, mech_storm
+import flykit, ue1mesh
 from sensor_concept import C, GLOSSY
 
-N = 256                                                 # a tile's texels
-TILE = 10.0                                             # world units a tile covers (about 19 cm): 25.6 texels a unit
-U, V = np.meshgrid((np.arange(N) + 0.5) / N, 1 - (np.arange(N) + 0.5) / N)   # (row 0 the top: v up the image)
+DX = os.path.dirname(flykit.REV)                        # the game's own folder (Revision's is inside it)
+A51, MISC, METAL = "Revision/Textures/RevTexA51", "Revision/Textures/RevTexMisc", "Textures/CoreTexMetal"
+# region: (package, texture, (world units it repeats over across, up), tone (the user: "too bright"), turned: its length
+# along a face rather than up it). The shared box's posts and rails wear the game's own storage rack (the user:
+# "shouldn't we use the rack texture for the racks?"): its upright (racksides), its slotted shelf edge (metalshelf_a).
+SOURCES = {"hull": (A51, "ClenCntrlPanl_1A", (40.0, 40.0), 0.5, False),
+           "panel": (A51, "ClenCntrlPanl_2A", (40.0, 40.0), 0.55, False),
+           "page": (A51, "BPagePanl_LaytA_Wall", (44.0, 44.0), 0.5, False),
+           "page2": (A51, "BPagePanl_LaytB_Wall", (44.0, 44.0), 0.5, False),
+           "duct": (METAL, "ShipGrayMetal_A", (16.0, 16.0), 1.0, False),
+           "steel": (METAL, "Galvanzd", (16.0, 16.0), 0.8, False),
+           "rim": (METAL, "IronYeloPlain_A", (12.0, 12.0), 0.75, False),
+           "rack": (METAL, "racksides", (1.2, 4.8), 1.0, False),
+           "rail": (METAL, "metalshelf_a", (1.2, 4.8), 1.0, True)}
+WHOLE = {"light": (A51, "OrangeLight_D", 1.0), "glass": (MISC, "CC_terminal2", 0.9)}
+FACE_TONE = 0.8
+FACES = (A51, MISC, METAL)                             # where "face:<name>" looks
+TILE = 10.0                                             # the painted tiles' repeat
+N = 256
+_pk = {}
 
 
-def pnoise(seed, octaves=((2, 1.0), (4, 0.5), (8, 0.25), (16, 0.12)), kx=1, ky=1):
-    """Tileable noise on the unit square, -1..1: random-phase waves of whole-number frequencies (kx, ky stretch them)."""
+def dxt1(data, w, h):
+    """A DXT1 (S3TC) image's pixels."""
+    b = np.frombuffer(data[:w * h // 2], np.uint8).reshape(-1, 8)
+    c = b[:, :4].copy().view("<u2")
+
+    def rgb(v):
+        return np.stack([((v >> 11) & 31) * 255 // 31, ((v >> 5) & 63) * 255 // 63, (v & 31) * 255 // 31], -1).astype(float)
+    c0, c1 = rgb(c[:, 0]), rgb(c[:, 1])
+    four = (c[:, 0] > c[:, 1])[:, None]
+    pal = np.stack([c0, c1, np.where(four, (2 * c0 + c1) / 3, (c0 + c1) / 2), np.where(four, (c0 + 2 * c1) / 3, 0)], 1)
+    idx = b[:, 4:].copy().view("<u4")[:, 0]
+    px = np.stack([(idx >> (2 * k)) & 3 for k in range(16)], 1)
+    blocks = np.take_along_axis(pal, px[..., None].repeat(3, -1), 1).reshape(h // 4, w // 4, 4, 4, 3)
+    return blocks.transpose(0, 2, 1, 3, 4).reshape(h, w, 3).astype(np.uint8)
+
+
+def game_texture(pkg, name):
+    """A texture out of the game's packages (pkg relative to the game's folder, no extension): RGB pixels, its top mip."""
+    if pkg not in _pk:
+        _pk[pkg] = ue1mesh.Package(os.path.join(DX, pkg + ".utx"))
+    p = _pk[pkg]
+    e = p.find(name, "Texture")
+    r = ue1mesh.Reader(p.d, e["off"])
+    props = p.object_props(r)
+    r.ci()
+    n = p.lazy_count(r)
+    data = p.d[r.p:r.p + n]
+    r.p += n
+    w, h = r.i32(), r.i32()
+    if props.get("Format", b"\x00")[:1] == b"\x03":
+        return dxt1(data, w, h)
+    pe = p.exports[props["Palette"] - 1]
+    pr = ue1mesh.Reader(p.d, pe["off"])
+    p.object_props(pr)
+    pal = [tuple(p.d[pr.p + 4 * i + j] for j in range(3)) for i in range(pr.ci())]
+    return np.array(pal, np.uint8)[np.frombuffer(data[:w * h], np.uint8)].reshape(h, w, 3)
+
+
+def find_face(name):
+    for pkg in FACES:
+        try:
+            return game_texture(pkg, name)
+        except Exception:
+            continue
+    raise KeyError(name)
+
+
+def painted(region, seed=7):
+    """The few regions the game has nothing to suit: rubber, copper contacts, the red key."""
     rng = np.random.default_rng(seed)
-    out = np.zeros((N, N))
-    for f, a in octaves:
-        for _ in range(6):
-            fx, fy = (int(x) for x in rng.integers(-f, f + 1, 2))
-            if fx == 0 and fy == 0:
-                continue
-            out += a * np.cos(2 * math.pi * (fx * kx * U + fy * ky * V) + rng.uniform(0, 2 * math.pi))
-    return out / (np.abs(out).max() + 1e-9)
-
-
-def painted(base, seed, panels, inset=False):
-    """Corvane's slate paint: panels with seams (a light lip above each), rivets at their corners, chipped edges showing
-    bare metal, grime streaking down from each seam."""
-    base = np.asarray(base, float)
-    col = base * (0.88 + 0.07 * pnoise(seed))[..., None]
-    P = N / panels
-    lu, lv = (U * N) % P, (V * N) % P                   # texels into the panel from its left, its bottom
-    du, dv = np.minimum(lu, P - lu), np.minimum(lv, P - lv)
-    streak = pnoise(seed + 1, ((8, 1.0), (16, 0.6), (32, 0.3)), kx=1, ky=0)
-    grime = np.clip(lv / P * 1.6 + 0.25 * streak, 0, 1)  # dirt gathers low in each panel, streaked
-    col = col * (0.8 + 0.2 * grime)[..., None]
-    chips = (pnoise(seed + 2, ((16, 1.0), (32, 0.7), (64, 0.4))) > 0.5) & ((du < 7) | (dv < 7))
-    col = np.where(chips[..., None], np.array([132.0, 134, 136]) * (0.9 + 0.1 * pnoise(seed + 3))[..., None], col)
-    if inset:                                           # a recessed panel: a second line inside the seam
-        ring = (np.abs(np.minimum(du, dv) - 11) < 0.8)
-        col = np.where(ring[..., None], col * 0.6, col)
-    col = np.where(((dv >= 1.3) & (dv < 2.6) & (lv < P / 2))[..., None], col * 1.2, col)
-    col = np.where(((du < 1.3) | (dv < 1.3))[..., None], col * 0.34, col)
-    rr = np.full(U.shape, 99.0)
-    for cu in (6.0, P - 6.0):
-        for cv in (6.0, P - 6.0):
-            rr = np.minimum(rr, np.hypot(lu - cu, lv - cv))
-    col = np.where((rr < 2.6)[..., None], col * 0.45, col)
-    col = np.where((rr < 1.5)[..., None], np.array([150.0, 152, 154]), col)
-    return col
-
-
-def tile(region, seed=7):
-    """A region's tile (RGB, 0-255)."""
-    n = pnoise(seed + 40)
-    if region == "hull":
-        return painted(flykit.SLATE, seed, 2)
-    if region == "panel":
-        return painted(flykit.SLATE * 1.14, seed + 10, 1, inset=True)
-    if region == "duct":                                # matte composite: a fine weave
-        w = np.sin(2 * math.pi * (16 * U + 16 * V)) * np.sin(2 * math.pi * (16 * U - 16 * V))
-        return flykit.COMPOSITE * (0.86 + 0.08 * w + 0.06 * n)[..., None]
-    if region == "steel":                               # brushed steel
-        b = pnoise(seed + 41, ((16, 1.0), (32, 0.7), (64, 0.5)), kx=0, ky=1)
-        return mech_storm.STEEL * (0.84 + 0.1 * b + 0.05 * n)[..., None]
-    if region == "band":                                # rubber
-        return np.array([30.0, 30, 33]) * (0.85 + 0.15 * n)[..., None]
-    if region == "rim":                                 # hazard amber, worn through to dark metal at the chips
-        col = mech_storm.HAZARD * (0.88 + 0.08 * n)[..., None]
-        chips = pnoise(seed + 42, ((16, 1.0), (32, 0.7), (64, 0.5))) > 0.62
-        return np.where(chips[..., None], np.array([58.0, 58, 60]), col)
-    if region == "pad":                                 # copper contacts, interleaved traces
-        on = (U * 16) % 1 < 0.55
-        return np.where(on[..., None], flykit.COPPER * 1.2, flykit.COPPER * 0.55) * (0.9 + 0.1 * n)[..., None]
-    if region == "glass":                               # a dark screen, faint scan lines
-        col = np.array([14.0, 18, 26]) * (1.0 + 0.4 * V)[..., None]
-        return np.where(((np.arange(N) % 3) == 0)[:, None, None], col * 0.75, col)
-    if region == "light":
-        return flykit.AMBER * (0.92 + 0.08 * n)[..., None]
-    return np.array(C.get(region, (0.3, 0.3, 0.3))) * 255 * (0.9 + 0.1 * n)[..., None]
-
-
-REGIONS = ("hull", "panel", "duct", "steel", "band", "rim", "pad", "glass", "light", "latch")
-
-
-def tiles(out):
-    """Each region's tile as PNG in out (once): {region: path}."""
-    from PIL import Image
-    paths = {}
-    for r in REGIONS:
-        path = os.path.join(out, "nest_%s.png" % r)
-        if not os.path.exists(path):
-            Image.fromarray(np.clip(tile(r), 0, 255).astype(np.uint8), "RGB").save(path)
-        paths[r] = path
-    return paths
+    n = rng.random((N, N, 1))
+    if region == "band":
+        return np.array([30.0, 30, 33]) * (0.85 + 0.15 * n)
+    if region == "pad":
+        on = ((np.arange(N) / N * 16) % 1 < 0.55)[None, :, None]
+        return np.where(on, flykit.COPPER * 1.2, flykit.COPPER * 0.55) * (0.9 + 0.1 * n)
+    return np.array(C.get(region, (0.3, 0.3, 0.3))) * 255 * (0.9 + 0.1 * n)
 
 
 def slug(s):
     return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+
+def region_png(out, r):
+    """The texture for region r as PNG in out (once)."""
+    from PIL import Image
+    path = os.path.join(out, "nest_%s.png" % slug(r))
+    if os.path.exists(path):
+        return path
+    if r.startswith("plate:"):
+        return plate_png(out, r[6:])
+    if r.startswith("face:"):
+        a = (find_face(r[5:]) * FACE_TONE).astype(np.uint8)
+    elif r in SOURCES:
+        a = (game_texture(*SOURCES[r][:2]) * SOURCES[r][3]).astype(np.uint8)
+    elif r in WHOLE:
+        a = (game_texture(*WHOLE[r][:2]) * WHOLE[r][2]).astype(np.uint8)
+    else:
+        a = np.clip(painted(r), 0, 255).astype(np.uint8)
+    Image.fromarray(a, "RGB").save(path)
+    return path
 
 
 def plate_png(out, text):
@@ -125,16 +137,18 @@ def plate_png(out, text):
     small, big = ImageFont.truetype(face, 30), ImageFont.truetype(face, 56)
     d.text((W / 2, 34), "CORVANE ORDNANCE", fill=(206, 204, 194), font=small, anchor="mm")
     d.text((W / 2, 86), text, fill=(232, 230, 220), font=big, anchor="mm")
-    a = np.asarray(im, float)
-    rng = np.random.default_rng(len(text))
-    a = a * (0.9 + 0.1 * rng.random((H, W, 1)))
+    a = np.asarray(im, float) * (0.9 + 0.1 * np.random.default_rng(len(text)).random((H, W, 1)))
     Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), "RGB").save(path)
     return path
 
 
+def whole(r):
+    return r.startswith("plate:") or r.startswith("face:") or r in WHOLE
+
+
 def face_uv(P, region):
     """A face's UVs by planar projection (level faces: x across, y up the texture; upright ones: across as a viewer facing
-    it reads, up as up), in tiles; a plate's front face takes its whole plate."""
+    it reads, up as up), in its texture's repeats; a whole one fills its face."""
     nrm = np.cross(P[1] - P[0], P[-1] - P[0])
     if np.linalg.norm(nrm) < 1e-12:
         return [(0.0, 0.0)] * len(P)
@@ -146,23 +160,19 @@ def face_uv(P, region):
         h /= np.linalg.norm(h)
         A, B = np.cross([0, 0, 1.0], h), np.array([0, 0, 1.0])
     u, v = P @ A, P @ B
-    if region.startswith("plate:"):
+    if whole(region):
         return list(zip((u - u.min()) / max(np.ptp(u), 1e-6), (v - v.min()) / max(np.ptp(v), 1e-6)))
-    return list(zip(u / TILE, v / TILE))
+    (ru, rv), turned = (SOURCES[region][2], SOURCES[region][4]) if region in SOURCES else ((TILE, TILE), False)
+    return list(zip(v / ru, u / rv)) if turned else list(zip(u / ru, v / rv))
 
 
 def write_tex(p, path, out):
-    """The part as OBJ + MTL with its regions' tiles (and plates) laid on (Blender's OBJ frame: y up)."""
-    tl = tiles(out)
+    """The part as OBJ + MTL with its regions' textures laid on (Blender's OBJ frame: y up)."""
     mtl = path[:-4] + ".mtl"
     used = sorted({r for _, r in p.faces})
     with open(mtl, "w") as f:
         for r in used:
-            png = plate_png(out, r[6:]) if r.startswith("plate:") else tl.get(r)
-            if png is None:
-                f.write("newmtl %s\nKd %.4f %.4f %.4f\n\n" % ((slug(r),) + tuple(c ** 2.2 for c in C.get(r, (0.3, 0.3, 0.3)))))
-                continue
-            f.write("newmtl %s\nKd 1 1 1\nmap_Kd %s\n" % (slug(r), os.path.basename(png)))
+            f.write("newmtl %s\nKd 1 1 1\nmap_Kd %s\n" % (slug(r), os.path.basename(region_png(out, r))))
             f.write("Ks 0.9 0.9 0.9\nNs 600\n" if r in GLOSSY else "Ks 0.2 0.2 0.2\nNs 40\n")
             f.write("Ke 1.0 0.62 0.12\n\n" if r == "light" else "\n")
     with open(path, "w") as f:
