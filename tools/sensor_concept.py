@@ -8,6 +8,7 @@ flykit.kit, seat, clamps telescope to it as to any payload). Flat colours on the
   python -I tools/sensor_concept.py build [outdir]   (default build/mech/sensor: the OBJs and render spec.json)
   blender -b --factory-startup --python tools/flykit_render.py -- <outdir>/spec.json <outdir>/render
   python -I tools/sensor_concept.py sheet [outdir]   (<outdir>/sensor_concepts.png: the renders, labelled)
+  python -I tools/sensor_concept.py d [outdir], dsheet [outdir]   (the 20 mm form iterated: VARIANTS; rendered as above)
 
 Frame: x forward, y left, z up; game units (about 1.9 cm).
 """
@@ -160,11 +161,14 @@ def mesh(p):
     return V, tris
 
 
-def kitted(p, out, tag):
-    """The FK-7 clamped onto part p (centred, as it hangs under the kit): the kit's OBJ and the seated part's OBJ."""
+def kitted(p, out, tag, cx=None):
+    """The FK-7 clamped onto part p (centred, as it hangs under the kit; cx: the x of p held under the kit's middle,
+    else its own middle): the kit's OBJ and the seated part's OBJ."""
     from PIL import Image
     V, tris = mesh(p)
     c = (V.max(0) + V.min(0)) / 2
+    if cx is not None:
+        c[0] = cx
     p = moved(p, t=-c)
     V = V - c
     k, under = flykit.kit(V.max(0) - V.min(0))
@@ -296,6 +300,115 @@ def sheet(out):
     print(path)
 
 
+# ---- D, iterated (the user, 2026-11-03: "some iterations of the 20 millimeter one, maybe make it a little longer so that the
+# clamps aren't touching the lens. Maybe adding some various details... a bunch of versions"). Each is longer than D (its
+# body 60% longer: both clamps land on the body, the dome clear ahead of them, held under the kit by its body's middle)
+# and carries its own details.
+D_LONG = 1.6
+VARIANTS = [("D1", "Long", "the 20 mm form lengthened: both clamps on the body, the dome clear"),
+            ("D2", "Finned", "cooling fins round its tail, like a sensor that runs warm"),
+            ("D3", "Hooded", "a short lens hood round the dome's base: sun and knocks"),
+            ("D4", "Caged", "four thin ribs arching over the dome: a guard, nothing moves"),
+            ("D5", "Hazard bands", "hazard stripes at the base, a status strip down one side"),
+            ("D6", "Clamp flats", "copper landing plates where the clamps grip, a stencilled band")]
+CLAMP_HALF = flykit.CLAMP["depth"] / 2 + flykit.CLAMP["thick"]     # a jaw's half width along the payload, about
+
+
+def d_body(kind):
+    """D lengthened, with kind's details (VARIANTS), stood on its base along z: (the part, its body length, the dome's
+    centre height, the dome's radius)."""
+    s, r = R20, 1.8 * R20
+    B = 3.95 * s * D_LONG
+    p = Part(kind)
+    p.prism((0, 0, -0.1), (0, 0, 0), (1, 0, 0), r * 0.8, 20, "pad", "pad", None)
+    p.prism((0, 0, 0), (0, 0, 0.15 * s), (1, 0, 0), r * 0.9, 20, "hull", "hull", None, radius_end=r)
+    p.prism((0, 0, 0.15 * s), (0, 0, B - 0.35), (1, 0, 0), r, 20, "hull", None, None)
+    p.prism((0, 0, 0.7 * s), (0, 0, 1.15 * s), (1, 0, 0), r * 1.03, 20, "band", None, None)       # the driving band
+    p.prism((0, 0, B - 1.4), (0, 0, B - 1.28), (1, 0, 0), r * 1.02, 20, "light", None, None)      # the status ring
+    p.prism((0, 0, B - 0.35), (0, 0, B), (1, 0, 0), r, 20, "panel", None, "panel", radius_end=r * 0.9)
+    dc, dr = B + 0.35, r * 0.86
+    eye_dome(p, (0, 0, dc), dr)
+    mid = B / 2
+    if kind == "D2":                                    # cooling fins round the tail
+        for k in range(10):
+            a = 2 * math.pi * k / 10
+            d, tg = np.array([math.cos(a), math.sin(a), 0]), np.array([-math.sin(a), math.cos(a), 0])
+            p.box(d * (r + 0.2) + [0, 0, 2.8], d, tg, (0, 0, 1), (0.42, 0.12, 1.8), ("duct", "duct"))
+    elif kind == "D3":                                  # the lens hood
+        p.prism((0, 0, dc - 0.05), (0, 0, dc + dr * 0.55), (1, 0, 0), dr * 1.16, 24, "duct", None, None)
+        p.prism((0, 0, dc + dr * 0.55), (0, 0, dc + dr * 0.6), (1, 0, 0), dr * 1.16, 24, "rim", None, None, radius_end=dr * 1.05)
+    elif kind == "D4":                                  # the cage over the dome
+        R = dr * 1.12
+        for k in range(4):
+            a = math.pi / 4 + math.pi / 2 * k
+            d = np.array([math.cos(a), math.sin(a), 0])
+            pts = [np.array([0, 0, dc + 0.14]) + R * (math.cos(u) * d + math.sin(u) * np.array([0, 0, 1]))
+                   for u in np.linspace(0, math.pi / 2, 7)]
+            for q0, q1 in zip(pts, pts[1:]):
+                p.prism(q0, q1, np.cross(d, (0, 0, 1)), 0.11, 6, "rimdark", "rimdark", "rimdark")
+        p.prism((0, 0, dc + 0.14 + R - 0.08), (0, 0, dc + 0.14 + R + 0.12), (1, 0, 0), 0.28, 8, "rimdark", "rimdark", "rimdark")
+    elif kind == "D5":                                  # hazard bands and a status strip
+        for k in range(6):
+            z0 = 1.5 * s + k * 0.32
+            p.prism((0, 0, z0), (0, 0, z0 + 0.32), (1, 0, 0), r * 1.015, 20, "rim" if k % 2 == 0 else "band", None, None)
+        p.box((0, -(r + 0.02), mid + 0.6), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.5, 0.1, 3.2), ("band", "band"))
+        p.box((0, -(r + 0.07), mid + 0.6), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.22, 0.06, 2.9), ("light", "light"))
+    elif kind == "D6":                                  # landing plates where the clamps grip, a stencilled band
+        for zc in (mid - 2.475, mid + 2.475):
+            for sy in (1, -1):
+                p.box((0, sy * (r + 0.03), zc), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1.4, 0.08, 1.1), ("pad", "pad"))
+        p.prism((0, 0, mid - 0.45), (0, 0, mid + 0.45), (1, 0, 0), r * 1.01, 20, "band", None, None)
+        for k in range(5):
+            a = 2 * math.pi * k / 5 + 0.3
+            d, tg = np.array([math.cos(a), math.sin(a), 0]), np.array([-math.sin(a), math.cos(a), 0])
+            p.box(d * (r * 1.02) + [0, 0, mid], d, tg, (0, 0, 1), (0.05, 0.5, 0.5), ("rim", "rim"))
+    return p, B, dc, dr
+
+
+def d_iterations(out):
+    """The D variants: each stood beside the game's 20 mm round, and under the FK-7 seen from the side (its clamps on
+    the body, the dome clear: checked, printed)."""
+    import json
+    os.makedirs(out, exist_ok=True)
+    r20 = game_obj("HDTPItems", "HDTPHECannister", 1.0, rot_y(-90), (0, 4.2, 3.05), out, "r20")
+    frames, states = [], []
+    for tag, name, _ in VARIANTS:
+        p, B, dc, dr = d_body(tag)
+        frames.append([write_obj(moved(p, t=(0, -2.6, 0)), os.path.join(out, "alone_%s.obj" % tag)), r20])
+        states.append(dict(eye=eye((0, 0.6, 4.6), 24, 32, 18), look=(0, 0.6, 4.6), lens=50))
+        q = moved(p, rot_y(90))                         # along the kit, the dome forward
+        V, _ = mesh(q)
+        xs = flykit.clamp_xs(V - [B / 2, 0, 0])
+        print("%s: clamps at %.2f and %.2f from the body's middle; the dome's collar starts at %.2f: clear by %.2f" % (
+            tag, xs[0], xs[1], dc - 0.35 - B / 2, dc - 0.35 - B / 2 - xs[1] - CLAMP_HALF))
+        frames.append(kitted(q, out, tag, cx=B / 2))
+        states.append(dict(eye=eye((1.2, 0, -1.5), 30, 62, 10), look=(1.2, 0, -1.5), lens=50))
+    json.dump(dict(frames=frames, states=states, studio=flykit.STUDIO), open(os.path.join(out, "spec.json"), "w"))
+    print("spec:", len(frames), "renders ->", os.path.join(out, "spec.json"))
+
+
+def d_sheet(out):
+    from PIL import Image, ImageDraw, ImageFont
+    rd = os.path.join(out, "render")
+    font = lambda s: ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeuib.ttf"), s)
+    tw, th = 640, 480
+    S = Image.new("RGB", (2 * tw, 90 + len(VARIANTS) * (56 + th)), (24, 26, 30))
+    d = ImageDraw.Draw(S)
+    d.text((24, 16), "Mobile sensor: the 20 mm form, iterated", fill=(240, 200, 120), font=font(38))
+    y = 90
+    for i, (tag, name, line) in enumerate(VARIANTS):
+        d.text((24, y + 10), "%s  %s" % (tag, name), fill=(240, 200, 120), font=font(28))
+        d.text((300, y + 16), line, fill=(200, 200, 205), font=font(20))
+        for j, cap in enumerate(("beside the game's 20 mm round", "under the FK-7, side on")):
+            im = Image.open(os.path.join(rd, "r%04d.png" % (i * 2 + j))).convert("RGB").resize((tw, th), Image.LANCZOS)
+            S.paste(im, (j * tw, y + 56))
+            d.text((j * tw + 12, y + 56 + th - 30), cap, fill=(255, 255, 255), font=font(18))
+        y += 56 + th
+    path = os.path.join(out, "sensor_20mm_iterations.png")
+    S.save(path)
+    print(path)
+
+
 if __name__ == "__main__":
     out = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else os.path.join("build", "mech", "sensor"))
-    {"build": build, "sheet": sheet}[sys.argv[1]](out)
+    {"build": build, "sheet": sheet, "d": d_iterations, "dsheet": d_sheet}[sys.argv[1]](out)
