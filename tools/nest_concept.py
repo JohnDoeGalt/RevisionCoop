@@ -581,7 +581,205 @@ def rack_sheet(out):
     print(path)
 
 
+# ---- the modular rack (the user, 2026-11-03: "the design should look scalable, and modular. it should be free standing
+# capable, wall mountable, vehicular mountable, etc"): one standard module, Corvane's KR-7, one kit hanging from a claw
+# under its top rail, open in front, couplers on its sides (power and data through copper pads) and stacking pins top
+# and bottom, its own status light; modules lock side by side and on top of one another; the mounts are adapters: a
+# base with feet and a power module (free-standing), a rail the modules hook onto (wall), a low clamp frame (a vehicle's
+# roof: the game's own van).
+BW, DP, TH = 21.0, 14.0, 17.0                          # a module: width (y), depth (x), height (z)
+
+
+def kr_module(p, origin):
+    """A KR-7 module with its bottom at origin (its middle, y and x): returns its claw's tip."""
+    o = np.asarray(origin, float)
+    for sx in (1, -1):                                  # corner posts
+        for sy in (1, -1):
+            p.box(o + [sx * (DP / 2 - 0.6), sy * (BW / 2 - 0.6), TH / 2], (1, 0, 0), (0, 1, 0), (0, 0, 1),
+                  (1.2, 1.2, TH), ("hull", "panel"))
+    for sx in (1, -1):                                  # top and bottom rails, front and back
+        for z in (0.6, TH - 0.6):
+            p.box(o + [sx * (DP / 2 - 0.6), 0, z], (1, 0, 0), (0, 1, 0), (0, 0, 1), (1.2, BW - 2.4, 1.2), ("hull", "panel"))
+    for sy in (1, -1):                                  # side rails, and a coupler on each side
+        for z in (0.6, TH - 0.6):
+            p.box(o + [0, sy * (BW / 2 - 0.6), z], (1, 0, 0), (0, 1, 0), (0, 0, 1), (DP - 2.4, 1.2, 1.2), ("hull", "panel"))
+        p.box(o + [0, sy * (BW / 2 - 0.35), TH * 0.62], (1, 0, 0), (0, 1, 0), (0, 0, 1), (5.0, 0.7, 3.2), ("duct", "duct"))
+        p.box(o + [0, sy * (BW / 2 + 0.02), TH * 0.62], (1, 0, 0), (0, 1, 0), (0, 0, 1), (3.4, 0.06, 1.8), ("pad", "pad"))
+    for sx in (1, -1):                                  # stacking pins on top
+        for sy in (1, -1):
+            p.prism(o + [sx * (DP / 2 - 0.6), sy * (BW / 2 - 0.6), TH], o + [sx * (DP / 2 - 0.6), sy * (BW / 2 - 0.6), TH + 0.5],
+                    (1, 0, 0), 0.35, 6, "steel", None, "steel")
+    p.box(o + [0, 0, TH - 1.6], (1, 0, 0), (0, 1, 0), (0, 0, 1), (DP - 2.4, 4.0, 1.6), ("duct", "duct"))   # the spine
+    p.box(o + [DP / 2 - 0.55, BW / 2 - 3.0, TH - 0.6], (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.12, 2.0, 0.6), ("light", "light"))
+    p.box(o + [DP / 2 - 0.55, -BW / 2 + 5.0, TH - 0.6], (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.1, 5.0, 0.9), ("rim", "rim"))
+    tip = o + [0.6, 0, TH - 5.6]
+    arm(p, o + [0.6, 0, TH - 2.4], [tip])
+    claw(p, tip)
+    return tuple(tip)
+
+
+def kr_grid(p, origin, nx, nz):
+    """nx modules side by side (y), nz high, from origin (the grid's bottom middle): their claws' tips."""
+    tips = []
+    for i in range(nx):
+        for j in range(nz):
+            tips.append(kr_module(p, np.asarray(origin, float) + [0, (i - (nx - 1) / 2) * BW, j * (TH + 0.5)]))
+    return tips
+
+
+def kr_power(p, origin, h):
+    """A power and control module (a module's footprint, h tall) at origin: a beacon and a conduit up from it."""
+    o = np.asarray(origin, float)
+    flykit.chamfer_box(p, tuple(o + [-DP / 2, -BW / 4, 0]), tuple(o + [DP / 2, BW / 4, h]), 0.5, "hull", "panel")
+    p.box(o + [DP / 2 + 0.05, 0, h * 0.7], (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.1, 6, 0.8), ("light", "light"))
+    hazard_strip(p, o + [DP / 2 + 0.05, 0, h * 0.3], (0, 1, 0), (0, 0, 1), (1, 0, 0), (BW / 2 - 2, 1.2, 0.08))
+    p.prism(o + [-DP / 2 + 2, 0, h], o + [-DP / 2 + 2, 0, h + 26], (1, 0, 0), 0.9, 10, "duct", None, None)
+
+
+def kr_feet(p, origin, width):
+    """The free-standing base: a beam under the modules, splayed feet with pads."""
+    o = np.asarray(origin, float)
+    p.box(o + [0, 0, 1.6], (1, 0, 0), (0, 1, 0), (0, 0, 1), (DP + 1, width, 1.6), ("duct", "duct"))
+    for y in np.linspace(-width / 2 + 2, width / 2 - 2, max(2, int(width // BW) + 1)):
+        p.box(o + [0, y, 0.5], (1, 0, 0), (0, 1, 0), (0, 0, 1), (DP + 8, 2.2, 1.0), ("hull", "panel"))
+        for sx in (1, -1):
+            p.prism(o + [sx * (DP / 2 + 3.4), y, 0], o + [sx * (DP / 2 + 3.4), y, -0.4], (1, 0, 0), 1.4, 8, "band", "band", None)
+
+
+def kr_wall_mount(p, n, top, bottom, back):
+    """The wall mount (wall at x = 0): a rail above the modules with a hook over each one's back rail, and a knee brace
+    under every joint, from a wall plate out under the modules' floor. n modules, their backs at x = back."""
+    width = n * BW
+    p.box((1.2, 0, top + 2.6), (1, 0, 0), (0, 1, 0), (0, 0, 1), (2.4, width + 6, 3.6), ("hull", "panel"))
+    hazard_strip(p, (2.45, 0, top + 2.6), (0, 1, 0), (0, 0, 1), (1, 0, 0), (width + 2, 1.2, 0.08))
+    for k in range(n):
+        y = -width / 2 + (k + 0.5) * BW
+        p.box(((back + 1.6) / 2, y, top + 0.4), (1, 0, 0), (0, 1, 0), (0, 0, 1), (back + 1.6, 3.0, 0.8), ("duct", "duct"))
+        p.box((back + 1.4, y, top - 0.2), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.4, 3.0, 2.0), ("duct", "duct"))
+    for y in [-width / 2 + 0.8] + [-width / 2 + k * BW for k in range(1, n)] + [width / 2 - 0.8]:
+        p.box((0.3, y, bottom - 7.0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.6, 3.0, 15.0), ("duct", "duct"))
+        p.box(((back + DP) / 2, y, bottom - 0.6), (1, 0, 0), (0, 1, 0), (0, 0, 1), (back + DP, 1.4, 1.2), ("hull", "panel"))
+        p.prism((0.6, y, bottom - 13.0), (back + DP - 2.0, y, bottom - 1.2), (0, 1, 0), 0.6, 8, "steel", None, None)
+
+
+def kr_vehicle_frame(p, origin, length, width):
+    """The vehicle mount: a low frame clamped to a roof (rails along it, clamp feet), its own small power module."""
+    o = np.asarray(origin, float)
+    for sy in (1, -1):
+        p.box(o + [0, sy * (width / 2 - 1), 1.0], (1, 0, 0), (0, 1, 0), (0, 0, 1), (length, 2.0, 2.0), ("hull", "panel"))
+        for x in (-length / 2 + 4, length / 2 - 4):
+            p.box(o + [x, sy * (width / 2 - 1), -0.2], (1, 0, 0), (0, 1, 0), (0, 0, 1), (3.0, 3.0, 1.2), ("duct", "duct"))
+    for x in np.linspace(-length / 2 + 2, length / 2 - 2, 4):
+        p.box(o + [x, 0, 2.2], (1, 0, 0), (0, 1, 0), (0, 0, 1), (2.0, width, 0.8), ("duct", "duct"))
+
+
+def obj_bounds(path):
+    V = np.array([[float(x) for x in l.split()[1:4]] for l in open(path) if l.startswith("v ")])
+    G = np.stack([V[:, 0], -V[:, 2], V[:, 1]], 1)        # (back from OBJ's y up)
+    return G.min(0), G.max(0)
+
+
+def mod_build(out):
+    os.makedirs(out, exist_ok=True)
+    flykit.PACKAGES["DeusExDeco"] = os.path.join(flykit.REV, "System", "DeusExDeco.u")
+    st, lo, hi = kit_obj(out)
+    frames, states = [], []
+    wall = Part("wall")
+    wall.box((-0.3, 0, 30), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.6, 180, 100), ("wall", "wall"))
+    floor_ = Part("floor")
+    floor_.box((0, 0, -0.6), (1, 0, 0), (0, 1, 0), (0, 0, 1), (300, 300, 0.4), ("wall", "wall"))
+    wp, fp = write_obj(wall, os.path.join(out, "mwall.obj")), write_obj(floor_, os.path.join(out, "mfloor.obj"))
+    hang = lambda tips, tag: [place(st, out, "%s%d" % (tag, k), (tx, ty, tz - hi)) for k, (tx, ty, tz) in enumerate(tips)]
+
+    # 0: one module, close.
+    p = Part("one")
+    tips = kr_grid(p, (0, 0, 0), 1, 1)
+    frames.append([fp, write_obj(p, os.path.join(out, "m_one.obj"))] + hang(tips, "one"))
+    states.append(dict(eye=eye((0, 0, 9), 42, 32, 16), look=(0, 0, 9), lens=50))
+    # 1: scaling: one, two side by side, three by two (each on its feet).
+    p = Part("scale")
+    tips = []
+    for (y, nx, nz) in ((-62, 1, 1), (-25, 2, 1), (40, 3, 2)):
+        kr_feet(p, (0, y, 0), nx * BW)
+        tips += kr_grid(p, (0, y, 2.4), nx, nz)
+    frames.append([fp, write_obj(p, os.path.join(out, "m_scale.obj"))] + hang(tips, "sc"))
+    states.append(dict(eye=eye((0, 8, 16), 240, 22, 12), look=(0, 8, 16), lens=50))
+    # 2: free-standing, three by two, a power module at its end.
+    p = Part("free")
+    kr_feet(p, (0, 0, 0), 3 * BW + BW / 2 + 2)
+    tips = kr_grid(p, (0, -BW / 4 - 1, 2.4), 3, 2)
+    kr_power(p, (0, 3 * BW / 2 + BW / 4 - BW / 4 + 1, 2.4), 2 * TH)
+    fpath = write_obj(p, os.path.join(out, "m_free.obj"))
+    kits = hang(tips, "fr")
+    frames.append([fp, fpath] + kits)
+    states.append(dict(eye=eye((0, 0, 18), 112, 30, 14), look=(0, 0, 18), lens=50))
+    # 3: wall-mounted: four in a row, hooked under a rail, knee braces below.
+    p = Part("wallm")
+    back, bottom = 2.4, 28.0
+    tips = kr_grid(p, (back + DP / 2, 0, bottom), 4, 1)
+    kr_wall_mount(p, 4, bottom + TH, bottom, back)
+    frames.append([wp, write_obj(p, os.path.join(out, "m_wall.obj"))] + hang(tips, "wl"))
+    states.append(dict(eye=eye((10, 0, 32), 130, 36, 10), look=(10, 0, 32), lens=50))
+    # 4: on a vehicle's roof: the game's own van, a clamp frame along it, two rows of four back to back facing out
+    # each side.
+    van = game_obj("DeusExDeco", "Van", 1.0, np.eye(3), (0, 0, 0), out, "van")
+    vlo, vhi = obj_bounds(van)
+    van = game_obj("DeusExDeco", "Van", 1.0, np.eye(3), (0, 0, -vlo[2]), out, "van")
+    vlo, vhi = obj_bounds(van)
+    assert (vhi[0] - vlo[0]) >= (vhi[1] - vlo[1]), "the van runs along y"
+    cx, cy, roof = (vlo[0] + vhi[0]) / 2, (vlo[1] + vhi[1]) / 2, vhi[2]
+    p = Part("veh")
+    kr_vehicle_frame(p, (cx, cy, roof), 4 * BW + 6, 2 * DP + 6)
+    kits = []
+    for s in (1, -1):                                   # a row facing +y (s = 1), one facing -y
+        q = Part("vrow")
+        R, t = rot_z(90 * s), np.array([cx, cy + s * (DP / 2 + 0.3), 0.0])
+        tips = kr_grid(q, (0, 0, roof + 2.6), 4, 1)
+        p.faces += moved(q, R, t).faces
+        kits += [place(st, out, "vh%d%d" % (s + 1, k), R @ np.asarray(tp) + t - [0, 0, hi], yaw=90.0 * s)
+                 for k, tp in enumerate(tips)]
+    frames.append([fp, van, write_obj(p, os.path.join(out, "m_veh.obj"))] + kits)
+    states.append(dict(eye=eye((cx, cy, roof * 0.65), 500, 62, 24), look=(cx, cy, roof * 0.65), lens=50))
+    print("van: %.0f x %.0f x %.0f units, roof at %.0f" % (*(vhi - vlo), roof))
+    # 5: launching: the free-standing rack, one kit let go, flying out of the front.
+    tx, ty, tz = kr_grid(Part("tmp"), (0, -BW / 4 - 1, 2.4), 3, 2)[1]
+    gone = place(st, out, "fr_off", (tx + 22, ty, tz - hi - 5))
+    frames.append([fp, fpath] + kits_free_without(out, st, hi, 1) + [gone])
+    states.append(dict(eye=eye((10, 0, 18), 118, 28, 12), look=(10, 0, 18), lens=50))
+    json.dump(dict(frames=frames, states=states, studio=flykit.STUDIO), open(os.path.join(out, "spec.json"), "w"))
+    print("spec:", len(frames), "renders ->", os.path.join(out, "spec.json"))
+
+
+def kits_free_without(out, st, hi, skip):
+    tips = kr_grid(Part("tmp"), (0, -BW / 4 - 1, 2.4), 3, 2)
+    return [place(st, out, "frw%d" % k, (tx, ty, tz - hi)) for k, (tx, ty, tz) in enumerate(tips) if k != skip]
+
+
+def mod_sheet(out):
+    from PIL import Image, ImageDraw, ImageFont
+    rd = os.path.join(out, "render")
+    font = lambda s: ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeuib.ttf"), s)
+    tw, th = 640, 480
+    caps = ("one KR-7 module: a kit on its claw, couplers on its sides, stacking pins on top",
+            "scalable: one, two side by side, three by two", "free-standing: three by two, feet and a power module",
+            "wall-mounted: four hooked under a rail, knee braces below",
+            "vehicle-mounted: two rows of four, back to back, on the game's own van",
+            "launching: one let go, flying out of the front")
+    S = Image.new("RGB", (2 * tw, 80 + 3 * th), (24, 26, 30))
+    d = ImageDraw.Draw(S)
+    d.text((24, 16), "Kit nest: the KR-7 modular rack", fill=(240, 200, 120), font=font(38))
+    for i, cap in enumerate(caps):
+        im = Image.open(os.path.join(rd, "r%04d.png" % i)).convert("RGB").resize((tw, th), Image.LANCZOS)
+        x, y = (i % 2) * tw, 80 + (i // 2) * th
+        S.paste(im, (x, y))
+        d.rectangle((x, y + th - 36, x + tw, y + th), fill=(24, 26, 30))
+        d.text((x + 12, y + th - 30), cap, fill=(255, 255, 255), font=font(17))
+    path = os.path.join(out, "nest_kr7_modular.png")
+    S.save(path)
+    print(path)
+
+
 if __name__ == "__main__":
     out = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else os.path.join("build", "mech", "nest"))
     {"build": build, "sheet": sheet, "hive": hive_build, "hivesheet": hive_sheet, "rack": rack_build,
-     "racksheet": rack_sheet}[sys.argv[1]](out)
+     "racksheet": rack_sheet, "mod": mod_build, "modsheet": mod_sheet}[sys.argv[1]](out)
