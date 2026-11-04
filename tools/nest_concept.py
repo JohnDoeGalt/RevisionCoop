@@ -404,6 +404,184 @@ def hive_sheet(out):
     print(path)
 
 
+# ---- hive-influenced, not literal (the user, 2026-11-03: "maybe less literally a hive lol"): what stays is the kits hanging
+# from little arms in a cluster; the hexagons and the nest shapes go for plain industrial hardware beside the game's own
+# security kit. I1 a ceiling rail (a beam of arms, after a factory's charging rail); I2 a security mast (arms branching
+# at two heights round a pole, a beacon on top); I3 a wall dock (the wall shelf turned over: a slim armoured housing high
+# on the wall, its arms folding out under its hood).
+RACKS = [("I1", "Ceiling rail", "a beam on the ceiling, a row of arms hanging kits, a conduit along it"),
+         ("I2", "Security mast", "a pole, arms branching at two heights, a beacon on top"),
+         ("I3", "Wall dock", "a slim armoured housing high on a wall, arms folding out under its hood"),
+         ("I4", "Rack system", "a modular frame, bays bolted side by side, two tiers of kits hanging, open in front")]
+
+
+def hazard_strip(p, centre, u, v, w, size):
+    """A row of alternating amber and dark blocks along u (on the face whose normal is w)."""
+    c = np.asarray(centre, float)
+    n = 8
+    for k in range(n):
+        off = (k - (n - 1) / 2) * size[0] / n
+        p.box(c + np.asarray(u) * off, u, v, w, (size[0] / n, size[1], size[2]), ("rim" if k % 2 == 0 else "band",) * 2)
+
+
+def ceiling_rail():
+    p = Part("rail")
+    L, z = 78.0, 43.0
+    p.box((0, 0, z), (1, 0, 0), (0, 1, 0), (0, 0, 1), (8.0, L, 5.0), ("hull", "panel"))          # the beam
+    for y in (-L / 2 + 4, L / 2 - 4):                  # its hangers to the ceiling
+        p.box((0, y, z + 3.2), (1, 0, 0), (0, 1, 0), (0, 0, 1), (5, 2, 1.6), ("duct", "duct"))
+    hazard_strip(p, (4.05, 0, z - 1.2), (0, 1, 0), (0, 0, 1), (1, 0, 0), (L - 6, 0.9, 0.08))
+    p.prism((-3.2, -L / 2 - 6, z + 2.0), (-3.2, L / 2 + 6, z + 2.0), (0, 0, 1), 0.9, 10, "duct", None, None)   # conduit
+    p.box((0, L / 2 + 2, z), (1, 0, 0), (0, 1, 0), (0, 0, 1), (6, 4, 6), ("panel", "panel"))      # the junction box
+    p.box((3.05, L / 2 + 2, z + 1.5), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.1, 3, 0.6), ("light", "light"))
+    slots = []
+    for k in range(4):
+        y = -L / 2 + 12 + k * (L - 24) / 3
+        p.box((0, y, z - 3.2), (1, 0, 0), (0, 1, 0), (0, 0, 1), (5, 4, 1.6), ("duct", "duct"))  # a trolley
+        p.box((2.6, y + 1.2, z - 3.2), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.2, 0.6, 0.6), ("light", "light"))
+        tip = (2.5, y, z - 13.0)
+        arm(p, (0, y, z - 4.0), [(0, y, z - 7.5), tip])
+        claw(p, tip)
+        slots.append((tip, 0.0))
+    return p, slots
+
+
+def security_mast():
+    p = Part("mast")
+    p.box((0, 0, 0.8), (1, 0, 0), (0, 1, 0), (0, 0, 1), (16, 16, 1.6), ("hull", "panel"))       # the base plate
+    for sx in (1, -1):
+        for sy in (1, -1):
+            p.prism((sx * 6.2, sy * 6.2, 1.6), (sx * 6.2, sy * 6.2, 2.2), (1, 0, 0), 0.6, 6, "steel", None, "steel")
+    p.box((0, 0, 7.0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (7, 7, 10), ("hull", "panel"))           # the power housing
+    hazard_strip(p, (3.55, 0, 3.0), (0, 1, 0), (0, 0, 1), (1, 0, 0), (6.6, 1.2, 0.08))
+    p.box((3.56, 0, 9.5), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.1, 3.5, 0.6), ("light", "light"))
+    p.prism((0, 0, 12), (0, 0, 64), (1, 0, 0), 1.5, 8, "steel", None, None)                     # the pole
+    p.prism((0, 0, 64), (0, 0, 66.5), (1, 0, 0), 1.2, 10, "duct", None, None)
+    p.prism((0, 0, 66.5), (0, 0, 68.5), (1, 0, 0), 1.0, 10, "light", None, "light")             # the beacon
+    slots = []
+    for h, a0 in ((54.0, 45.0), (38.0, 0.0)):
+        p.prism((0, 0, h - 1.5), (0, 0, h + 1.5), (1, 0, 0), 2.6, 8, "duct", "duct", "duct")     # a collar
+        for k in range(3 if h > 50 else 3):
+            a = math.radians(a0 + k * 120)
+            d = np.array([math.cos(a), math.sin(a), 0])
+            tip = d * 15.0 + [0, 0, h - 8.0]
+            arm(p, d * 2.4 + [0, 0, h], [d * 9.0 + [0, 0, h + 1.5], tip])
+            claw(p, tip)
+            slots.append((tuple(tip), math.degrees(a)))
+    return p, slots
+
+
+def wall_dock():
+    p = Part("dock")
+    W, z = 74.0, 40.0                                 # (arms 18 apart: a kit is 16.2 across)
+    p.box((4.0, 0, z), (1, 0, 0), (0, 1, 0), (0, 0, 1), (8.0, W, 6.0), ("hull", "panel"))       # the housing
+    p.box((8.4, 0, z - 2.6), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1.2, W, 1.2), ("duct", "duct"))   # its hood lip
+    hazard_strip(p, (8.05, 0, z + 1.2), (0, 1, 0), (0, 0, 1), (1, 0, 0), (W - 8, 1.0, 0.08))
+    for y in (-W / 2 + 3, W / 2 - 3):                  # wall brackets
+        p.box((1.0, y, z - 5.0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (2, 1.5, 8), ("duct", "duct"))
+    p.prism((0.4, W / 2 - 6, z + 3.0), (0.4, W / 2 - 6, z + 30.0), (1, 0, 0), 0.9, 10, "duct", None, None)   # conduit
+    slots = []
+    for k in range(4):
+        y = -W / 2 + 10 + k * (W - 20) / 3
+        p.box((8.05, y + 3.0, z), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.1, 0.8, 0.8), ("light", "light"))
+        tip = (13.0, y, z - 10.0)
+        arm(p, (6.0, y, z - 3.0), [(10.5, y, z - 4.5), tip])
+        claw(p, tip)
+        slots.append((tip, 0.0))
+    return p, slots
+
+
+def rack_system(bays=2, tiers=2):
+    """A free-standing modular frame (the user: "maybe a rack system?"): bays side by side (y), tiers one above another,
+    a kit hanging from a claw under each tier's rail, open in front (+x) for the kits to fly out; a power bay at its end."""
+    p = Part("racksys")
+    bw, dp, th = 22.0, 14.0, 18.0                      # a bay's width, its depth, a tier's height
+    W, H = bays * bw, tiers * th + 4.0
+    y0 = -W / 2
+    for k in range(bays + 1):                          # the uprights (front and back), hazard-banded at the foot
+        y = y0 + k * bw
+        for x in (-dp / 2, dp / 2):
+            p.box((x, y, H / 2), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1.4, 1.4, H), ("hull", "panel"))
+            for j in range(4):
+                p.box((x + (0.72 if x > 0 else -0.72), y, 1.0 + j * 1.6), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.06, 1.3, 0.8),
+                      ("rim" if j % 2 == 0 else "band",) * 2)
+        p.box((0, y, H - 0.5), (1, 0, 0), (0, 1, 0), (0, 0, 1), (dp, 1.4, 1.0), ("hull", "panel"))   # the top ties
+        p.box((0, y, 0.5), (1, 0, 0), (0, 1, 0), (0, 0, 1), (dp + 2, 2.0, 1.0), ("duct", "duct"))   # the feet
+    slots = []
+    for i in range(tiers):
+        zr = (i + 1) * th + 2.0                         # this tier's rail
+        for x in (-dp / 2, dp / 2):
+            p.box((x, 0, zr), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1.2, W, 1.6), ("hull", "panel"))
+        for k in range(bays):
+            y = y0 + (k + 0.5) * bw
+            p.box((0, y, zr + 0.2), (1, 0, 0), (0, 1, 0), (0, 0, 1), (dp, 2.2, 1.2), ("duct", "duct"))    # the bay's rail
+            tip = (1.0, y, zr - 4.0)
+            arm(p, (0, y, zr - 0.6), [tip])
+            claw(p, tip)
+            p.box((dp / 2 + 0.65, y + 6, zr), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.1, 0.8, 0.6), ("light", "light"))
+            slots.append((tip, 0.0))
+    p.box((0, W / 2 + 5, H * 0.35), (1, 0, 0), (0, 1, 0), (0, 0, 1), (dp, 8, H * 0.7), ("hull", "panel"))   # power bay
+    p.box((dp / 2 + 0.05, W / 2 + 5, H * 0.5), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.1, 5, 0.8), ("light", "light"))
+    p.prism((-dp / 2 + 1, W / 2 + 5, H * 0.7), (-dp / 2 + 1, W / 2 + 5, H + 30), (1, 0, 0), 0.9, 10, "duct", None, None)
+    return p, slots
+
+
+def rack_build(out):
+    os.makedirs(out, exist_ok=True)
+    st, lo, hi = kit_obj(out)
+    frames, states = [], []
+    wall = Part("wall")
+    wall.box((-0.9, 0, 30), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.6, 150, 90), ("wall", "wall"))
+    ceil = Part("ceiling")
+    ceil.box((0, 0, 46.3), (1, 0, 0), (0, 1, 0), (0, 0, 1), (160, 160, 0.6), ("wall", "wall"))
+    floor_ = Part("floor")
+    floor_.box((0, 0, -0.2), (1, 0, 0), (0, 1, 0), (0, 0, 1), (160, 160, 0.4), ("wall", "wall"))
+    wp, cp, fp = (write_obj(x, os.path.join(out, n + ".obj")) for x, n in ((wall, "rwall"), (ceil, "rceil"), (floor_, "rfloor")))
+    for tag, make, scene, view, near, off in (
+            ("I1", ceiling_rail, [cp], ((0, 0, 30), 105, 30, -4), 34, (16, 0, -12)),
+            ("I2", security_mast, [fp], ((0, 0, 38), 120, 30, 6), 32, (18, 4, -10)),
+            ("I3", wall_dock, [wp], ((6, 0, 30), 100, 38, 8), 32, (18, 4, -10)),
+            ("I4", rack_system, [fp], ((0, 4, 20), 100, 32, 14), 30, (20, 0, -6))):
+        p, slots = make()
+        hp = write_obj(p, os.path.join(out, "rack_%s.obj" % tag))
+        kits = [place(st, out, "%skit%d" % (tag, k), (tx, ty, tz - hi), yaw=a) for k, ((tx, ty, tz), a) in enumerate(slots)]
+        (look, dist, az, el) = view
+        frames.append(scene + [hp] + kits)
+        states.append(dict(eye=eye(look, dist, az, el), look=look, lens=50))
+        (tx, ty, tz), a = slots[1]
+        frames.append(scene + [hp] + kits)
+        states.append(dict(eye=eye((tx, ty, tz), near, az + 20, 14), look=(tx, ty, tz - 3), lens=50))
+        R = np.array([[math.cos(math.radians(a)), -math.sin(math.radians(a)), 0], [math.sin(math.radians(a)), math.cos(math.radians(a)), 0], [0, 0, 1]])
+        gone = place(st, out, "%skit_off" % tag, np.array((tx, ty, tz - hi)) + R @ np.array(off, float), yaw=a)
+        frames.append(scene + [hp] + kits[:1] + kits[2:] + [gone])
+        states.append(dict(eye=eye(look, dist, az, el), look=look, lens=50))
+    json.dump(dict(frames=frames, states=states, studio=flykit.STUDIO), open(os.path.join(out, "spec.json"), "w"))
+    print("spec:", len(frames), "renders ->", os.path.join(out, "spec.json"))
+
+
+def rack_sheet(out):
+    from PIL import Image, ImageDraw, ImageFont
+    rd = os.path.join(out, "render")
+    font = lambda s: ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeuib.ttf"), s)
+    tw, th = 480, 360
+    S = Image.new("RGB", (3 * tw, 90 + len(RACKS) * (60 + th)), (24, 26, 30))
+    d = ImageDraw.Draw(S)
+    d.text((24, 16), "Kit nest: hive-influenced, industrial", fill=(240, 200, 120), font=font(40))
+    y = 90
+    for i, (tag, name, line) in enumerate(RACKS):
+        d.text((24, y + 10), "%s  %s" % (tag, name), fill=(240, 200, 120), font=font(30))
+        d.text((330, y + 18), line, fill=(200, 200, 205), font=font(20))
+        for j, cap in enumerate(("at rest, its kits hanging", "an arm and its claw, close", "one let go, flying off")):
+            im = Image.open(os.path.join(rd, "r%04d.png" % (i * 3 + j))).convert("RGB").resize((tw, th), Image.LANCZOS)
+            S.paste(im, (j * tw, y + 60))
+            d.text((j * tw + 12, y + 60 + th - 30), cap, fill=(255, 255, 255), font=font(18))
+        y += 60 + th
+    path = os.path.join(out, "nest_racks.png")
+    S.save(path)
+    print(path)
+
+
 if __name__ == "__main__":
     out = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else os.path.join("build", "mech", "nest"))
-    {"build": build, "sheet": sheet, "hive": hive_build, "hivesheet": hive_sheet}[sys.argv[1]](out)
+    {"build": build, "sheet": sheet, "hive": hive_build, "hivesheet": hive_sheet, "rack": rack_build,
+     "racksheet": rack_sheet}[sys.argv[1]](out)
