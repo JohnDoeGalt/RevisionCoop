@@ -39,6 +39,7 @@ import flykit
 from mech_parts import Part
 from sensor_concept import eye, game_obj, moved, write_obj
 from nest_concept import BW, TH, arm, claw, hazard_strip, kit_obj, kr_vehicle_frame, obj_bounds, place, rot_z
+from nest_skin import write_tex
 
 X, Y, Z = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
 CP = 9.6                                                # cells' pitch in a bank (a cell is 8.7 square, 1.9 thick)
@@ -69,6 +70,12 @@ def facing(n, up=Z):
 def bx(p, c, size, reg=("hull", "panel")):
     """An axis-aligned box."""
     p.box(np.asarray(c, float), X, Y, Z, size, reg if isinstance(reg, tuple) else (reg, reg))
+
+
+def plate(p, c, n, w, h, text):
+    """A nameplate facing n (level), w wide and h tall: its face takes a plate of its own (nest_skin)."""
+    n = unit(n)
+    p.box(np.asarray(c, float), n, np.cross(Z, n), np.array(Z), (0.08, w, h), ("duct", "plate:" + text))
 
 
 def hang(tip):
@@ -228,12 +235,13 @@ def frame(p, cells, o, hard=False, cut=False):
             cell_bank(p, cells, o + [VD / 2 + 1.0, 0, TH / 2 - 0.8], X, 1, 1, depth=1.2)
             hazard_strip(p, o + [VD / 2 + 0.05, 0, TH - 2.0], Y, Z, X, (BW - 6, 1.2, 0.08))
             bx(p, o + [VD / 2 + 0.06, BW / 2 - 2.0, TH - 2.0], (0.1, 1.0, 0.6), "light")
+            plate(p, o + [VD / 2 - 0.25, 0, 13.75], X, 9.0, 0.9, "VC-6 QUIVER")
     else:
         for sy in (1, -1):
             bx(p, o + [0, sy * (BW / 2 - 0.35), TH * 0.62], (5.0, 0.7, 3.2), "duct")
             bx(p, o + [0, sy * (BW / 2 + 0.02), TH * 0.62], (3.4, 0.06, 1.8), "pad")
         bx(p, o + [VD / 2 - 0.55, BW / 2 - 3.0, TH - 0.6], (0.12, 2.0, 0.6), "light")
-        bx(p, o + [VD / 2 - 0.55, -BW / 2 + 5.0, TH - 0.6], (0.1, 5.0, 0.9), "rim")
+        plate(p, o + [VD / 2 + 0.04, -BW / 2 + 5.5, TH - 0.6], X, 7.0, 1.1, "MR-3 TRELLIS")
 
 
 def held(p, o, folded=False):
@@ -303,6 +311,7 @@ def frame_power(p, cells, o, nz):
     rows = max(1, int((h - 5.0) // CP))
     cell_bank(p, cells, o + [VD / 2 + 1.0, 0, 2.0 + (rows * CP + 1.4) / 2], X, 2, rows)
     hazard_strip(p, o + [VD / 2 + 0.05, 0, h - 1.6], Y, Z, X, (BW - 3, 1.2, 0.08))
+    plate(p, o + [VD / 2 + 0.04, 0, 1.0], X, 9.0, 1.0, "MR-3 CELL BANK")
     p.prism(o + [0, 0, h], o + [0, 0, h + 1.6], X, 1.0, 10, "light", None, "light")
     p.prism(o + [-VD / 2 + 2, BW / 2 - 3, h], o + [-VD / 2 + 2, BW / 2 - 3, h + 24], X, 0.9, 10, "duct", None, None)
 
@@ -500,6 +509,7 @@ def locker(p, cells, o, open_=False):
     cell_bank(p, cells, o + [LD / 2 + 1.0, -LW / 4, SILL / 2], X, 1, 1)
     console(p, o + [LD / 2, LW / 4, SILL / 2])
     hazard_strip(p, o + [LD / 2 + 0.05, 0, LH - 1.6], Y, Z, X, (LW - 4, 1.2, 0.08))
+    plate(p, o + [0, LW / 2 + 0.04, LH - 6.0], Y, 8.0, 1.6, "SL-4 WARDEN")
     if open_:
         p.prism(o + [LD / 2 - 2.0, -(LW / 2 - 1.0), LH - 4.2], o + [LD / 2 - 2.0, LW / 2 - 1.0, LH - 4.2], Z, 1.5, 10, "panel",
                 "duct", "duct")
@@ -600,6 +610,7 @@ def tripod(p, o, h=10.0):
     o = np.asarray(o, float)
     bx(p, o + [0, 0, h / 2], (14.0, 14.0, h))
     hazard_strip(p, o + [7.05, 0, h - 2], Y, Z, X, (12.0, 1.2, 0.08))
+    plate(p, o + [7.04, 0, h - 4.5], X, 10.0, 1.4, "WC-9 ARGUS")
     for a in (90, 210, 330):
         d = rot_z(a) @ np.array(X)
         foot = o + d * 26 + [0, 0, 0.6]
@@ -677,6 +688,7 @@ def pad(p, cells, o):
     for s in (1, -1):
         bx(p, o + [0, s * (PY / 2 + 0.02), PT / 2], (5.0, 0.06, 1.4), "pad")
     bx(p, o + [PX / 2 + 0.03, 7.0, PT / 2], (0.06, 2.0, 0.6), "light")
+    plate(p, o + [PX / 2 + 0.04, -4.0, PT / 2], X, 9.0, 1.1, "LP-1 PERCH")
     return [(sit(o + [4.5, 0, PT + 1.0]), 0.0)]
 
 
@@ -756,6 +768,7 @@ def case(p, cells, o, open_=True, lid_deg=-100.0, strap=False):
         for sx in (1, -1):
             bx(p, o + [sx * (CX / 2 - 0.7), s * (CY / 2 - 0.7), CB / 2], (1.8, 1.8, CB + 0.2), "band")
     bx(p, o + [CX / 2 + 0.06, -15.0, CB * 0.4], (0.1, 1.2, 0.6), "light")
+    plate(p, o + [CX / 2 + 0.05, 0, CB * 0.45], X, 12.0, 1.8, "FC-5 VALISE")
     lid, lc = Part("lid"), []
     flykit.chamfer_box(lid, tuple(o + [-CX / 2, -CY / 2, CB]), tuple(o + [CX / 2, CY / 2, CB + CL]), 0.8, "hull", "panel")
     for s in (1, -1):
@@ -862,7 +875,7 @@ DESIGNS = [  # tag, name, line, its place in the line-up, its views
      dict(one=kv_one, scale=kv_scale, free=kv_free, wall=kv_wall, van=kv_van, launch=kv_launch,
           caps=("one box, its cap open: the kit going up out of the top", "scalable: boxes stack into one tube, a cap on top",
                 "free-standing: three tubes three high, one launching", "wall-mounted, the hive format: on their sides, out of the front",
-                "vehicle-mounted: two rows of three, capped", "cutaway: three kits level in one tube; top one first, the next after it"))),
+                "on the riot van: two rows of three, capped", "cutaway: three kits level in one tube; top one first, the next after it"))),
     ("FC-5", "Valise", "the man-portable launcher: carried by squads and elite troops (lootable), or a player's own portable nest",
      "man-portable: squads, players",
      dict(one=kf_one, scale=kf_scale, free=kf_free, wall=kf_wall, van=kf_van, launch=(2, (0, 0, 30), ((0, 0, 30), 195, 30, 16)),
@@ -924,7 +937,7 @@ def build(out):
                 slots[k] = (np.asarray(o) + rot_z(y) @ np.asarray(off, float), y) + tuple(slots[k][2:])
                 scene = [fp]
             nm = "%s_%s" % (t, view)
-            objs = scene + ([write_obj(p, os.path.join(out, nm + ".obj"))] if p.faces else [])
+            objs = scene + ([write_tex(p, os.path.join(out, nm + ".obj"), out)] if p.faces else [])
             if cells:
                 objs.append(cells_obj(cells, out, nm))
             objs += [place(st, out, "%s_k%d" % (nm, k), o, yaw=y) for k, (o, y) in enumerate(slots)]
