@@ -199,3 +199,31 @@ payload's blast but a GEP rocket's), and Active Protection is a one-shot-per-rel
 defense setting a kit off where it is uses the kit's own path (CoopFPVGuided.Explode, CoopMechAugDrones.Release).
 Open for the design: an inventory kit item for players and characters (the AI using it), what a kit costs, a defense's
 energy and charges against a swarm, whether a kit should evade (jink) a defense's first try.
+
+## Kit nests (brainstorm, concept art only, 2026-11-03)
+
+A nest holds kits for a level's security and launches them when the alarm trips (one or two armed kits at a time, after
+a spotter goes red); kits in a nest taken out drop inert and can be looted. Concept art: `tools/nest_concept.py` (the
+first designs, the KR-7 modular rack), `tools/nest_riffs.py` (the line-up below). Every nest is powered by the game's own
+bio cells (the BioCell mesh and skin, unchanged, face-out so the gauge shows). The line-up, as the user set it:
+
+| Nest | What it is | Its place |
+|---|---|---|
+| KP-7 pads | landing tiles joined edge to edge, a kit sitting on each, a cell to a kit | the cheapest; each pad its own use |
+| KR-7 rack | the shared box, open: a gimbal arm on its back wall holds each kit level; out of the front; a cell bank that grows with the rack | cheap and modular |
+| KL-7 lockers | the box's module boxed one by one, a roll-up shutter, a cell and a console in the sill | indoors; each one hardened |
+| KV-7 vertical cells | the KR-7's box in armour, a cell in each; three stacked make one tube, out of its top; on a wall (the hive format) out of the front | modular and hardened |
+| KF-7 field case | a hard case for two kits in foam, three cells in its lid, fold-out legs | the man-portable vertical launcher |
+| KC-7 carousel | tiers of six kits round a core of cells, every kit's camera always on | the dearest: a camera and a launcher at once, it launches the second it sees you |
+
+The box and its arm (the user: "the back is always the same solid piece where the arm is mounted"; "think of the
+mounting arm... to be like a gimbal... it's gonna be mounted normally... holding it from a different position so that you
+can launch multiple ones sequentially"): a kit is always held level, as it flies, by its tail in a gimbal arm on the box's
+solid back wall. The open rack's kits go out of the front. Armoured boxes stack (three high) into one tube with a cap on
+top: its kits go straight up out of the top one at a time, top first, each arm folding flat up its wall once its kit has
+gone so the next can climb through. That is cheaper a kit than a cell each, at a price (the user): only one at a time;
+kits loaded in order (mixed payloads go in in the order they will launch); and to launch the bottom one, the two above it
+must go first, then go back in. On a wall in the hive format (a box on its side, its back wall down), the gimbal holds the
+kit level, nose out, and it goes straight out of the front. (A launch pose, the kit nose up with its fans swung to thrust
+along it, was drawn and dropped: "don't have the drone facing directly straight up in any of the versions".)
+Power: a cell to a kit for pads and lockers ("1-to-1"); three cells to two kits (the case) is fine.

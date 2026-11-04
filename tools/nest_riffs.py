@@ -1,21 +1,28 @@
-"""Kit nest riffs on the KR-7 modular rack (tools/nest_concept.py mod). The user, 2026-11-03: "This is pretty much
-perfect... I like the attached power supply... Maybe throw in the bio battery cells... that's the implied battery source...
-so even its power supply is scalable... riff off of this design, do some weird stuff... 5 separate designs with the same...
-6 images of the same design in different uses"; then "use the BioCells models, like, verbatim".
+"""Kit nests, riffed off the KR-7 modular rack (tools/nest_concept.py mod). The user, 2026-11-03: "This is pretty much
+perfect... throw in the bio battery cells... so even its power supply is scalable... riff off of this design... 5 separate
+designs with the same... 6 images"; "use the BioCells models, like, verbatim". Then, on those riffs: the rack and the
+vertical cells "are supposed to be the same thing... one has the walls on it and one doesn't" (the rack the cheaper,
+non-hardened one; the cells modular and hardened, and stackable); kits held "grabbed by the tail", in a new pose, "the
+drone is literally facing vertically... the props facing straight up, and it just shoots straight up really fast"; the
+lockers hardened one by one, for launching indoors, a cell and a console in the sill; the pads "the absolute cheapest";
+the carousel the dearest, its cameras "on at all points in time", a camera and a launcher at once; the field case the
+man-portable vertical launcher; a cell to a kit for the pads and the lockers ("1-to-1"), the rest as they were.
 
-Power in every design is the game's own bioelectric cell (DeusExItems BioCell, its own skin, unchanged), banked face-out
-so its gauge shows: more kits, more cells. Six designs, six views each (one module; scaling; free-standing; on a wall; on
-the game's own van; launching):
+Power in every design is the game's own bioelectric cell (DeusExItems BioCell, its own skin, unchanged), face-out so its
+gauge shows. Kits are always mounted level, as they fly, held by the tail in a gimbal arm on a box's solid back wall.
+The designs, cheapest first, six views each (one module; scaling; free-standing; on a wall; on the game's own van;
+launching):
 
-  KR-7  the modular rack, its power module now a bank of bio cells, as tall as the rack
-  KL-7  lockers: the rack's module boxed in armour, a roll-up shutter, two cells in its sill
-  KC-7  carousel: tiers of six kits hanging round a core faced with cells, stacked on a tripod
-  KV-7  vertical cells: kits upright in tubes that launch straight up, a cell set in each lid
-  KP-7  pads: landing tiles that join edge to edge, a kit sitting on each, two cells in each tile
-  KF-7  field case: a hard case for two kits, cells strapped in its lid, fold-out legs
+  KP-7  pads: landing tiles joined edge to edge, a kit sitting on each, a cell in each
+  KR-7  the rack: the shared box, open, its kits going out of the front; a cell bank that grows with the rack
+  KL-7  lockers: hardened one by one, a roll-up shutter, a cell and a console in the sill; for indoors
+  KV-7  vertical cells: the rack's box in armour, a cell in each; three stacked make one tube, its kits out of its top
+        one at a time, top first (cheaper a kit); on a wall, the hive format, out of the front
+  KF-7  field case: a hard case for two kits, cells strapped in its lid, fold-out legs: the man-portable launcher
+  KC-7  carousel: tiers of six kits round a core of cells, their cameras always on: it sees, and it launches
 
-  python -I tools/nest_riffs.py build [outdir]      (default build/mech/riffs)
-  blender -b --factory-startup --python tools/flykit_render.py -- <outdir>/spec.json <outdir>/render   (absolute paths)
+  python -I tools/nest_riffs.py build <outdir, absolute>   (Blender writes renders relative to itself otherwise)
+  blender -b --factory-startup --python tools/flykit_render.py -- <outdir>/spec.json <outdir>/render
   python -I tools/nest_riffs.py sheet [outdir]      (a sheet per design, and an overview)
 
 Frame: x forward, y left, z up; game units (about 1.9 cm).
@@ -28,13 +35,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import flykit
 from mech_parts import Part
 from sensor_concept import eye, game_obj, moved, write_obj
-from nest_concept import (BW, DP, TH, arm, claw, hazard_strip, kit_obj, kr_feet, kr_grid, kr_vehicle_frame,
-                          kr_wall_mount, obj_bounds, place, rot_z)
+from nest_concept import BW, TH, arm, claw, hazard_strip, kit_obj, kr_vehicle_frame, obj_bounds, place, rot_z
 
 X, Y, Z = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
 CP = 9.6                                                # cells' pitch in a bank (a cell is 8.7 square, 1.9 thick)
 LO = HI = 0.0                                           # the kit's lowest and highest points (set by build)
-
+TAILP = np.zeros(3)                                     # the kit's tail, where an arm holds it (set by build)
 
 def unit(v):
     v = np.asarray(v, float)
@@ -131,7 +137,7 @@ def turned_in(p, cells, slots, build, deg, t):
     R, t = rot_z(deg), np.asarray(t, float)
     p.faces += moved(q, R, t).faces
     cells += [(R @ Rc, R @ np.asarray(tc) + t) for Rc, tc in qc]
-    slots += [(R @ np.asarray(o) + t, y + deg) for o, y in qs]
+    slots += [(R @ np.asarray(s[0]) + t, s[1] + deg) + tuple(s[2:]) for s in qs]
 
 
 def knee(p, y, z, reach):
@@ -146,74 +152,334 @@ def van_cam(V):
     return (cx, cy, roof * 0.65), 500, 62, 24
 
 
-# ---- KR-7: the modular rack, cell powered --------------------------------------------------------------------------
-def kr_cells(p, cells, o, nz):
-    """The power module, a module's footprint, nz tiers tall: bio cells face-out two across, as many high as it stands."""
+# ---- the shared box: KR-7 open, KV-7 hardened -----------------------------------------------------------------------
+# One box with a solid back wall, a gimbal arm on it holding a kit by its tail, the kit always level, as it flies (the
+# user: "the back is always the same solid piece where the arm is mounted"; "think of the mounting arm... to be like a
+# gimbal... it's gonna be mounted normally... the gimbal's gonna be holding it from a different position so that you can
+# launch multiple ones sequentially"). The open rack's kits go out of the front. The armoured boxes stack three high into
+# one tube, their kits going straight up out of its top one at a time, top first, each arm folding flat up its wall once
+# its kit has gone so the kits below can climb through: cheaper a kit, but only one at a time, loaded in order, and the
+# bottom one out only after the two above it (which then go back in). On a wall in the hive format, a box on its side
+# (its back wall down), the gimbal holds its kit level, nose out, and it goes straight out of the front.
+VD = 16.0                                               # the box's depth (BW wide, TH tall)
+FLY = 18.0                                              # how far above a tube's top a launched kit is shown
+HIVE = np.array([[0, 0, 1], [0, -1, 0], [1, 0, 0]], float)   # a box on its side: its top out of the wall, its back wall down
+
+
+def seg(p, a, b, r, region):
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    d = b - a
+    p.prism(a, b, Z if abs(d[2]) < 0.7 * np.linalg.norm(d) else X, r, 8, region, None, None)
+
+
+def tail_grip(p, at):
+    """The arm's hand: a wrist behind the kit's tail, two fingers either side of its spine's end."""
+    at = np.asarray(at, float)
+    p.prism(at - [1.4, 0, 0], at - [0.3, 0, 0], Z, 1.0, 8, "duct", "duct", "duct")
+    for s in (1, -1):
+        bx(p, at + [0.6, s * 1.9, 0], (2.4, 0.4, 1.4), "steel")
+
+
+def gimbal(p, mount, T, folded=False):
+    """The grab arm: from its mount on the back wall, a boom to a gimbal (a yoke and its pin) holding the kit's tail at T,
+    the kit level; folded flat up the back wall (the box clear) when folded."""
+    mount, T = np.asarray(mount, float), np.asarray(T, float)
+    E, W = T - [2.4, 0, 0], T - [1.4, 0, 0]
+    bx(p, mount, (1.4, 3.4, 3.4), "duct")
+    if folded:
+        seg(p, mount, mount + [0.4, 0, 4.0], 0.5, "steel")
+        for s in (1, -1):
+            bx(p, mount + [0.4, s * 1.5, 4.6], (1.6, 0.4, 1.6), "duct")
+        return
+    seg(p, mount, E, 0.5, "steel")
+    seg(p, E, W, 0.5, "steel")
+    for s in (1, -1):
+        bx(p, W + [0.2, s * 1.5, 0], (1.6, 0.4, 1.6), "duct")
+    p.prism(W + [0.3, -1.8, 0], W + [0.3, 1.8, 0], Z, 0.35, 8, "steel", "steel", "steel")
+    tail_grip(p, T)
+
+
+def frame(p, cells, o, hard=False, cut=False):
+    """The box (BW wide, VD deep, TH tall; open top and bottom, so boxes stack into one tube): posts, rails, stacking
+    pins, a solid back wall where the arm mounts; open (KR-7: couplers, lights), or armoured (KV-7: walls all round, a bio
+    cell in its front panel; cut, the front cut away to show inside)."""
+    o = np.asarray(o, float)
+    hx, hy = VD / 2 - 0.6, BW / 2 - 0.6
+    for sx in (1, -1):
+        for sy in (1, -1):
+            bx(p, o + [sx * hx, sy * hy, TH / 2], (1.2, 1.2, TH), "duct" if hard else ("hull", "panel"))
+            p.prism(o + [sx * hx, sy * hy, TH], o + [sx * hx, sy * hy, TH + 0.5], X, 0.35, 6, "steel", None, "steel")
+        for z in (0.6, TH - 0.6):
+            bx(p, o + [sx * hx, 0, z], (1.2, BW - 2.4, 1.2))
+    for sy in (1, -1):
+        for z in (0.6, TH - 0.6):
+            bx(p, o + [0, sy * hy, z], (VD - 2.4, 1.2, 1.2))
+    bx(p, o + [-(VD / 2 - 0.7), 0, TH / 2], (0.8, BW - 1.2, TH - 1.2))                # the back wall
+    if hard:
+        for sy in (1, -1):
+            bx(p, o + [0, sy * (BW / 2 - 0.7), TH / 2], (VD - 1.2, 0.8, TH - 1.2))
+            bx(p, o + [0, sy * (BW / 2 - 0.28), TH * 0.62], (3.4, 0.06, 1.8), "pad")
+        bx(p, o + [-(VD / 2 - 1.2), 0, TH / 2], (0.2, BW - 3.0, TH - 3.0), "band")
+        if not cut:
+            bx(p, o + [VD / 2 - 0.7, 0, TH / 2], (0.8, BW - 1.2, TH - 1.2))
+            cell_bank(p, cells, o + [VD / 2 + 1.0, 0, TH / 2 - 0.8], X, 1, 1, depth=1.2)
+            hazard_strip(p, o + [VD / 2 + 0.05, 0, TH - 2.0], Y, Z, X, (BW - 6, 1.2, 0.08))
+            bx(p, o + [VD / 2 + 0.06, BW / 2 - 2.0, TH - 2.0], (0.1, 1.0, 0.6), "light")
+    else:
+        for sy in (1, -1):
+            bx(p, o + [0, sy * (BW / 2 - 0.35), TH * 0.62], (5.0, 0.7, 3.2), "duct")
+            bx(p, o + [0, sy * (BW / 2 + 0.02), TH * 0.62], (3.4, 0.06, 1.8), "pad")
+        bx(p, o + [VD / 2 - 0.55, BW / 2 - 3.0, TH - 0.6], (0.12, 2.0, 0.6), "light")
+        bx(p, o + [VD / 2 - 0.55, -BW / 2 + 5.0, TH - 0.6], (0.1, 5.0, 0.9), "rim")
+
+
+def held(p, o, folded=False):
+    """A box's arm and where its kit sits: level in the middle, facing the front, its tail in the gimbal (the kit's origin)."""
+    o = np.asarray(o, float)
+    K = o + [1.5, 0, 8.3]
+    T = K + TAILP
+    gimbal(p, [o[0] - VD / 2 + 1.5, 0, T[2]], T, folded)
+    return K
+
+
+def cap(p, top, state, lid_deg=-105.0):
+    """A tube's cap, hinged at the back of its top: "closed" or "open"."""
+    lid_ = Part("cap")
+    bx(lid_, top + [0, 0, 0.6], (VD, BW, 1.2), ("panel", "hull"))
+    hazard_strip(lid_, top + [VD / 2 + 0.05, 0, 0.6], Y, Z, X, (BW - 4, 1.0, 0.08))
+    bx(lid_, top + [VD / 2 - 1.5, 0, 1.5], (1.0, 6.0, 0.6), "rim")
+    R = np.eye(3) if state == "closed" else rot(Y, lid_deg)
+    hinge = top + [-VD / 2, 0, 0.6]
+    p.faces += moved(lid_, R, hinge - R @ hinge).faces
+
+
+def column(p, cells, o, n, kits=None, cap_="closed", cut=False):
+    """n armoured boxes stacked into one tube on its floor plate, a cap on top, a kit level in each; they launch top
+    first, each straight up the tube and out of its top. kits, a box each from the bottom: "held"; a height it has
+    climbed above its place (its arm folded); "fly" (out, FLY above the top); None (gone)."""
+    o = np.asarray(o, float)
+    kits = kits or ["held"] * n
+    bx(p, o + [0, 0, 0.3], (VD - 1.2, BW - 1.2, 0.6), "duct")
+    top = o + [0, 0, n * (TH + 0.5)]
+    s = []
+    for j in range(n):
+        k, m = kits[j], o + [0, 0, j * (TH + 0.5)]
+        frame(p, cells, m, True, cut)
+        K = held(p, m, folded=k != "held")
+        if k == "held":
+            s.append((K, 0.0))
+        elif k == "fly":
+            s.append((np.array([K[0], K[1], top[2] + FLY]), 0.0))
+        elif k is not None:
+            s.append((K + [0, 0, k], 0.0))
+    if cap_:
+        cap(p, top, cap_)
+    return s
+
+
+GOING = lambda n: ["held"] * (n - 2) + [TH + 6.0, "fly"]   # a tube launching: its top kit out, the next climbing after it
+
+
+def rack_grid(p, cells, o, nx, nz, gone=()):
+    """The open rack: nx by nz boxes, a kit level in each on its gimbal; gone: those let go, out of the front."""
+    s, o = [], np.asarray(o, float)
+    for i in range(nx):
+        for j in range(nz):
+            m = o + [0, (i - (nx - 1) / 2) * BW, j * (TH + 0.5)]
+            frame(p, cells, m)
+            K = held(p, m)
+            s.append((K + ([26.0, 0, -2.0] if i * nz + j in gone else [0, 0, 0]), 0.0))
+    return s
+
+
+def frame_power(p, cells, o, nz):
+    """The rack's power module, a box's footprint, nz tiers tall: bio cells two across, as many high as it stands."""
     o = np.asarray(o, float)
     h = nz * (TH + 0.5) - 0.5
-    flykit.chamfer_box(p, tuple(o + [-DP / 2, -BW / 2, 0]), tuple(o + [DP / 2, BW / 2, h]), 0.5, "hull", "panel")
+    flykit.chamfer_box(p, tuple(o + [-VD / 2, -BW / 2, 0]), tuple(o + [VD / 2, BW / 2, h]), 0.5, "hull", "panel")
     rows = max(1, int((h - 5.0) // CP))
-    cell_bank(p, cells, o + [DP / 2 + 1.0, 0, 2.0 + (rows * CP + 1.4) / 2], X, 2, rows)
-    hazard_strip(p, o + [DP / 2 + 0.05, 0, h - 1.6], Y, Z, X, (BW - 3, 1.2, 0.08))
+    cell_bank(p, cells, o + [VD / 2 + 1.0, 0, 2.0 + (rows * CP + 1.4) / 2], X, 2, rows)
+    hazard_strip(p, o + [VD / 2 + 0.05, 0, h - 1.6], Y, Z, X, (BW - 3, 1.2, 0.08))
     p.prism(o + [0, 0, h], o + [0, 0, h + 1.6], X, 1.0, 10, "light", None, "light")
-    p.prism(o + [-DP / 2 + 2, BW / 2 - 3, h], o + [-DP / 2 + 2, BW / 2 - 3, h + 24], X, 0.9, 10, "duct", None, None)
+    p.prism(o + [-VD / 2 + 2, BW / 2 - 3, h], o + [-VD / 2 + 2, BW / 2 - 3, h + 24], X, 0.9, 10, "duct", None, None)
 
 
-def kr_rack(p, cells, y0, nx, nz, feet=True, z0=0.0):
-    W = (nx + 1) * BW
-    zb = z0
-    if feet:
-        kr_feet(p, (0, y0 + W / 2, z0), W)
-        zb += 2.4
-    tips = kr_grid(p, (0, y0 + nx * BW / 2, zb), nx, nz)
-    kr_cells(p, cells, (0, y0 + nx * BW + BW / 2, zb), nz)
-    return [(hang(t), 0.0) for t in tips]
+def feet(p, o, width, depth=VD):
+    """A base: a beam under the boxes, splayed feet with pads."""
+    o = np.asarray(o, float)
+    bx(p, o + [0, 0, 1.6], (depth + 1, width, 1.6), "duct")
+    for y in np.linspace(-width / 2 + 2, width / 2 - 2, max(2, int(width // BW) + 1)):
+        bx(p, o + [0, y, 0.5], (depth + 8, 2.2, 1.0))
+        for sx in (1, -1):
+            p.prism(o + [sx * (depth / 2 + 3.4), y, 0], o + [sx * (depth / 2 + 3.4), y, -0.4], X, 1.4, 8, "band", "band", None)
+
+
+def skids(p, width):
+    for x in (-VD / 2 + 2, VD / 2 - 2):
+        bx(p, (x, 0, 1.0), (3.0, width + 6, 2.0), "duct")
+        for y in (-width / 2 - 3, width / 2 + 3):
+            hazard_strip(p, (x, y, 2.05), X, Y, Z, (2.8, 1.0, 0.08))
+
+
+def rack(p, cells, y0, nx, nz, gone=(), base=True):
+    """The open rack, nx by nz from y0, a power module at its end, on feet: its kits."""
+    zb = 2.4 if base else 0.0
+    if base:
+        feet(p, (0, y0 + (nx + 1) * BW / 2, 0), (nx + 1) * BW)
+    s = rack_grid(p, cells, (0, y0 + nx * BW / 2, zb), nx, nz, gone)
+    frame_power(p, cells, (0, y0 + nx * BW + BW / 2, zb), nz)
+    return s
+
+
+def tubes(p, cells, y0, nx, nz, kits={}, caps={}, cut=(), z0=0.0):
+    """nx tubes nz boxes high from y0, at z0: their kits."""
+    s = []
+    for i in range(nx):
+        s += column(p, cells, (0, y0 + (i + 0.5) * BW, z0), nz, kits.get(i), caps.get(i, "closed"), i in cut)
+    return s
+
+
+def wall_mount(p, n, top, bottom, back, depth, hooks=True):
+    """On a wall (x = 0): a rail above n boxes (a hook over each), a knee brace under every joint."""
+    width = n * BW
+    bx(p, (1.2, 0, top + 2.6), (2.4, width + 6, 3.6))
+    hazard_strip(p, (2.45, 0, top + 2.6), Y, Z, X, (width + 2, 1.2, 0.08))
+    for k in range(n if hooks else 0):
+        y = -width / 2 + (k + 0.5) * BW
+        bx(p, ((back + 1.6) / 2, y, top + 0.4), (back + 1.6, 3.0, 0.8), "duct")
+        bx(p, (back + 1.4, y, top - 0.2), (0.4, 3.0, 2.0), "duct")
+    for y in [-width / 2 + 0.8] + [-width / 2 + k * BW for k in range(1, n)] + [width / 2 - 0.8]:
+        knee(p, y, bottom, back + depth)
+
+
+def hive_cell(p, cells, t, go=False):
+    """The hive format: one armoured box on its side on a wall, its top (the cap) out of the wall, its back wall down;
+    the gimbal on that wall holds its kit level, nose out (go: the cap down, the kit on its way out of the front)."""
+    t = np.asarray(t, float)
+    q, qc = Part("cell"), []
+    frame(q, qc, (0, 0, 0), True)
+    bx(q, (0, 0, 0.3), (VD - 1.2, BW - 1.2, 0.6), "duct")
+    cap(q, np.array([0, 0, TH + 0.5]), "open" if go else "closed", -90.0)
+    p.faces += moved(q, HIVE, t).faces
+    cells += [(HIVE @ Rc, HIVE @ np.asarray(tc) + t) for Rc, tc in qc]
+    floor_z = t[2] - VD / 2 + 1.1
+    K = t + [8.5, 0, -0.7]
+    T = K + TAILP
+    gimbal(p, [T[0] - 2.4, 0, floor_z + 0.7], T)
+    return [(K + ([16.0, 0, 0] if go else [0, 0, 0]), 0.0)] if go else []
 
 
 def kr_one(p, c):
-    return kr_rack(p, c, -BW, 1, 1, feet=False), ((0, 0, 9), 66, 30, 16)
+    return rack(p, c, -BW, 1, 1, base=False), ((0, 0, 9), 74, 30, 18)
 
 
 def kr_scale(p, c):
     s, y = [], -105.0
     for nx, nz in ((1, 1), (2, 1), (3, 2)):
-        s += kr_rack(p, c, y, nx, nz)
+        s += rack(p, c, y, nx, nz)
         y += (nx + 1) * BW + 10
-    return s, ((0, 14, 18), 345, 22, 12)
+    return s, ((0, 14, 18), 350, 22, 12)
 
 
 def kr_free(p, c):
-    return kr_rack(p, c, -2 * BW, 3, 2), ((0, 0, 18), 125, 30, 14)
+    return rack(p, c, -2 * BW, 3, 2), ((4, 0, 18), 138, 30, 16)
 
 
 def kr_wall(p, c):
-    back, bottom = 2.4, 28.0
-    tips = kr_grid(p, (back + DP / 2, -BW / 2, bottom), 4, 1)
-    kr_cells(p, c, (back + DP / 2, 2 * BW, bottom), 1)
-    kr_wall_mount(p, 5, bottom + TH, bottom, back)
-    return [(hang(t), 0.0) for t in tips], ((10, 0, 32), 150, 36, 10)
+    back, bottom = 0.6, 28.0
+    s = rack_grid(p, c, (back + VD / 2, -BW / 2, bottom), 4, 1)
+    frame_power(p, c, (back + VD / 2, 2 * BW, bottom), 1)
+    wall_mount(p, 5, bottom + TH, bottom, back, VD)
+    return s, ((12, 0, 32), 155, 36, 10)
 
 
 def kr_van(p, c, V):
     cx, cy, roof = V
-    kr_vehicle_frame(p, (cx, cy, roof), 5 * BW + 6, 2 * DP + 6)
+    kr_vehicle_frame(p, (cx, cy, roof), 5 * BW + 6, 2 * VD + 6)
     s = []
 
     def row(q, qc):
-        tips = kr_grid(q, (0, -BW / 2, roof + 2.6), 4, 1)
-        kr_cells(q, qc, (0, 2 * BW, roof + 2.6), 1)
-        return [(hang(t), 0.0) for t in tips]
+        r = rack_grid(q, qc, (0, -BW / 2, roof + 2.6), 4, 1)
+        frame_power(q, qc, (0, 2 * BW, roof + 2.6), 1)
+        return r
     for k in (1, -1):
-        turned_in(p, c, s, row, 90 * k, (cx, cy + k * (DP / 2 + 0.3), 0))
+        turned_in(p, c, s, row, 90 * k, (cx, cy + k * (VD / 2 + 0.3), 0))
     return s, van_cam(V)
+
+
+def kr_launch(p, c):
+    return rack(p, c, -2 * BW, 3, 2, gone=(1,)), ((10, 0, 18), 150, 28, 14)
+
+
+def kv_one(p, c):
+    return column(p, c, (0, 0, 0), 1, [12.0], "open"), ((2, 0, 13), 88, 30, 28)
+
+
+def kv_scale(p, c):
+    s, y = [], -70.0
+    for nx, nz, kits, caps in ((1, 1, {}, {}), (1, 2, {0: GOING(2)}, {0: "open"}), (3, 3, {1: GOING(3)}, {1: "open"})):
+        feet(p, (0, y + nx * BW / 2, 0), nx * BW)
+        s += tubes(p, c, y, nx, nz, kits, caps, z0=2.4)
+        y += nx * BW + 14
+    return s, ((0, 10, 26), 300, 22, 12)
+
+
+def kv_free(p, c):
+    skids(p, 3 * BW)
+    return tubes(p, c, -1.5 * BW, 3, 3, {0: GOING(3)}, {0: "open"}, z0=2.0), ((6, 0, 30), 175, 30, 14)
+
+
+def kv_wall(p, c):
+    s, base = [], 22.0
+    bx(p, (0.3, 0, base + 1.5 * (VD + 0.5)), (0.6, 3 * BW + 4, 3 * (VD + 0.5) + 4))
+    for i in range(3):
+        for j in range(3):
+            s += hive_cell(p, c, (0.6, (i - 1) * BW, base + VD / 2 + j * (VD + 0.5)), (i, j) == (1, 1))
+    for y in (-1.5 * BW + 0.8, -0.5 * BW, 0.5 * BW, 1.5 * BW - 0.8):
+        knee(p, y, base, TH + 2.0)
+    return s, ((16, 0, 48), 185, 34, 10)
+
+
+def kv_van(p, c, V):
+    cx, cy, roof = V
+    kr_vehicle_frame(p, (cx, cy, roof), 3 * BW + 6, 2 * VD + 6)
+    s = []
+
+    def row(q, qc):
+        r = []
+        for i in range(3):
+            r += column(q, qc, (0, (i - 1) * BW, roof + 2.6), 1, ["fly"] if i == 1 else None, "open" if i == 1 else "closed")
+        return r
+    for k in (1, -1):
+        turned_in(p, c, s, row, 90 * k, (cx, cy + k * (VD / 2 + 0.3), 0))
+    return s, van_cam(V)
+
+
+def kv_launch(p, c):
+    skids(p, 2 * BW)
+    return tubes(p, c, -BW, 2, 3, {1: GOING(3)}, {1: "open"}, cut=(1,), z0=2.0), ((4, 0, 36), 185, 28, 12)
 
 
 # ---- KL-7: lockers --------------------------------------------------------------------------------------------------
 LW, LD, LH, SILL = 22.0, 16.0, 33.0, 12.0
 
 
+def console(p, c):
+    """A small console on a sill: a screen with a few lit lines, a keypad, a red key."""
+    c = np.asarray(c, float)
+    bx(p, c + [0.6, 0, 0], (1.2, 9.4, 10.0))
+    bx(p, c + [1.25, 0, 2.2], (0.1, 7.0, 4.0), "glass")
+    for k, w in enumerate((5.0, 3.6, 4.4)):
+        bx(p, c + [1.32, -3.5 + 0.6 + w / 2, 3.5 - k * 0.9], (0.04, w, 0.35), "light")
+    for i in range(3):
+        for j in range(3):
+            bx(p, c + [1.4, -1.6 + i * 1.2, -1.2 - j * 1.1], (0.4, 0.9, 0.8), "steel")
+    bx(p, c + [1.4, 2.6, -2.3], (0.4, 1.4, 1.4), "latch")
+
+
 def locker(p, cells, o, open_=False):
-    """The rack's module boxed in armour: a roll-up shutter over its front, two bio cells in its sill."""
+    """The rack's module boxed in armour: a roll-up shutter over its front; a bio cell (the viewer's left) and a console
+    (the right) in its sill."""
     o = np.asarray(o, float)
     for s in (1, -1):
         bx(p, o + [0, s * (LW / 2 - 0.5), LH / 2], (LD, 1.0, LH))
@@ -228,9 +494,9 @@ def locker(p, cells, o, open_=False):
     bx(p, o + [0, 0, SILL], (LD, LW, 1.0))
     bx(p, o + [LD / 2 - 0.5, 0, SILL / 2], (1.0, LW, SILL))
     bx(p, o + [LD / 2 - 0.5, 0, LH - 1.6], (1.0, LW, 2.2))
-    cell_bank(p, cells, o + [LD / 2 + 1.0, 0, SILL / 2], X, 2, 1)
+    cell_bank(p, cells, o + [LD / 2 + 1.0, -LW / 4, SILL / 2], X, 1, 1)
+    console(p, o + [LD / 2, LW / 4, SILL / 2])
     hazard_strip(p, o + [LD / 2 + 0.05, 0, LH - 1.6], Y, Z, X, (LW - 4, 1.2, 0.08))
-    bx(p, o + [LD / 2 + 0.05, LW / 2 - 1.6, SILL + 1.2], (0.1, 1.0, 0.6), "light")
     if open_:
         p.prism(o + [LD / 2 - 2.0, -(LW / 2 - 1.0), LH - 4.2], o + [LD / 2 - 2.0, LW / 2 - 1.0, LH - 4.2], Z, 1.5, 10, "panel",
                 "duct", "duct")
@@ -257,7 +523,7 @@ def plinth(p, y, width, depth):
 
 
 def kl_one(p, c):
-    return locker(p, c, (0, 0, 0), True), ((0, 0, 16), 74, 30, 14)
+    return locker(p, c, (0, 0, 0), True), ((0, 0, 15), 86, 30, 14)
 
 
 def kl_scale(p, c):
@@ -387,100 +653,15 @@ def kc_van(p, c, V):
     return s, van_cam(V)
 
 
-# ---- KV-7: vertical cells -------------------------------------------------------------------------------------------
-TW, VH = 21.0, 16.0
-
-
-def vtube(p, cells, o, open_=False, lid_deg=-105.0):
-    """A square tube, a kit sitting upright inside on a cradle; its lid hinged at the back, a bio cell set in the lid."""
-    o = np.asarray(o, float)
-    for s in (1, -1):
-        bx(p, o + [0, s * (TW / 2 - 0.5), VH / 2], (TW, 1.0, VH))
-        bx(p, o + [s * (TW / 2 - 0.5), 0, VH / 2], (1.0, TW - 2.0, VH))
-        bx(p, o + [0, s * (TW / 2 + 0.02), VH * 0.5], (4.0, 0.06, 2.4), "pad")
-        for sx in (1, -1):
-            bx(p, o + [sx * (TW / 2 - 0.6), s * (TW / 2 - 0.6), VH / 2], (1.3, 1.3, VH + 0.1), "duct")
-    bx(p, o + [0, 0, 1.0], (TW - 2, TW - 2, 2.0), "duct")
-    lift = VH - 3.0 if open_ else 3.0                   # (its lid open, the kit lifted to the rim, ready to go)
-    p.prism(o + [0, 0, 2.0], o + [0, 0, lift - 1.0], X, 1.0, 8, "steel", None, None)
-    p.prism(o + [0, 0, lift - 1.0], o + [0, 0, lift], X, 2.4, 10, "duct", "duct", "duct")
-    hazard_strip(p, o + [TW / 2 + 0.05, 0, VH - 1.5], Y, Z, X, (TW - 4, 1.0, 0.08))
-    bx(p, o + [TW / 2 + 0.05, TW / 2 - 2.0, 2.0], (0.1, 1.0, 0.6), "light")
-    lid, lc = Part("lid"), []
-    bx(lid, o + [0, 0, VH + 0.6], (TW, TW, 1.2), ("panel", "hull"))
-    cell_bank(lid, lc, o + [1.0, 0, VH + 2.4], Z, 1, 1, up=X, depth=1.2)
-    bx(lid, o + [TW / 2 - 1.2, 0, VH + 1.5], (1.0, 6.0, 0.6), "rim")
-    if not open_:
-        p.faces += lid.faces
-        cells += lc
-        return []
-    hinge = o + [-TW / 2, 0, VH + 0.6]
-    R = rot(Y, lid_deg)
-    t = hinge - R @ hinge
-    p.faces += moved(lid, R, t).faces
-    cells += [(R @ Rc, R @ np.asarray(tc) + t) for Rc, tc in lc]
-    return [(sit(o + [0, 0, lift]), 0.0)]
-
-
-def vblock(p, cells, o, nx, ny, opened=(), lid_deg=-105.0):
-    s, o = [], np.asarray(o, float)
-    for i in range(nx):
-        for j in range(ny):
-            s += vtube(p, cells, o + [((nx - 1) / 2 - i) * TW, (j - (ny - 1) / 2) * TW, 0], i * ny + j in opened, lid_deg)
-    return s
-
-
-def kv_one(p, c):
-    return vtube(p, c, (0, 0, 0), True), ((0, 0, 12), 88, 30, 28)
-
-
-def kv_scale(p, c):
-    s, y = [], -77.0
-    for nx, ny, op in ((1, 1, (0,)), (1, 2, (1,)), (3, 3, (0, 4, 8))):
-        s += vblock(p, c, (0, y + ny * TW / 2, 0), nx, ny, op)
-        y += ny * TW + 14
-    return s, ((0, 0, 10), 260, 22, 28)
-
-
-def kv_free(p, c):
-    for x in (-TW / 2, TW / 2):
-        bx(p, (x, 0, 1.0), (3.0, 3 * TW + 6, 2.0), "duct")
-        for y in (-1.5 * TW - 3, 1.5 * TW + 3):
-            hazard_strip(p, (x, y, 2.05), X, Y, Z, (2.8, 1.0, 0.08))
-    s = vblock(p, c, (0, 0, 2.0), 2, 3, (1, 3))
-    return s, ((0, 0, 12), 140, 30, 26)
-
-
-def kv_wall(p, c):
-    z = 40.0
-    bx(p, (TW / 2 + 0.6, 0, z - 1.0), (TW + 1.2, 4 * TW + 2, 2.0))
-    bx(p, (0.5, 0, z + VH / 2), (1.0, 4 * TW + 4, VH + 6))
-    hazard_strip(p, (TW + 1.25, 0, z - 1.0), Y, Z, X, (4 * TW, 1.2, 0.08))
-    for y in (-2 * TW + 1, -TW, 0, TW, 2 * TW - 1):
-        knee(p, y, z - 2.0, TW + 1.2)
-    s = vblock(p, c, (TW / 2 + 0.6, 0, z), 1, 4, (1, 2), lid_deg=-88.0)
-    return s, ((12, 0, 40), 175, 34, 16)
-
-
-def kv_van(p, c, V):
-    cx, cy, roof = V
-    kr_vehicle_frame(p, (cx, cy, roof), 5 * TW + 6, 2 * TW + 6)
-    s = []
-    for i in range(5):
-        for j in range(2):
-            s += vtube(p, c, (cx + (i - 2) * TW, cy + (j - 0.5) * TW, roof + 2.6), (i + j) % 2 == 0)
-    return s, van_cam(V)
-
-
 # ---- KP-7: pads -----------------------------------------------------------------------------------------------------
 PX, PY, PT = 24.0, 22.0, 2.6
 
 
 def pad(p, cells, o):
-    """A landing tile: a kit sitting on its cradle inside corner marks, two bio cells set face-up behind it."""
+    """A landing tile: a kit sitting on its cradle inside corner marks, a bio cell set face-up behind it."""
     o = np.asarray(o, float)
     flykit.chamfer_box(p, tuple(o + [-PX / 2, -PY / 2, 0]), tuple(o + [PX / 2, PY / 2, PT]), 0.6, "hull", "panel")
-    cell_bank(p, cells, o + [-6.4, 0, PT + 0.6], Z, 2, 1, up=X, depth=1.2)
+    cell_bank(p, cells, o + [-6.4, 0, PT + 0.6], Z, 1, 1, up=X, depth=1.2)
     for sx in (1, -1):
         for sy in (1, -1):
             c = o + [4.5 + sx * 6.0, sy * 9.0, PT + 0.03]
@@ -654,44 +835,62 @@ def kf_van(p, c, V):
 
 # ---- the designs, their views, the sheets ------------------------------------------------------------------------------
 VIEWS = ("one", "scale", "free", "wall", "van", "launch")
-DESIGNS = [
-    ("KR-7", "modular rack", "the KR-7, its power module now a bank of the game's own bio cells that grows with the rack",
-     dict(one=kr_one, scale=kr_scale, free=kr_free, wall=kr_wall, van=kr_van, launch=(1, (22, 0, -5), ((10, 0, 18), 130, 28, 12)),
-          caps=("one module and its cell pack: two bio cells, face out", "scalable: the cell bank grows with the rack",
-                "free-standing: three by two, six cells", "wall-mounted: four and a cell pack, on the rail",
-                "vehicle-mounted: two rows of four, a cell pack each", "launching: one let go, flying out of the front"))),
-    ("KL-7", "lockers", "the rack's module boxed in armour: a roll-up shutter, two bio cells in its sill, lockers that stack",
-     dict(one=kl_one, scale=kl_scale, free=kl_free, wall=kl_wall, van=kl_van, launch=(0, (24, 0, -3), ((10, 0, 34), 170, 28, 12)),
-          caps=("one locker, open: a kit on its claw, cells in the sill", "scalable: one, two, three by two (each its own cells)",
-                "free-standing: four by two on a plinth, two open", "wall-mounted: three by two, rail above, braces below",
-                "vehicle-mounted: two rows of three, back to back", "launching: out from under the shutter"))),
-    ("KC-7", "carousel", "tiers of six kits hanging round a core faced with bio cells; tiers stack on a tripod",
-     dict(one=kc_one, scale=kc_scale, free=kc_free, wall=kc_wall, van=kc_van, launch=(11, (28, 0, 4), ((10, 0, 36), 170, 30, 12)),
-          caps=("one tier on its tripod: six kits, four cells in the core", "scalable: one, two, three tiers",
-                "free-standing: two tiers, a beacon on top", "wall-mounted: half tiers on a wall plate, cells between",
-                "vehicle-mounted: two tiers on the roof, kits all round", "launching: one let go, flying out"))),
-    ("KV-7", "vertical cells", "kits upright in tubes, lids hinged back, a bio cell set in every lid; kits launch straight up",
-     dict(one=kv_one, scale=kv_scale, free=kv_free, wall=kv_wall, van=kv_van, launch=(0, (0, 0, 30), ((0, 0, 22), 160, 30, 20)),
-          caps=("one tube, its lid open, the kit lifted to the rim", "scalable: one, two, three by three",
-                "free-standing: two by three on skids", "wall-mounted: four on a braced shelf",
-                "vehicle-mounted: two by five, every other lid up", "launching: straight up out of its tube"))),
-    ("KP-7", "pads", "landing tiles that join edge to edge, a kit sitting on each, two bio cells set face-up behind it",
+DESIGNS = [  # tag, name, line, its place in the line-up, its views
+    ("KP-7", "pads", "the cheapest: landing tiles joined edge to edge, a kit sitting on each, a bio cell set behind it", "the cheapest",
      dict(one=kp_one, scale=kp_scale, free=kp_free, wall=kp_wall, van=kp_van, launch=(7, (0, 0, 32), ((-24, 0, 32), 205, 30, 16)),
-          caps=("one tile: a kit on its cradle, two cells behind it", "scalable: one, two, three by three",
+          caps=("one tile: a kit on its cradle, a cell behind it", "scalable: one, two, three by three",
                 "free-standing: decks stepping up and back, open sky above each", "wall-mounted: ledges climbing the wall",
                 "vehicle-mounted: two by five tiles on the roof", "launching: straight up off its tile"))),
-    ("KF-7", "field case", "a hard case for two kits in foam, three bio cells strapped in its lid, fold-out legs; cases latch and stack",
+    ("KR-7", "rack", "cheap and modular: the shared box, open; a gimbal arm on its back wall holds each kit level, facing out; a cell bank grows with it",
+     "cheap, open, modular",
+     dict(one=kr_one, scale=kr_scale, free=kr_free, wall=kr_wall, van=kr_van, launch=kr_launch,
+          caps=("one box and its cell pack: a kit level in its gimbal arm", "scalable: the cell bank grows with the rack",
+                "free-standing: three by two on feet", "wall-mounted: four and a cell pack, on the rail",
+                "vehicle-mounted: two rows of four, back to back", "launching: let go, straight out of the front"))),
+    ("KL-7", "lockers", "for indoors: each locker hardened on its own, a roll-up shutter, a bio cell and a console in its sill",
+     "indoors, each one hardened",
+     dict(one=kl_one, scale=kl_scale, free=kl_free, wall=kl_wall, van=kl_van, launch=(0, (24, 0, -3), ((10, 0, 34), 195, 28, 12)),
+          caps=("one locker, open: a kit on its claw; a cell and a console", "scalable: one, two, three by two (a cell each)",
+                "free-standing: four by two on a plinth, two open", "wall-mounted: three by two, rail above, braces below",
+                "vehicle-mounted: two rows of three, back to back", "launching: out from under the shutter"))),
+    ("KV-7", "vertical cells", "the rack's box in armour; three stacked make one tube (cheaper a kit): out of its top one at a time, top first",
+     "the rack, hardened",
+     dict(one=kv_one, scale=kv_scale, free=kv_free, wall=kv_wall, van=kv_van, launch=kv_launch,
+          caps=("one box, its cap open: the kit going up out of the top", "scalable: boxes stack into one tube, a cap on top",
+                "free-standing: three tubes three high, one launching", "wall-mounted, the hive format: on their sides, out of the front",
+                "vehicle-mounted: two rows of three, capped", "cutaway: three kits level in one tube; top one first, the next after it"))),
+    ("KF-7", "field case", "the man-portable launcher: a hard case for two kits in foam, cells strapped in its lid, fold-out legs",
+     "man-portable",
      dict(one=kf_one, scale=kf_scale, free=kf_free, wall=kf_wall, van=kf_van, launch=(2, (0, 0, 30), ((0, 0, 30), 195, 30, 16)),
           caps=("one case, open: two kits in foam, cells in the lid", "scalable: one, two latched, a stack of six",
                 "free-standing: three on their fold-out legs", "wall-mounted: cases on braced brackets, lids up",
                 "vehicle-mounted: eight strapped on the roof, two open", "launching: straight up out of its case"))),
+    ("KC-7", "carousel", "the dearest: six kits a tier round a core of bio cells, every kit's camera always on: it sees you, and it launches",
+     "the dearest: always watching",
+     dict(one=kc_one, scale=kc_scale, free=kc_free, wall=kc_wall, van=kc_van, launch=(11, (28, 0, 4), ((10, 0, 36), 170, 30, 12)),
+          caps=("one tier on its tripod: six kits watching, four cells in the core", "scalable: one, two, three tiers",
+                "free-standing: two tiers, a beacon on top", "wall-mounted: half tiers on a wall plate, cells between",
+                "vehicle-mounted: two tiers on the roof, kits all round", "launching: the one that saw you, gone"))),
 ]
 
 
+def frames_of():
+    """Each design's first frame number and its views."""
+    n, out = 0, []
+    for d in DESIGNS:
+        views = d[4].get("views", VIEWS)
+        out.append((n, views))
+        n += len(views)
+    return out
+
+
 def build(out):
-    global LO, HI
+    global LO, HI, TAILP
     os.makedirs(out, exist_ok=True)
     st, LO, HI = kit_obj(out)
+    P = np.array([q for pts, r in st["p"].faces for q in pts if r != "blur"])
+    x0 = P[:, 0].min()
+    TAILP = np.array([x0, 0.0, P[P[:, 0] < x0 + 0.6][:, 2].mean()])
     flykit.PACKAGES["DeusExDeco"] = os.path.join(flykit.REV, "System", "DeusExDeco.u")
     van = game_obj("DeusExDeco", "Van", 1.0, np.eye(3), (0, 0, 0), out, "van")
     vlo, vhi = obj_bounds(van)
@@ -703,24 +902,25 @@ def build(out):
     bx(floor_, (0, 0, -0.6), (400, 400, 0.4), "wall")
     wp, fp = write_obj(wall, os.path.join(out, "wall.obj")), write_obj(floor_, os.path.join(out, "floor.obj"))
     frames, states = [], []
-    for tag, name, line, fn in DESIGNS:
+    for tag, name, line, role, fn in DESIGNS:
         t = tag.replace("-", "").lower()
-        for view in VIEWS:
+        for view in fn.get("views", VIEWS):
             p, cells = Part(t + view), []
+            f = fn[view]
             if view == "van":
-                slots, cam = fn["van"](p, cells, V)
+                slots, cam = f(p, cells, V)
                 scene = [fp, van]
-            elif view == "launch":
-                slots, _ = fn["free"](p, cells)
-                k, off, cam = fn["launch"]
-                o, y = slots[k]
-                slots[k] = (np.asarray(o) + rot_z(y) @ np.asarray(off, float), y)
-                scene = [fp]
-            else:
-                slots, cam = fn[view](p, cells)
+            elif callable(f):
+                slots, cam = f(p, cells)
                 scene = [wp, fp] if view == "wall" else [fp]
+            else:                                       # (a launch: the free-standing view, one kit gone off)
+                slots, _ = fn["free"](p, cells)
+                k, off, cam = f
+                o, y = slots[k][:2]
+                slots[k] = (np.asarray(o) + rot_z(y) @ np.asarray(off, float), y) + tuple(slots[k][2:])
+                scene = [fp]
             nm = "%s_%s" % (t, view)
-            objs = scene + [write_obj(p, os.path.join(out, nm + ".obj"))]
+            objs = scene + ([write_obj(p, os.path.join(out, nm + ".obj"))] if p.faces else [])
             if cells:
                 objs.append(cells_obj(cells, out, nm))
             objs += [place(st, out, "%s_k%d" % (nm, k), o, yaw=y) for k, (o, y) in enumerate(slots)]
@@ -737,13 +937,15 @@ def sheet(out):
     rd = os.path.join(out, "render")
     font = lambda s: ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeuib.ttf"), s)
     tw, th = 640, 480
-    for n, (tag, name, line, fn) in enumerate(DESIGNS):
-        S = Image.new("RGB", (2 * tw, 112 + 3 * th), (24, 26, 30))
+    starts = frames_of()
+    for (tag, name, line, role, fn), (n0, views) in zip(DESIGNS, starts):
+        rows = (len(views) + 1) // 2
+        S = Image.new("RGB", (2 * tw, 112 + rows * th), (24, 26, 30))
         d = ImageDraw.Draw(S)
-        d.text((24, 12), "Kit nest: %s %s" % (tag, name), fill=(240, 200, 120), font=font(38))
-        d.text((24, 70), line, fill=(200, 200, 205), font=font(20))
+        d.text((24, 12), "Kit nest: %s %s" % (tag, name) if tag != "FK-7" else "FK-7: the launch pose", fill=(240, 200, 120), font=font(38))
+        d.text((24, 70), line, fill=(200, 200, 205), font=font(20 if len(line) < 110 else 17))
         for i, cap in enumerate(fn["caps"]):
-            im = Image.open(os.path.join(rd, "r%04d.png" % (n * 6 + i))).convert("RGB").resize((tw, th), Image.LANCZOS)
+            im = Image.open(os.path.join(rd, "r%04d.png" % (n0 + i))).convert("RGB").resize((tw, th), Image.LANCZOS)
             x, y = (i % 2) * tw, 112 + (i // 2) * th
             S.paste(im, (x, y))
             d.rectangle((x, y + th - 36, x + tw, y + th), fill=(24, 26, 30))
@@ -751,13 +953,14 @@ def sheet(out):
         path = os.path.join(out, "riff_%s.png" % tag.replace("-", "").lower())
         S.save(path)
         print(path)
+    nests = [(d, s) for d, s in zip(DESIGNS, starts) if d[0] != "FK-7"]
     O = Image.new("RGB", (3 * tw, 80 + 2 * (th + 44)), (24, 26, 30))
     d = ImageDraw.Draw(O)
-    d.text((24, 16), "Kit nests: the KR-7 and five riffs, all on the game's bio cells", fill=(240, 200, 120), font=font(38))
-    for n, (tag, name, line, fn) in enumerate(DESIGNS):
-        im = Image.open(os.path.join(rd, "r%04d.png" % (n * 6 + 2))).convert("RGB").resize((tw, th), Image.LANCZOS)
-        x, y = (n % 3) * tw, 80 + (n // 3) * (th + 44)
-        d.text((x + 12, y + 6), "%s  %s" % (tag, name), fill=(240, 200, 120), font=font(26))
+    d.text((24, 16), "Kit nests, cheapest first, all on the game's bio cells", fill=(240, 200, 120), font=font(38))
+    for k, ((tag, name, line, role, fn), (n0, views)) in enumerate(nests):
+        im = Image.open(os.path.join(rd, "r%04d.png" % (n0 + views.index("free")))).convert("RGB").resize((tw, th), Image.LANCZOS)
+        x, y = (k % 3) * tw, 80 + (k // 3) * (th + 44)
+        d.text((x + 12, y + 6), "%s %s: %s" % (tag, name, role), fill=(240, 200, 120), font=font(24))
         O.paste(im, (x, y + 44))
     path = os.path.join(out, "riff_overview.png")
     O.save(path)
