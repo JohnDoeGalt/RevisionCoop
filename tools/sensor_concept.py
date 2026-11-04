@@ -188,6 +188,8 @@ def kitted(p, out, tag, cx=None):
     st = dict(p=k, own=None, V=np.zeros((0, 3)), tris=[], uvs=[], tnames=[], skins=skins, mtl=mtl)
     a = flykit.obj(os.path.join(out, "kit_%s.obj" % tag), st)
     b = write_obj(moved(p, t=S[0] - V[0]), os.path.join(out, "kitload_%s.obj" % tag))
+    global LAST_SEAT
+    LAST_SEAT = S[0] - V[0] - c                         # (the part as given to its seat: tex_build's textured copy)
     return [a, b]
 
 
@@ -409,6 +411,225 @@ def d_sheet(out):
     print(path)
 
 
+# ---- D1 textured (the user, 2026-11-03, D1 chosen: "do some stuff to those textures... more like what we see in the base
+# game"): one painted 1024 skin baked from its 3D surface as the FK-7's are (flykit.bake_kit's way: each face its own cell,
+# occlusion, wear and chipped paint from mech_storm.weathered, stencils from flykit.stencil), in the kit's own gunmetal so
+# the two read as one maker's: engraved seams and recessed screws, a copper driving band, the status ring lit, the
+# collar matte composite, a machined seat ring, the dome smoked glass with the sensor's iris at its pole, the bond pad's
+# copper electrode traces; its markings: the name, the lot, a caution by the dome, an ID plate and barcode on the far side.
+import mech_bake
+import mech_storm
+
+TEX_NAME, TEX_LOT, TEX_WARN = "MS-3  MOBILE SENSOR", "LOT 52-0611   MFD 05/2052", "OPTICAL DOME - DO NOT OBSTRUCT"
+
+
+def layout_one(p, A=1024):
+    """Each face its own cell in one skin's 256-unit UV square (as flykit.layout_kit, one sheet)."""
+    from mech_parts import face_size, shelf_pack
+    density = 60.0
+    while True:
+        rects = [(max(2, int(round(face_size(pts)[0] * density))), max(2, int(round(face_size(pts)[1] * density))))
+                 for pts, _ in p.faces]
+        placed = shelf_pack(rects, 255)
+        if placed:
+            break
+        density *= 0.95
+    p.cells = [(x, y, x + w, y + h) for x, y, w, h in placed]
+    return density * A / 256
+
+
+def paint_sensor(region, pos, n, sx, ty, w, h, mats, geo):
+    """A sensor face's colour at its texels (stood on its base along z; geo: its body length B, radius r, dome centre dc
+    and radius dr)."""
+    B, r, dc, dr = geo["B"], geo["r"], geo["dc"], geo["dr"]
+    flat = np.ones(pos.shape[:-1] + (1,))
+    nb = np.broadcast_to(n, pos.shape)
+    edge = np.minimum(np.minimum(sx * w, (1 - sx) * w), np.minimum(ty * h, (1 - ty) * h))[..., None]
+    z = pos[..., 2]
+    ang = np.arctan2(pos[..., 1], pos[..., 0])
+    metal = mech_bake.triplanar(mats["gunmetal"], pos, nb, 6).mean(-1, keepdims=True) / 128.0
+    if region in ("hull", "panel"):
+        col = (flykit.SLATE if region == "hull" else flykit.SLATE * 1.14) * (0.82 + 0.3 * metal)
+        if region == "hull":
+            for zs in geo["seams"]:                     # engraved seams round it, a light lip below each
+                d = z - zs
+                col = np.where((np.abs(d) < 0.03)[..., None], col * 0.35, col)
+                col = np.where(((d < -0.03) & (d > -0.06))[..., None], col * 1.25, col)
+                for k in range(4):                      # recessed screws by each seam
+                    a = math.pi / 4 + k * math.pi / 2
+                    rr = np.hypot(((ang - a + math.pi) % (2 * math.pi) - math.pi) * r, d - 0.24)
+                    col = np.where((rr < 0.09)[..., None], np.where((rr < 0.055)[..., None], col * 0.8, col * 0.4), col)
+                    col = np.where(((rr < 0.055) & (np.abs(d - 0.24) < 0.012))[..., None], col * 0.4, col)
+            # The markings on its +y side, reading along it from the dome (left to right under the kit, from its side).
+            up = ((ang - math.pi / 2 + math.pi) % (2 * math.pi) - math.pi) * r
+            zc = geo["mid"]
+            col = np.where(flykit.stencil(TEX_NAME, -(z - zc), up - 0.2, 0.36, True)[..., None], np.array([214.0, 214, 206]), col)
+            col = np.where(flykit.stencil(TEX_LOT, -(z - zc), up + 0.26, 0.16)[..., None], np.array([180.0, 182, 176]), col)
+            warn = (np.abs(z - (B - 0.95)) < 0.22) & (np.abs(up) < 1.25)
+            col = np.where(warn[..., None], mech_storm.HAZARD, col)
+            col = np.where((warn & flykit.stencil(TEX_WARN, -(z - (B - 0.95)), up, 0.15, True))[..., None], mech_storm.INK, col)
+            # The far side (-y): a pale ID plate and a barcode.
+            far = ((ang + math.pi / 2 + math.pi) % (2 * math.pi) - math.pi) * r
+            plate = (np.abs(z - zc) < 0.95) & (np.abs(far) < 0.5)
+            col = np.where(plate[..., None], np.array([196.0, 196, 188]), col)
+            bars = plate & (np.abs(far + 0.12) < 0.2)
+            code = mech_storm.hashn(np.stack([z * 7.0, flat[..., 0] * 3, flat[..., 0] * 5], -1), 1.0, 7) > 0.5
+            col = np.where((bars & code)[..., None], mech_storm.INK, col)
+            col = np.where((plate & flykit.stencil("MS3-0611", (z - zc) * -1, far - 0.3, 0.12, True))[..., None], mech_storm.INK, col)
+        else:                                           # the shoulder: knurled
+            knurl = (np.mod(ang * 24 / math.pi + z * 6, 1) < 0.5) ^ (np.mod(ang * 24 / math.pi - z * 6, 1) < 0.5)
+            col = np.where(knurl[..., None], col * 0.82, col)
+        return mech_storm.weathered(col, pos, n, mats, edge, True, 31)
+    if region == "band":                                # the driving band: copper, lathe grooves, worn bright
+        col = flykit.COPPER * (0.78 + 0.16 * np.sin(z * 140))[..., None] * (0.85 + 0.25 * metal)
+        return mech_storm.weathered(col, pos, n, mats, edge, False, 32)
+    if region == "light":                               # the status ring, lit amber
+        return flykit.AMBER * (0.85 + 0.15 * np.cos(ang * 6))[..., None]
+    if region == "duct":                                # the collar: matte composite, moulded seams
+        weave = mech_bake.triplanar(mats["carbon"], pos, nb, 10).mean(-1, keepdims=True) / 128.0
+        col = flykit.COMPOSITE * (0.8 + 0.25 * weave)
+        seam = np.abs(np.mod(ang, math.pi / 2) - math.pi / 4) < 0.02
+        return mech_storm.weathered(np.where(seam[..., None], col * 0.5, col), pos, n, mats, edge, False, 33)
+    if region == "rim":                                 # the seat ring: machined steel, lathe rings
+        rad = np.hypot(pos[..., 0], pos[..., 1])
+        return mech_storm.STEEL * (0.8 + 0.2 * np.sin(rad * 120 + z * 80))[..., None]
+    if region == "glass":                               # smoked glass; the sensor's iris at its pole, seen through it
+        el = np.clip((z - dc) / dr, 0, 1)
+        col = np.array([14.0, 18, 26]) * (0.9 + 0.5 * el)[..., None]
+        pr = np.hypot(pos[..., 0], pos[..., 1]) / dr
+        col = np.where((pr < 0.34)[..., None], np.array([8.0, 10, 16]), col)
+        col = np.where(((pr > 0.34) & (pr < 0.4))[..., None], np.array([70.0, 96, 128]), col)
+        col = np.where(((pr > 0.55) & (pr < 0.57))[..., None], np.array([40.0, 54, 70]), col)
+        return col
+    if region == "pad":                                 # copper, interleaved electrode traces, a border
+        rad = np.hypot(pos[..., 0], pos[..., 1])
+        comb = np.mod(pos[..., 0] * 3.0, 2) < 1
+        tine = np.where(comb, pos[..., 1] > -rad * 0.8, pos[..., 1] < rad * 0.8)
+        col = np.where((np.mod(pos[..., 0] * 3.0, 1) < 0.55)[..., None] & tine[..., None], flykit.COPPER * 1.25, flykit.COPPER * 0.6)
+        return np.where((rad > r * 0.74)[..., None], np.array([40.0, 34, 30]), col)
+    return np.array(C.get(region, (0.3, 0.3, 0.3))) * 255 * flat
+
+
+def bake_sensor(p, geo, out_png, A=1024):
+    """The sensor's skin (flykit.bake_kit's way, one sheet)."""
+    from PIL import Image
+    from mech_parts import face_size
+    mats = {k: mech_bake.material(k, blur=0.8) for k in ("gunmetal", "steel", "carbon")}
+    mats["grunge"] = np.asarray(Image.open(os.path.join(mech_bake.MATS, "grunge.png")).convert("RGB"), float) / 255.0
+    occ = []
+    for pts, _ in p.faces:
+        occ.append([pts[0], pts[1], pts[2]])
+        if len(pts) == 4:
+            occ.append([pts[0], pts[2], pts[3]])
+    occ = np.array(occ)
+    img = np.zeros((A, A, 3))
+    mask = np.zeros((A, A), bool)
+    k = A / 256.0
+    for (pts, region), (u0, v0, u1, v1) in zip(p.faces, p.cells):
+        P = np.array(pts)
+        n = flykit.unit(np.cross(P[1] - P[0], P[-1] - P[0]))
+        w, h = face_size(P)
+        ao = mech_bake.vertex_ao(P, np.repeat(n[None], len(P), 0), occ, rays=16, reach=1.6) if w * h > 0.05 else np.ones(len(P))
+        X0, Y0, X1, Y1 = int(u0 * k), int(v0 * k), int(u1 * k), int(v1 * k)
+        xs, ys = np.meshgrid(np.arange(X0 - 2, X1 + 2), np.arange(Y0 - 2, Y1 + 2))
+        sx = np.clip((xs + 0.5 - X0) / max(1, X1 - X0), 0, 1)
+        ty = np.clip((Y1 - (ys + 0.5)) / max(1, Y1 - Y0), 0, 1)
+        if len(P) == 4:
+            pos = ((1 - sx) * (1 - ty))[..., None] * P[0] + (sx * (1 - ty))[..., None] * P[1] \
+                + (sx * ty)[..., None] * P[2] + ((1 - sx) * ty)[..., None] * P[3]
+            a3 = (1 - sx) * (1 - ty) * ao[0] + sx * (1 - ty) * ao[1] + sx * ty * ao[2] + (1 - sx) * ty * ao[3]
+        else:
+            pos = P[0] + sx[..., None] * (P[1] - P[0]) + ty[..., None] * (P[2] - P[0])
+            a3 = (1 - sx - ty) * ao[0] + sx * ao[1] + ty * ao[2]
+        col = paint_sensor(region, pos, n, sx, ty, w, h, mats, geo)
+        if region not in ("light", "glass"):
+            col = col * (0.55 + 0.45 * np.clip(a3, 0, 1) ** 1.2)[..., None]
+        ok = (ys >= 0) & (ys < A) & (xs >= 0) & (xs < A)
+        img[ys[ok], xs[ok]] = col[ok]
+        mask[ys[ok], xs[ok]] = True
+    img = mech_bake.bleed(img, mask, passes=4)
+    Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGB").save(out_png)
+
+
+def write_textured(p, path, skin, R=np.eye(3), t=(0, 0, 0)):
+    """A laid-out, baked part as OBJ (its cells as UVs, flykit.obj's way), turned by R and moved by t."""
+    mtl = path[:-4] + ".mtl"
+    with open(mtl, "w") as f:
+        f.write("newmtl skin\nKd 1 1 1\nmap_Kd %s\n\n" % os.path.basename(skin))
+        f.write("newmtl glass\nKd 1 1 1\nmap_Kd %s\nKs 0.9 0.9 0.9\nNs 700\n\n" % os.path.basename(skin))
+        f.write("newmtl light\nKd 1 1 1\nmap_Kd %s\nKe 1.0 0.62 0.12\n\n" % os.path.basename(skin))
+    with open(path, "w") as f:
+        f.write("mtllib %s\n" % os.path.basename(mtl))
+        n = 0
+        for (pts, region), (u0, v0, u1, v1) in zip(p.faces, p.cells):
+            uv = [(u0, v1), (u1, v1), (u1, v0), (u0, v0)] if len(pts) == 4 else [(u0, v1), (u1, v1), (u0, v0)]
+            for v in pts:
+                w = R @ np.asarray(v, float) + np.asarray(t, float)
+                f.write("v %.4f %.4f %.4f\n" % (w[0], w[2], -w[1]))
+            for u in uv:
+                f.write("vt %.5f %.5f\n" % (u[0] / 256.0, 1 - u[1] / 256.0))
+            mat = "glass" if region == "glass" else ("light" if region == "light" else "skin")
+            f.write("usemtl %s\nf %s\n" % (mat, " ".join("%d/%d" % (n + k + 1, n + k + 1) for k in range(len(pts)))))
+            n += len(pts)
+    return path
+
+
+def tex_build(out):
+    """D1 textured: its skin, and its renders' spec (hero, its markings close, beside the game's grenades and 20 mm
+    round, under the FK-7 side on and from below in front, stuck to a wall)."""
+    import json
+    os.makedirs(out, exist_ok=True)
+    p, B, dc, dr = d_body("D1")
+    s = R20
+    geo = dict(B=B, r=1.8 * R20, dc=dc, dr=dr, mid=B / 2, seams=(2.35, 5.05))
+    dens = layout_one(p)
+    skin = os.path.join(out, "MobileSensor.png")
+    bake_sensor(p, geo, skin)
+    print("skin %.0f texels a unit -> %s" % (dens, skin))
+    frames, states = [], []
+    frames.append([write_textured(p, os.path.join(out, "hero.obj"), skin, t=(0, 0, -B / 2))])
+    states.append(dict(eye=eye((0, 0, 0.5), 21, 35, 20), look=(0, 0, 0.5), lens=50))
+    frames.append([write_textured(p, os.path.join(out, "marks.obj"), skin, t=(0, 0, -B / 2))])
+    states.append(dict(eye=eye((0, 0, 0), 15, 90, 4), look=(0, 0, 0), lens=50))
+    refs = [game_obj("HDTPItems", "HDTPLAMPickup", 1.0, np.eye(3), (0, 11.0, 4.0), out, "lam"),
+            game_obj("HDTPItems", "HDTPEMPgrenadePickup", 1.0, np.eye(3), (0, 5.4, 2.45), out, "emp"),
+            game_obj("HDTPItems", "HDTPHECannister", 1.0, rot_y(-90), (0, -5.0, 3.05), out, "r20")]
+    frames.append([write_textured(p, os.path.join(out, "lineup.obj"), skin, t=(0, 0.6, 0))] + refs)
+    states.append(dict(eye=eye((0, 2.5, 4.0), 34, 24, 14), look=(0, 2.5, 4.0), lens=50))
+    kit_obj = kitted(moved(p, rot_y(90)), out, "D1t", cx=B / 2)[0]
+    tex_k = write_textured(p, os.path.join(out, "kit_sensor.obj"), skin, R=rot_y(90), t=LAST_SEAT)   # (as kitted seated it)
+    frames.append([kit_obj, tex_k])
+    states.append(dict(eye=eye((1.2, 0, -1.5), 30, 62, 10), look=(1.2, 0, -1.5), lens=50))
+    frames.append([kit_obj, tex_k])
+    states.append(dict(eye=eye((2.5, 0, -3.0), 26, 25, -18), look=(2.5, 0, -3.0), lens=50))
+    wall = Part("wall")
+    wall.box((-0.35, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (0.4, 40, 40), ("wall", "wall"))
+    frames.append([write_obj(wall, os.path.join(out, "wall.obj")), write_textured(p, os.path.join(out, "onwall.obj"), skin, R=rot_y(90))])
+    states.append(dict(eye=eye((4, 0, 0), 22, 40, 14), look=(4, 0, 0), lens=50))
+    json.dump(dict(frames=frames, states=states, studio=flykit.STUDIO), open(os.path.join(out, "spec.json"), "w"))
+    print("spec:", len(frames), "renders ->", os.path.join(out, "spec.json"))
+
+
+def tex_sheet(out):
+    from PIL import Image, ImageDraw, ImageFont
+    rd = os.path.join(out, "render")
+    font = lambda s: ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "segoeuib.ttf"), s)
+    tw, th = 640, 480
+    caps = ("D1, textured", "its markings, close", "beside the game's LAM, EMP grenade and 20 mm round",
+            "under the FK-7, side on", "under the FK-7, from below in front", "stuck to a wall")
+    S = Image.new("RGB", (2 * tw, 80 + 3 * th), (24, 26, 30))
+    d = ImageDraw.Draw(S)
+    d.text((24, 16), "Mobile sensor D1: painted skin", fill=(240, 200, 120), font=font(38))
+    for i, cap in enumerate(caps):
+        im = Image.open(os.path.join(rd, "r%04d.png" % i)).convert("RGB").resize((tw, th), Image.LANCZOS)
+        x, y = (i % 2) * tw, 80 + (i // 2) * th
+        S.paste(im, (x, y))
+        d.text((x + 12, y + th - 30), cap, fill=(255, 255, 255), font=font(18))
+    path = os.path.join(out, "sensor_d1_textured.png")
+    S.save(path)
+    print(path)
+
+
 if __name__ == "__main__":
     out = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else os.path.join("build", "mech", "sensor"))
-    {"build": build, "sheet": sheet, "d": d_iterations, "dsheet": d_sheet}[sys.argv[1]](out)
+    {"build": build, "sheet": sheet, "d": d_iterations, "dsheet": d_sheet, "tex": tex_build, "texsheet": tex_sheet}[sys.argv[1]](out)
