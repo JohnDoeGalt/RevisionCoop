@@ -31,8 +31,8 @@ level's security.
 
 ## Anti-goals
 
-- Reading a kit's payload off the HUD by default (you can see what hangs under it; the Targeting augmentation tells
-  you, see the open questions).
+- Reading a kit's payload off the HUD by default (you can see what hangs under it; the Targeting augmentation at
+  tech 3 names it).
 - Generic art: every piece made from the game's own assets where it has them (the bio cells verbatim, Revision's
   textures), never generic sci-fi; no hazard stripes on the nests.
 
@@ -93,7 +93,8 @@ the kit by its tail, the kit always level, as it flies. The Trellis's kits go ou
 three high into one tube with a cap: its kits go straight up out of the top, one at a time, top first, each arm folding
 flat up its wall once its kit has gone so the next can climb through. That's cheaper a kit, at a price: one at a time;
 loaded in order (mixed payloads go in in launch order); the bottom kit out only after the two above it, which then go
-back in. In the hive format (on a wall, a box on its side, its back wall down) the gimbal holds the kit level and it
+back in: they lift out, hold just above the cap while the bottom one goes, then drop back in, their order kept (a
+slow, exposed moment). In the hive format (on a wall, a box on its side, its back wall down) the gimbal holds the kit level and it
 goes straight out of the front.
 
 **Patrols:** a nest runs rotating patrols that relieve each other: a spotter coming home as its battery runs down,
@@ -108,7 +109,7 @@ the next going up to take its place, so the watch never lapses.
 - A semi-scripted opening there: a UNATCO comm thanking JC for spotting one; a 20 mm kit blowing an NSF trooper up;
   another transmission about the rules of engagement. AI voices (synthetic, never cloned from a real person), with the
   game's comm distortion.
-- At least one 3 x 3 x 3 pack of VC-6 Quivers somewhere (where: open).
+- At least one 3 x 3 x 3 pack of VC-6 Quivers (27 kits): at Area 51, guarding the bunker approach or the hangar.
 
 ## Left to the builder
 
@@ -117,10 +118,8 @@ the next going up to take its place, so the watch never lapses.
 - Kit, nest and Burr numbers past the ones above (health, ranges, costs) *(quality specs still to be set with the user)*.
 - Meshes in the game: the nests' and the Burr's, out of the concept tools (the FK-7's way: `tools/flykit.py game`).
 
-## Open questions (the user's to answer)
+## Answered (2026-11-04)
 
-1. What shows at Targeting tech 3 (the user: "would show up at tech level 3"): the payload a kit carries, or spotters
-   on the HUD?
-2. When a Quiver tube clears its top two kits to reach the bottom one, do those two fly out and re-dock, or hold in the
-   air nearby?
-3. Where the 3 x 3 x 3 Quiver pack goes.
+1. Targeting tech 3 names the payload a kit carries.
+2. A Quiver tube clearing its top two kits to reach the bottom one: they hover just above the cap, then go back in.
+3. The 3 x 3 x 3 Quiver pack goes at Area 51.
