@@ -420,7 +420,11 @@ def d_sheet(out):
 import mech_bake
 import mech_storm
 
-TEX_NAME, TEX_LOT, TEX_WARN = "MS-3  MOBILE SENSOR", "LOT 52-0611   MFD 05/2052", "OPTICAL DOME - DO NOT OBSTRUCT"
+# The fly kit's own maker's (the user, 2026-11-03: "it should be by the same manufacturer as the fly kit"): Corvane Ordnance
+# (docs/FK7_PROMO.md), its -7 family and lot style (tools/flykit.py: "FK-7  FLY KIT", "LOT 52-0318   MFD 03/2052").
+TEX_NAME, TEX_LOT, TEX_WARN = "MS-7  MOBILE SENSOR", "LOT 52-0611   MFD 05/2052", "OPTICAL DOME - DO NOT OBSTRUCT"
+TEX_MAKER = "CORVANE ORDNANCE"
+TEX_PLATE = ("CORVANE", "MS-7 / 0611")
 
 
 def layout_one(p, A=1024):
@@ -464,7 +468,8 @@ def paint_sensor(region, pos, n, sx, ty, w, h, mats, geo):
             up = ((ang - math.pi / 2 + math.pi) % (2 * math.pi) - math.pi) * r
             zc = geo["mid"]
             col = np.where(flykit.stencil(TEX_NAME, -(z - zc), up - 0.2, 0.36, True)[..., None], np.array([214.0, 214, 206]), col)
-            col = np.where(flykit.stencil(TEX_LOT, -(z - zc), up + 0.26, 0.16)[..., None], np.array([180.0, 182, 176]), col)
+            col = np.where(flykit.stencil(TEX_MAKER, -(z - zc), up - 0.97, 0.24, True)[..., None], np.array([196.0, 196, 188]), col)
+            col = np.where(flykit.stencil(TEX_LOT, -(z - zc), up + 0.28, 0.16)[..., None], np.array([180.0, 182, 176]), col)
             warn = (np.abs(z - (B - 0.95)) < 0.22) & (np.abs(up) < 1.25)
             col = np.where(warn[..., None], mech_storm.HAZARD, col)
             col = np.where((warn & flykit.stencil(TEX_WARN, -(z - (B - 0.95)), up, 0.15, True))[..., None], mech_storm.INK, col)
@@ -475,7 +480,8 @@ def paint_sensor(region, pos, n, sx, ty, w, h, mats, geo):
             bars = plate & (np.abs(far + 0.12) < 0.2)
             code = mech_storm.hashn(np.stack([z * 7.0, flat[..., 0] * 3, flat[..., 0] * 5], -1), 1.0, 7) > 0.5
             col = np.where((bars & code)[..., None], mech_storm.INK, col)
-            col = np.where((plate & flykit.stencil("MS3-0611", (z - zc) * -1, far - 0.3, 0.12, True))[..., None], mech_storm.INK, col)
+            col = np.where((plate & flykit.stencil(TEX_PLATE[0], (z - zc) * -1, far - 0.34, 0.15, True))[..., None], mech_storm.INK, col)
+            col = np.where((plate & flykit.stencil(TEX_PLATE[1], (z - zc) * -1, far + 0.33, 0.11))[..., None], mech_storm.INK, col)
         else:                                           # the shoulder: knurled
             knurl = (np.mod(ang * 24 / math.pi + z * 6, 1) < 0.5) ^ (np.mod(ang * 24 / math.pi - z * 6, 1) < 0.5)
             col = np.where(knurl[..., None], col * 0.82, col)
