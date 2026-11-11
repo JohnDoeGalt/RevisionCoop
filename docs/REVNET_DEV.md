@@ -262,6 +262,11 @@ A game that dies without "Critical" lines crashed hard: the Windows Application 
 (Id 1000) has it. Log results as `RevNetTest:` lines; a client-side check logs on the client
 (`Level.NetMode==NM_Client`) and shows in the client's log.
 
+**Captures** (the user, 2026-11-04): raw frame and screenshot dumps (`.bmp`) under `build/video`, `build/shots` and
+`build/tmp` are kept 3 days and 20 GB in all, a take's folder at a time (`tools/capture_clean.py`, run by
+`shot_take.py` and `run_net_suite.ps1`; keep a folder by listing it in `build/capture_keep.txt`). Concept art and
+demo videos are never deleted.
+
 **Demo videos** (`tools/shot_take.py` films a show, `tools/demo_video.py` cuts it): pace the *show* for its
 captions, never freeze the picture under them (the user, 2026-10-30: "make longer videos... the transitions
 between different things timed for the text"). Each step lasts as long as its caption takes to read (1.2 s and

@@ -24,6 +24,10 @@ $suite = [ordered]@{
 	UI = @("-Seconds", 300); Weapons = @("-Seconds", 420)
 	Security = @("-Seconds", 90); CustomDiff = @("-Seconds", 320, "-Url", "?CustomDifficulty=True?CustomAuto=A")
 	FlyKit = @("-Seconds", 120, "-ClientAgent", "Mech")
+	Nests = @("-Seconds", 540)
+	NestDefense = @("-Seconds", 160, "-HostAgent", "Mech")
+	NestLate = @("-Seconds", 230, "-Clients", 2, "-ClientGap", 45)
+	NestTravel = @("-Seconds", 260)
 }
 $pass = 0; $fail = 0
 foreach ($name in $suite.Keys) {
@@ -54,3 +58,4 @@ foreach ($name in $suite.Keys) {
 	Write-Output ("{0,-4} {1,-9} done {2,-5} critical {3} clients joined {4}/{5}  {6} s" -f $(if ($ok) { "PASS" } else { "FAIL" }), $name, $done, $crit, $joined, $clients, $secs)
 }
 Write-Output "suite: $pass passed, $fail failed (logs in $out)"
+& python -I (Join-Path $here "tools\capture_clean.py") | Select-Object -Last 1   # (capture retention)

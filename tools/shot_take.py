@@ -64,6 +64,7 @@ def main():
         stop.set()
         t.join()
     print("frames moved: %d -> %s" % (count[0], dest))
+    subprocess.run([sys.executable, "-I", os.path.join(HERE, "capture_clean.py")])      # (capture retention)
 
 
 if __name__ == "__main__":

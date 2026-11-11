@@ -200,7 +200,7 @@ defense setting a kit off where it is uses the kit's own path (CoopFPVGuided.Exp
 Open for the design: an inventory kit item for players and characters (the AI using it), what a kit costs, a defense's
 energy and charges against a swarm, whether a kit should evade (jink) a defense's first try.
 
-## Kit nests (brainstorm, concept art only, 2026-11-03)
+## Kit nests (brainstorm and concept art 2026-11-03; in the game 2026-11-04)
 
 A nest holds kits for a level's security and launches them when the alarm trips (one or two armed kits at a time, after
 a spotter goes red); kits in a nest taken out drop inert and can be looted. Concept art: `tools/nest_concept.py` (the
@@ -214,10 +214,10 @@ named "letters, number, nickname" (only the fly kit keeps its 7), the uses as th
 | SP-2 Burr | the sensor puck: a fixed fisheye dome, 20 mm sized; thrown, it sticks and watches; on a kit, a flying camera | players and NPCs: players throw it to watch a room or a corner (the feed shared in co-op); NPCs fly it on spotter kits that hunt for you (going red sets off the alarm and the nests) |
 | LP-1 Perch | landing tiles, a kit and a cell each | cheap scattered pickets: low-budget outfits (NSF, gangs, Triads) dot them on rooftops, ledges and alleys, each covering one approach; easy to sneak past or wreck one at a time, but everywhere |
 | MR-3 Trellis | the open rack, kits level on gimbal arms out of the front, a cell bank that grows with it | a mass swarm from secure bases: depots and compounds behind the wire (UNATCO's island, military bases, hangars); the most kits for the money, all launching at once; exposed if reached (wreck it or loot it) |
-| SL-4 Warden | lockers, each hardened on its own, a roll-up shutter, a cell and a console in the sill | indoor corridors (launching straight down them, no room overhead), often at security desks too; physically secure and tamper resistant, the console the way in (hack it, like a turret's security computer, to shut it down or turn its kits) |
+| SL-4 Warden | lockers, each hardened on its own, a roll-up shutter, its cell sealed in behind a hatch and a console in the sill | indoor corridors (launching straight down them, no room overhead), often at security desks too; physically secure and tamper resistant, the console the way in (hack it, like a turret's security computer, to shut it down or turn its kits) |
 | FC-5 Valise | a hard case for two kits in foam, three cells in its lid, fold-out legs | squads and elite troops (MJ12 commandos, men in black) carry one and set it up on contact (kill the carrier, the case is yours); and a player's own portable nest |
-| VC-6 Quiver | the Trellis's box in armour, a cell in each; three stacked make one capped tube; the hive format on a wall | hardened against weather and attack: sites that expect a fight (bases, silos, HQ roofs, Area 51), a stacked tube keeping kits coming for as long as the alarm lasts; and sealed places (ships, subs, the ocean lab) |
-| WC-9 Argus | tiers of six kits round a core of cells, every kit's camera always on | crown-jewel sites only, and rare (MJ12, Area 51, Versalife): atriums, courtyards and helipads it sees all round; no gap between camera and nest, so a priority target you plan for |
+| VC-6 Quiver | the Trellis's box in armour, run off the rack's cell bank in the same armour; three stacked make one capped tube; the hive format on a wall | hardened against weather and attack: sites that expect a fight (bases, silos, HQ roofs, Area 51), a stacked tube keeping kits coming for as long as the alarm lasts; and sealed places (ships, subs, the ocean lab) |
+| WC-9 Argus | tiers of six kits round an armoured core, its cells sealed in; every kit's camera always on | crown-jewel sites only, and rare (MJ12, Area 51, Versalife): atriums, courtyards and helipads it sees all round; no gap between camera and nest, so a priority target you plan for |
 
 The box and its arm (the user: "the back is always the same solid piece where the arm is mounted"; "think of the
 mounting arm... to be like a gimbal... it's gonna be mounted normally... holding it from a different position so that you
@@ -229,4 +229,43 @@ kits loaded in order (mixed payloads go in in the order they will launch); and t
 must go first, then go back in. On a wall in the hive format (a box on its side, its back wall down), the gimbal holds the
 kit level, nose out, and it goes straight out of the front. (A launch pose, the kit nose up with its fans swung to thrust
 along it, was drawn and dropped: "don't have the drone facing directly straight up in any of the versions".)
-Power: a cell to a kit for pads and lockers ("1-to-1"); three cells to two kits (the case) is fine.
+Power: a cell to a kit for pads and lockers ("1-to-1"); three cells to two kits (the case) is fine. The cheap nests show
+their cells, the hardened ones hide them (the user, 2026-11-04): the Perch's and the Trellis bank's are out in the open (a
+weak spot to shoot); the Quiver runs off the rack's own cell bank ("the power solution should match what we use for the
+racking systems"), in the tubes' armour, its cells shut in behind an armoured door; the Warden's cell is sealed behind a
+hatch in its sill; the Argus's behind armour round its core; the Valise's stay in its lid.
+
+### In the game (2026-11-04, plan docs/superpowers/plans/2026-11-04-kit-nests.md)
+
+All six nests and the Burr are real game models in RevNetMech (`tools/nest_game.py`, out of `tools/nest_riffs.py`'s
+parts), their skins Revision's own textures by reference (loaded at run time, never shipped), the BioCell the game's own.
+Moving parts are their own actors on every machine: the Quiver's cap and gimbal arms, the Warden's shutter, the Valise's
+lid with its cells.
+
+- **Docked kits** are real kits (CoopFPVGuided) held in their places, on every machine, always relevant as their nests
+  are: a client joining late has the same docked kits, cells, open lids and folded arms as the first (NestLate).
+- **The alarm** (a spotter gone red, CoopNest.Raise): every nest within 2048 launches one kit at the intruder, two on
+  Hard and Realistic; friendly nests never launch at a player. No room in front or above: it keeps that kit and logs
+  "blocked". A nest wrecked: its kits, docked or flying, drop inert. A target gone: its kits fly home and dock.
+- **Spotters and patrols:** a nest's first `Spotters` places hold unarmed spotter kits, searchlight on, that fly a
+  round over it and go red 1.5 s after seeing a player; `Patrols` keeps that many up, one relieving the next at half its
+  battery. Radar Transparency hides a player from them.
+- **Defenses:** Aggressive Defense costs KitEnergy (10) for each armed kit it sets off; the Mech's Active Protection
+  spends a charge on each kit coming at the Mech or a player near it.
+- **VC-6 Quiver:** three boxes stacked in one tube, launching top first; to reach a lower kit the ones above lift out and
+  hold beside the cap, then go back in, lowest first. A kit coming home enters over the top; any docked above its box
+  lift out of its way and go back in after it (the user's "back in, in order", applied to homecomings).
+- **SL-4 Warden:** a multitool on its console bypasses it (it launches nothing); with Electronics at Advanced it is
+  turned instead, its kit watching for the turner's enemies.
+- **WC-9 Argus:** every kit's camera always on: a kit goes the moment one sees a player.
+- **FC-5 Valise:** frobbed, it packs into an item with its kits (CoopValiseItem); used, it is set down open in front of
+  its user, its kits going for the user's enemies.
+- **SP-2 Burr** (CoopWeaponBurr, its own ammo): thrown as the game's grenades are, it sticks where it lands (or is
+  placed on a wall), and every half second marks the enemies it sees for every player, drawn over each one's view
+  (CoopBurrMarks, the gun-cam's boxes). It raises no alarm.
+- **Revisits:** RevNet's map memory keeps each nest (a K line): a placed one is found again by name, a spawned one
+  (a Valise set down) spawned again; each with the kits it had, no refill, no duplicates, and the player it was for.
+
+Placeholders until the kits-as-gear plan: the Valise and Burr items use the multitool's and the EMP grenade's looks.
+Not yet: nests placed in the levels (Liberty Island's UNATCO spotters, NSF gas kits, Area 51's 3 x 3 x 3 Quiver pack),
+inert kits looted, kits flown by NPCs from their hands.

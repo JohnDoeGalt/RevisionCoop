@@ -87,6 +87,9 @@ function Timer()
 // first client joined (Remote, the host's player is Host; Done() ends it).
 function Run( int t );
 
+// A client's answer to a ClientTest (ServerTestReply): the scenario's to weigh.
+function Reply( CoopPlayer From, string Text );
+
 // Just before Revision's map pass (CoopGameInfo.ApplyGamemode): what it will change.
 function BeforeMapPass();
 

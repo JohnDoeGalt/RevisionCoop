@@ -114,13 +114,26 @@ function Scan()
 // team's own, not a friendly character's, in sight (as AugDefense judges them).
 function bool Incoming( DeusExProjectile Proj, Pawn P )
 {
+	local Pawn Ally;
+
 	if ( Proj.bDeleteMe || !Proj.bExplodes || Proj.bIgnoresNanoDefense || Proj.bStuck || VSize(Proj.Velocity)<100 )
 		return false;
 	if ( PlayerPawn(Proj.Owner)!=None || PlayerPawn(Proj.Instigator)!=None )
 		return false;
 	if ( ScriptedPawn(Proj.Owner)!=None && ScriptedPawn(Proj.Owner).GetPawnAllianceType( P )!=ALLIANCE_Hostile )
 		return false;
-	return Normal(Proj.Velocity) Dot Normal(P.Location - Proj.Location) > 0.6 && FastTrace( Proj.Location, P.Location );
+	if ( Toward( Proj, P ) )
+		return true;
+	for ( Ally=Level.PawnList; Ally!=None; Ally=Ally.NextPawn )     // (an ally within a few metres is covered too)
+		if ( Ally!=P && PlayerPawn(Ally)!=None && Ally.Health>0 && VSize(Ally.Location - P.Location)<=160 && Toward( Proj, Ally ) )
+			return true;
+	return false;
+}
+
+// Proj heading at T, in sight.
+function bool Toward( DeusExProjectile Proj, Pawn T )
+{
+	return Normal(Proj.Velocity) Dot Normal(T.Location - Proj.Location) > 0.6 && FastTrace( Proj.Location, T.Location );
 }
 
 // A charge at a projectile: it goes off where it is when the Mech is out of

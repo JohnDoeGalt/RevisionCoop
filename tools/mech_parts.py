@@ -408,6 +408,9 @@ def main():
     # improvised quad was turned down by the user 2026-10-30, "way too modern... this is a retro future cyberpunk setting".)
     import flykit
     blade_meshes += flykit.game(out)
+    # The Corvane kit nests (tools/nest_game.py; docs/superpowers/specs/2026-11-03-kit-nests-design.md).
+    import nest_game
+    blade_meshes += nest_game.game(out)
     write_uc(os.path.join(out, "Classes", "MechArt.uc"), m, list(meshes), seqs, blade_tex, blade_meshes)
     os.makedirs(os.path.join(out, "Textures"), exist_ok=True)
     bake_atlas([p for p in parts if p.mesh == "BarrettParts"] + [p for p in parts if p.mesh != "BarrettParts"],

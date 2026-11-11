@@ -17,6 +17,7 @@
 //   D|<name>|<locked 0/1>|<key frame>|<destroyed 0/1>
 //   B|<class>|<location>|<rotation>|<items>|<property=value;...>   a body
 //   I|<class>|<location>|<rotation>|<count>    a thing lying around
+//   K|<placed name or ->|<class>|<location>|<rotation>|<CoopNest.Remembered>   a kit nest: its kits, the player it's for
 //=============================================================================
 class CoopMapMemory extends CoopManager;
 
@@ -117,6 +118,7 @@ function Capture()
 	local Inventory Item;
 	local DeusExMover D;
 	local Actor A;
+	local CoopNest Nest;
 	local string Gone;
 	local int i;
 
@@ -151,6 +153,10 @@ function Capture()
 	foreach AllActors( class'Inventory', Item )
 		if ( Item.Owner==None && !Item.bDeleteMe && !Item.bHidden && !IsPlacedItem( Item ) )
 			S.Add( "I|" $ class'CoopSave'.static.ClassStr( Item.Class ) $ "|" $ Item.Location $ "|" $ Item.Rotation $ "|" $ Count( Item ) );
+	foreach AllActors( class'CoopNest', Nest )
+		if ( !Nest.bDeleteMe )
+			S.Add( "K|" $ PlacedNameOf( Nest ) $ "|" $ class'CoopSave'.static.ClassStr( Nest.Class ) $ "|" $ Nest.Location $ "|"
+				$ Nest.Rotation $ "|" $ Nest.Remembered() );
 	for ( i=0; i<NumDoors; i++ )
 	{
 		D = Door[i];
@@ -283,8 +289,40 @@ function Apply( CoopMapState S )
 			SpawnBody( L );
 		else if ( Kind=="I" )
 			SpawnThing( L );
+		else if ( Kind=="K" )
+			RecallNest( L );
 	}
 	Log( "RevNet: map memory put back on" @ Level.Outer.Name $ ":" @ S.NumLines @ "lines", 'RevNet' );
+}
+
+// A's name in the fresh map, or "-" (spawned since).
+function string PlacedNameOf( Actor A )
+{
+	local int i;
+
+	for ( i=0; i<NumPlaced; i++ )
+		if ( Placed[i]==A )
+			return string(PlacedName[i]);
+	return "-";
+}
+
+// A kit nest as it was left (a K line): a placed one found by its name, else spawned again; its kits, no more.
+function RecallNest( string L )
+{
+	local CoopNest Nest;
+	local class<CoopNest> C;
+
+	Nest = CoopNest(FindPlaced( class'CoopSave'.static.Part( L, 1, "|" ) ));
+	if ( Nest==None )
+	{
+		C = class<CoopNest>( class'CoopSave'.static.LoadClassStr( class'CoopSave'.static.Part( L, 2, "|" ) ) );
+		if ( C==None )
+			return;
+		Nest = Spawn( C,,, vector(class'CoopSave'.static.Part( L, 3, "|" )), rotator(class'CoopSave'.static.Part( L, 4, "|" )) );
+		if ( Nest==None )
+			return;
+	}
+	Nest.Recall( class'CoopSave'.static.Rest( L, 5, "|" ) );
 }
 
 function Actor FindPlaced( string N )

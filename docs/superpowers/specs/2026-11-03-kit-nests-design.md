@@ -77,16 +77,18 @@ raise an alarm), the feed shared in co-op. NPCs fly it on spotter kits. Not much
 
 All Corvane, named "letters, number, nickname" (only the fly kit keeps its 7). Power is always the game's own bio cells
 (the BioCell mesh and skin, unchanged, gauge out): more kits, more cells; a cell to a kit for the pads and the lockers,
-three cells to two kits in the case.
+three cells to two kits in the case. The cheap nests show their cells, the hardened ones hide them (the user, 2026-11-04):
+the Perch's and the Trellis bank's in the open; the Quiver on the rack's own cell bank in the tubes' armour; the Warden's
+sealed behind a hatch in its sill; the Argus's behind armour round its core; the Valise's in its lid.
 
 | Nest | What it is | Where it's best |
 |---|---|---|
 | LP-1 Perch | landing tiles, a kit and a cell each | the cheapest: low-budget outfits (NSF, gangs, Triads) dot them on rooftops, ledges and alleys, each covering one approach |
 | MR-3 Trellis | the open rack: kits level on gimbal arms, out of the front; a cell bank that grows with it | cheap and modular: a mass swarm from secure bases (UNATCO's island, military bases, hangars); exposed if reached |
-| SL-4 Warden | lockers hardened one by one, a roll-up shutter, a cell and a console in the sill | indoor corridors (straight down them) and security desks; physically secure and tamper resistant, the console the way in (hack it, like a turret's security computer) |
+| SL-4 Warden | lockers hardened one by one, a roll-up shutter, its cell sealed in and a console in the sill | indoor corridors (straight down them) and security desks; physically secure and tamper resistant, the console the way in (hack it, like a turret's security computer) |
 | FC-5 Valise | a hard case for two kits, three cells in its lid, fold-out legs | man-portable: squads and elite troops carry one and set it up on contact (lootable); a player's own portable nest |
-| VC-6 Quiver | the Trellis's box armoured; three stacked make one capped tube; the hive format on walls | hardened against weather and attack: bases that expect a fight, ships, subs; on the riot van |
-| WC-9 Argus | tiers of six kits round a core of cells, every kit's camera always on | the dearest, crown-jewel sites only (MJ12, Area 51, Versalife): it is its own camera, launching the second it sees you |
+| VC-6 Quiver | the Trellis's box armoured, on the rack's cell bank armoured too; three stacked make one capped tube; the hive format on walls | hardened against weather and attack: bases that expect a fight, ships, subs; on the riot van |
+| WC-9 Argus | tiers of six kits round an armoured core (its cells sealed in), every kit's camera always on | the dearest, crown-jewel sites only (MJ12, Area 51, Versalife): it is its own camera, launching the second it sees you |
 
 **The box and its arm** (the Trellis and the Quiver are one framework): a solid back wall carries a gimbal arm holding
 the kit by its tail, the kit always level, as it flies. The Trellis's kits go out of the front. Armoured boxes stack

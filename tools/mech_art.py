@@ -88,8 +88,13 @@ BOX = struct.pack("<6fB", -16000, -16000, -1000, 16000, 16000, 27000, 1)
 SPHERE = struct.pack("<4f", 0, 0, 13000, 22000)
 
 
+# The Corvane nests' pieces (tools/nest_game.py's PIECES: the game's textures only by reference).
+NEST_MESHES = ("CorvanePerch", "CorvaneTrellisBox", "CorvaneTrellisCells", "CorvaneFeet", "CorvaneWardenBody",
+               "CorvaneWardenShutter", "CorvaneQuiverBox", "CorvaneQuiverBank", "CorvaneQuiverArm", "CorvaneQuiverCap", "CorvaneQuiverFloor",
+               "CorvaneValiseBase", "CorvaneValiseLid", "CorvaneValiseLegs", "CorvaneArgusTier", "CorvaneArgusTripod",
+               "CorvaneBurr")
 # Meshes made here with no game data in them (tools/mech_storm.py, tools/blade_arms.py, tools/flykit.py): kept whole.
-WHOLE = ("StormView", "MechBladeView", "JensenBladeView", "MechBladeViewA", "JensenBladeViewA", "FPVDrone", "FlyKit", "FlyKitBody", "FlyKitDuctL", "FlyKitDuctR")
+WHOLE = ("StormView", "MechBladeView", "JensenBladeView", "MechBladeViewA", "JensenBladeViewA", "FPVDrone", "FlyKit", "FlyKitBody", "FlyKitDuctL", "FlyKitDuctR") + NEST_MESHES
 FROM_BODY = ()   # meshes of the body's own faces, their triangles emptied too (none now: the views carry their own arms)
 
 

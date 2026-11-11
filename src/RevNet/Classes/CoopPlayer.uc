@@ -11,6 +11,7 @@ class CoopPlayer extends CoopPlayerUI;
 var float TestWalkUntil;
 var string MemLevels;      // (MemLine)
 var bool bTestStall;       // (ClientTest "stall") this game sends the host no more moves
+var CoopBurrMarks BurrMarks; // the Burrs' marks over this player's view (CoopBurr.Tick), on its own machine
 var CoopTestSeen Watch;    // (ClientTest "watch", "seen": CoopTestFlyKit) what this machine saw
 
 replication
@@ -41,8 +42,14 @@ event PlayerInput( float DeltaTime )
 simulated function ClientTest( string Command )
 {
 	local Actor A;
-	local int n, PRIs, GRIs, Actors;
+	local int n, PRIs, GRIs, Actors, Docked, Cells;
 	local MenuUIMessageBoxWindow Box;
+	local CoopNest Nest;
+	local CoopFPVGuided Kit;
+	local CoopNestPart Part;
+	local CoopNestQuiver Quiver;
+	local CoopBurr Burr;
+	local int i;
 
 	if ( Command=="ping" )
 	{
@@ -62,6 +69,59 @@ simulated function ClientTest( string Command )
 	{
 		ConsoleCommand( "set Rocket mpBlastRadius 124" );
 		ServerTestReply( "client set -> get=" $ ConsoleCommand( "get Rocket mpBlastRadius" ) @ "default=" $ class'Rocket'.default.mpBlastRadius );
+	}
+	else if ( Command=="nests" )                // (CoopTestNests) the kit nests this machine has, their docked kits and cells
+	{
+		foreach AllActors( class'CoopNest', Nest )
+			n++;
+		foreach AllActors( class'CoopFPVGuided', Kit )
+			if ( Kit.bDocked )
+				Docked++;
+		foreach AllActors( class'CoopNestPart', Part )
+			if ( Part.bCell )
+				Cells++;
+		ServerTestReply( "client nests:" @ n @ "nests," @ Docked @ "docked kits," @ Cells @ "cells" );
+	}
+	else if ( Command=="quiver" )               // (CoopTestNests) the first Quiver's cap and arms as this machine has them
+	{
+		foreach AllActors( class'CoopNestQuiver', Quiver )
+			break;
+		if ( Quiver!=None )
+		{
+			for ( n=0; n<8; n++ )
+				if ( (Quiver.Folded & (1 << n))!=0 )
+					Docked++;
+			if ( Quiver.bOpen )
+				ServerTestReply( "client quiver: cap open," @ Docked @ "arms folded" );
+			else
+				ServerTestReply( "client quiver: cap closed," @ Docked @ "arms folded" );
+		}
+	}
+	else if ( Command=="lids" )                 // (CoopTestNestLate) the nests open on this machine, the arms folded
+	{
+		foreach AllActors( class'CoopNest', Nest )
+		{
+			if ( Nest.bOpen )
+				n++;
+			for ( i=0; i<8; i++ )
+				if ( (Nest.Folded & (1 << i))!=0 )
+					Docked++;
+		}
+		ServerTestReply( "client lids:" @ n @ "open," @ Docked @ "arms folded" );
+	}
+	else if ( Command=="burr" )                 // (CoopTestNests) the Burrs stuck on this machine, what they mark, the marks drawn
+	{
+		foreach AllActors( class'CoopBurr', Burr )
+			if ( Burr.bSet )
+			{
+				n++;
+				for ( i=0; i<ArrayCount(Burr.Marked); i++ )
+					if ( Burr.Marked[i]!=None )
+						Docked++;
+			}
+		if ( BurrMarks!=None )
+			Cells = BurrMarks.Drawn;
+		ServerTestReply( "client burr:" @ n @ "stuck," @ Docked @ "marked |" @ Cells @ "drawn" );
 	}
 	else if ( Command=="watch" )
 	{
@@ -291,6 +351,7 @@ function ServerTestReply( string Reply )
 	if ( CoopGameInfo(Level.Game)==None || CoopGameInfo(Level.Game).Test==None )
 		return;                                 // (only while a test runs: not a way to fill the host's log)
 	Log( "RevNetTest: reply from" @ PlayerReplicationInfo.PlayerName $ ":" @ Reply, 'RevNet' );
+	CoopGameInfo(Level.Game).Test.Reply( Self, Reply );
 }
 
 // What the client sees of an actor (names differ on clients: by reference), compared

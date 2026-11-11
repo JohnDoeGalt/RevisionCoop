@@ -55,7 +55,7 @@ def real_booms(ev):
     return real
 
 
-def main():
+def main(ending="the Mech's FK-7 Fly Kits  ·  in-game footage", grade="eq=gamma=1.6:saturation=1.12:contrast=1.04"):
     log, frames, sdir, out = sys.argv[1:5]
     music = sys.argv[5] if len(sys.argv) > 5 else REV_MUSIC
     out = os.path.abspath(out)
@@ -92,7 +92,7 @@ def main():
             caps.append(dict(t0=a + 0.25, t1=b, text=line, size=23, x=56, y="h-112"))
     end = starts[-1]
     caps.append(dict(t0=end + 0.2, t1=total - 0.2, text="RevNet  ·  Deus Ex: Revision co-op", size=46, x="(w-tw)/2", y="h/2-60", box=False))
-    caps.append(dict(t0=end + 0.4, t1=total - 0.2, text="the Mech's FK-7 Fly Kits  ·  in-game footage",
+    caps.append(dict(t0=end + 0.4, t1=total - 0.2, text=ending,
                      size=23, x="(w-tw)/2", y="h/2+10", box=False))
 
     # The soundtrack.
@@ -165,7 +165,7 @@ def main():
     w.close()
 
     edit = dict(frames=[os.path.join(os.path.abspath(frames), f) for f in files], times=times, keep=keep, hold=hold,
-                fade=fade, track=track, captions=caps, grade="eq=gamma=1.6:saturation=1.12:contrast=1.04", dim=[float(end), 0.22])
+                fade=fade, track=track, captions=caps, grade=grade, dim=[float(end), 0.22])
     ej = out[:-4] + "_edit.json"
     json.dump(edit, open(ej, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
     json.dump(dict(placed=placed, segments={w[4:]: round(float(e(t) or 0), 3) for t, w in ev if w.startswith("seg ")},

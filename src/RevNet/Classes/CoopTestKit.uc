@@ -128,3 +128,87 @@ function ClientDo( string Command, optional Actor A )
 	else
 		Probe.ClientDo( Command, A );
 }
+
+function Radar( bool bOn, optional DeusExPlayer Who )
+{
+	local CoopGameInfo G;
+	local Augmentation Aug;
+
+	if ( Who==None )
+		Who = Remote;
+	Aug = Who.AugmentationSystem.FindAugmentation( class'AugRadarTrans' );
+	if ( Aug==None || !Aug.bHasIt )
+	{
+		G = CoopGameInfo(Level.Game);
+		G.BeginSinglePlayerRules();
+		Who.AugmentationSystem.GivePlayerAugmentation( class'AugRadarTrans' );
+		G.EndSinglePlayerRules();
+		Aug = Who.AugmentationSystem.FindAugmentation( class'AugRadarTrans' );
+	}
+	if ( Aug==None )
+		return;
+	Who.Energy = Who.EnergyMax;
+	if ( bOn && !Aug.bIsActive )
+		Aug.Activate();
+	else if ( !bOn && Aug.bIsActive )
+		Aug.Deactivate();
+	Log( "RevNetTest: nests:" @ Who.PlayerReplicationInfo.PlayerName @ "radar transparency on" @ Aug.bIsActive, 'RevNet' );
+}
+
+// A wall Lo to Hi out from the client's eyes, the farthest of those round it with a spot out from it and to one side
+// (out of the Burr's way there), on a floor (not off a ledge), that a Burr on the wall and the client both see: the
+// wall's point (At), which way it faces (N), the spot (Stand).
+function bool FindWall( float Lo, float Hi, out vector At, out vector N, out vector Stand )
+{
+	local vector Eye, HitLocation, HitNormal, Floor, FloorNormal, Try, Side;
+	local rotator R;
+	local float Best, D;
+	local int i, j;
+
+	Eye = Remote.Location + vect(0,0,1) * Remote.BaseEyeHeight;
+	for ( i=0; i<16; i++ )
+	{
+		R.Yaw = i * 4096;
+		if ( Trace( HitLocation, HitNormal, Eye + vector(R) * Hi, Eye, false )!=Level )
+			continue;
+		D = VSize(HitLocation - Eye);
+		if ( Abs(HitNormal.Z)>=0.3 || D<Lo || D<=Best )
+			continue;
+		Side = Normal(HitNormal Cross vect(0,0,1));
+		for ( j=0; j<6; j++ )
+		{
+			Try = HitLocation + HitNormal * (160 + 50 * (j / 2)) + Side * 60 * (1 - 2 * (j % 2));
+			if ( Trace( Floor, FloorNormal, Try - vect(0,0,160), Try, false )==None )
+				continue;
+			Try = Floor + vect(0,0,50);
+			if ( !FastTrace( Try, HitLocation + HitNormal * 8 ) || !FastTrace( Try, Eye ) )
+				continue;
+			Best = D;
+			At = HitLocation;
+			N = HitNormal;
+			Stand = Try;
+			break;
+		}
+	}
+	return Best>0;
+}
+
+// The client's Burr off at At as its grenade throw would send it (ProjectileFire: out of its eyes, its own), on the
+// low arc that lands it there.
+function CoopBurr Throw( vector At )
+{
+	local vector Eye, Flat;
+	local rotator R;
+	local float D, G, V, s;
+
+	Eye = Remote.Location + vect(0,0,1) * Remote.BaseEyeHeight;
+	Flat = At - Eye;
+	Flat.Z = 0;
+	D = VSize(Flat) - 24;
+	G = -Remote.Region.Zone.ZoneGravity.Z;
+	V = class'CoopBurr'.default.Speed;
+	s = FMin( 0.99, G * D / (V * V) );
+	R = rotator(Flat);
+	R.Pitch = int(0.5 * Atan( s / Sqrt( 1 - s * s ) ) * 32768 / Pi);
+	return Spawn( class'CoopBurr', Remote,, Eye + Normal(Flat) * 24, R );
+}
