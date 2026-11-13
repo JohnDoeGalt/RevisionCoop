@@ -350,7 +350,13 @@ function LoadWorld( DeusExPlayer Host )
 			continue;
 		Img = Host.Spawn( class<DataVaultImage>(C), Host );
 		if ( Img!=None )
+		{
+			// Carried, as a datacube gives it: not given, it lay at the host's feet in its
+			// pickup state, a "cube" named Image01_LibertyIsland (playtest 2026-11-13).
+			Img.GiveTo( Host );
+			Img.SetBase( Host );
 			Host.AddImage( Img );
+		}
 	}
 	Log( "RevNet: loaded saved game on" @ SavedMap @ "-" @ NumFlags @ "flags," @ NumGoals @ "goals," @ NumNotes @ "notes," @ NumKeys @ "keys", 'RevNet' );
 }
@@ -399,6 +405,26 @@ function DropPlayer( int P )
 	for ( i=P; i<NumPlayers-1; i++ )
 		PlayerName[i] = PlayerName[i+1];
 	PlayerName[--NumPlayers] = "";
+}
+
+// Player From's record in Other, as this one's (one of the same name replaced).
+function CopyPlayer( CoopSave Other, int From )
+{
+	local int i, Idx;
+
+	for ( i=0; i<NumPlayers; i++ )
+		if ( PlayerName[i]~=Other.PlayerName[From] )
+		{
+			DropPlayer( i );
+			break;
+		}
+	if ( NumPlayers>=MaxPlayers )
+		return;
+	Idx = NumPlayers++;
+	PlayerName[Idx] = Other.PlayerName[From];
+	for ( i=0; i<Other.NumLines; i++ )
+		if ( int( Part( Other.Line[i], 0, "," ) )==From )
+			AddLine( Idx, Mid( Other.Line[i], InStr( Other.Line[i], "," ) + 1 ) );
 }
 
 // No player records (a new game: a player joining it starts fresh, not with what

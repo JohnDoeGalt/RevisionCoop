@@ -7,11 +7,14 @@
 //=============================================================================
 class CoopTestSave extends CoopTest;
 
+var config vector BoatAt; // the police boat's place at the save
 var config int Stage; // 0 fresh, 1 saved, 2 loading, 3 done (in the test ini: a new map has a new test actor)
 
 function Run( int t )
 {
 	local Inventory Kit;
+	local DataVaultImage Img;
+	local int n;
 
 	if ( Stage==0 && t==5 )
 	{
@@ -25,7 +28,13 @@ function Run( int t )
 		Remote.HandleItemPickup( Kit );
 		GiveAug( Remote, "DeusEx.AugSpeed", 2 );
 		GiveAug( Host, "DeusEx.AugCombat", 1 );
+		// An image the host has (Paul's map: a load put it back lying in the world, a "cube").
+		Img = Spawn( class'Image01_LibertyIsland', Host );
+		Img.GiveTo( Host );
+		Img.SetBase( Host );
+		Host.AddImage( Img );
 		Log( "RevNetTest: augs saved: client" @ Augs( Remote ) @ "| host" @ Augs( Host ), 'RevNet' );
+		Boat( "at the save" );
 		SetStage( 1 );
 		CoopGameInfo(Level.Game).SaveCoopGame( true );
 		Log( "RevNetTest: saved: flag=true client credits=777 client medkit=" $ (Remote.FindInventoryType(class'MedKit')!=None), 'RevNet' );
@@ -39,6 +48,11 @@ function Run( int t )
 		if ( Kit!=None )
 			Kit.Destroy();
 		GiveAug( Remote, "DeusEx.AugSpeed", 0 );
+		// Something the client picks up after the save: a load takes it away.
+		Kit = Spawn( class'WeaponCrowbar',,, Remote.Location );
+		Remote.FrobTarget = Kit;
+		Remote.HandleItemPickup( Kit );
+		Log( "RevNetTest: client picked up after the save: crowbar=" $ (Remote.FindInventoryType(class'WeaponCrowbar')!=None), 'RevNet' );
 		if ( FindNPC('UNATCOTroop1')!=None )
 			FindNPC('UNATCOTroop1').Destroy();
 		SetStage( 2 );
@@ -50,9 +64,48 @@ function Run( int t )
 		SetStage( 3 );
 		Log( "RevNetTest: after load on" @ Level.Outer.Name $ ": flag=" $ Host.flagBase.GetBool('RevNetSaveTest') @ "client credits=" $ Remote.Credits @ "client medkit=" $ (Remote.FindInventoryType(class'MedKit')!=None) @ "client items" @ Things( Remote ), 'RevNet' );
 		Log( "RevNetTest: after load: removed before the save still gone=" $ (FindNPC('Terrorist5')==None) @ "removed after the save back=" $ (FindNPC('UNATCOTroop1')!=None), 'RevNet' );
+		Boat( "after the load" );
 		Log( "RevNetTest: after load: augs: client" @ Augs( Remote ) @ "| host" @ Augs( Host ), 'RevNet' );
+		n = 0;
+		foreach AllActors( class'DataVaultImage', Img )
+			if ( Img.Owner==None || Img.IsInState('Pickup') )
+			{
+				n++;
+				Log( "RevNetTest: after load an image lies in the world:" @ Img @ Img.GetStateName() @ "owner=" $ Img.Owner @ "at" @ Img.Location, 'RevNet' );
+			}
+		Check( "no image lying in the world after the load (" $ n $ ")", n==0 );
+		n = 0;
+		for ( Img=Host.FirstImage; Img!=None; Img=Img.NextImage )
+			if ( Img.IsA('Image01_LibertyIsland') )
+				n++;
+		Check( "host has the saved image once (" $ n $ ")", n==1 );
+		Check( "client lost what it picked up after the save", Remote.FindInventoryType(class'WeaponCrowbar')==None );
 		Done();
 	}
+}
+
+// The police boat by the dock (playtest: "the boat near the start floats in the air when reloading").
+function Boat( string When )
+{
+	local Actor A;
+
+	foreach AllActors( class'Actor', A )
+		if ( A.IsA('NYPoliceBoat') )
+		{
+			if ( When=="at the save" )
+				BoatAt = A.Location;
+			else
+				Check( "the boat is back where it was saved (" $ int(VSize(A.Location - BoatAt)) @ "units off)", VSize(A.Location - BoatAt)<8 );
+			Log( "RevNetTest: boat" @ When $ ":" @ A.Name @ "at" @ A.Location @ "physics" @ GetEnum( enum'EPhysics', A.Physics ) @ "target" @ A.Target @ "state" @ A.GetStateName(), 'RevNet' );
+		}
+}
+
+function Check( string What, bool bOk )
+{
+	if ( bOk )
+		Log( "RevNetTest: CHECK" @ What @ "ok", 'RevNet' );
+	else
+		Log( "RevNetTest: CHECK" @ What @ "BAD", 'RevNet' );
 }
 
 function ScriptedPawn FindNPC( name N )

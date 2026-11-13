@@ -58,6 +58,9 @@ In the game
   - Conversations: the player who starts one picks the answers; players nearby hear it.
     Infolinks, notes, goals, nanokeys, images and skill points are shared with the team;
     items, credits, augmentations and skills are each player's own.
+  - Weapon mods and augmentation upgrade canisters are found for the whole team: when
+    one player picks one up, everyone gets one (no room: it's at their feet).
+  - Everyone starts a new game with JC's pistol, prod and medkit.
   - Carry bodies (search a body, then use it again to pick it up) and boxes as usual;
     everyone sees them carried and where they're put down.
   - Computers, keypads, ATMs, medical bots and the rest work for every player.

@@ -269,7 +269,7 @@ function Apply( CoopMapState S )
 			A = FindPlaced( class'CoopSave'.static.Part( L, 1, "|" ) );
 			if ( A!=None )
 			{
-				A.SetLocation( vector(class'CoopSave'.static.Part( L, 2, "|" )) );
+				PutBack( A, vector(class'CoopSave'.static.Part( L, 2, "|" )) );
 				A.SetRotation( rotator(class'CoopSave'.static.Part( L, 3, "|" )) );
 			}
 		}
@@ -323,6 +323,30 @@ function RecallNest( string L )
 			return;
 	}
 	Nest.Recall( class'CoopSave'.static.Rest( L, 5, "|" ) );
+}
+
+// A moved thing back where it was. Where it collides there, SetLocation finds it room
+// instead: Liberty Island's police boat sits into the dock's water, and noted for its
+// rocking (its rotation), it went 150 units up into the air (playtest 2026-11-13). Where
+// it is already, it stays; else, if it lands elsewhere, with its collision off.
+function PutBack( Actor A, vector At )
+{
+	local bool bActors, bBlockActors, bBlockPlayers, bWorld;
+
+	if ( VSize(A.Location - At)<1 )
+		return;
+	if ( A.SetLocation( At ) && VSize(A.Location - At)<1 )
+		return;
+	bActors = A.bCollideActors;
+	bBlockActors = A.bBlockActors;
+	bBlockPlayers = A.bBlockPlayers;
+	bWorld = A.bCollideWorld;
+	A.SetCollision( false, false, false );
+	A.bCollideWorld = false;
+	if ( !A.SetLocation( At ) )
+		Log( "RevNet: couldn't put" @ A @ "back at" @ At, 'RevNet' );
+	A.bCollideWorld = bWorld;
+	A.SetCollision( bActors, bBlockActors, bBlockPlayers );
 }
 
 function Actor FindPlaced( string N )

@@ -65,6 +65,11 @@ var int WaitPlayers;            // the menu map waits for them
 var float LastLogin;            // when a player last joined
 var float AutoSaveAt;           // the checkpoint save of this map, once its story has started
 var bool bLeaving;              // the team is leaving the map (ProcessServerTravel)
+var bool bNewGame;              // (default) the menu map opened a new co-op game: its host's starting kit
+var bool bSharing;              // ShareFind giving the others theirs (their pickups aren't finds)
+var localized string SharedFindText, SharedYoursText, SharedFloorText;
+var bool bEntryWait;            // (Entry) waiting to see if a client that lost its host is still here (Timer)
+var Conversation HostBoundCon;  // the host's conversation its player's parts are bound to the host in (Tick)
 
 event InitGame( string Options, out string Error )
 {
@@ -146,6 +151,11 @@ event InitGame( string Options, out string Error )
 	}
 }
 
+function bool IsEntry()
+{
+	return Caps( string(Level.Outer.Name) )=="ENTRY";
+}
+
 function bool IsMenuMap()
 {
 	local string MapName;
@@ -170,8 +180,26 @@ event Tick( float DeltaTime )
 {
 	local int i;
 	local ThrownProjectile Grenade;
+	local DeusExPlayer Me;
+	local Pawn P;
 
 	Super.Tick( DeltaTime );
+	// The host's conversation, once started (and each one it jumps to): the engine bound
+	// its player's parts to whichever "JCDenton" it found first, a remote player too, who
+	// got the host's items (Paul's weapon, playtest 2026-11-13) and spoke its lines.
+	Me = DeusExPlayer( GetPlayerPawn() );
+	if ( bCoop && Me!=None && Me.conPlay!=None && Me.conPlay.bConversationStarted && Me.conPlay.con!=HostBoundCon )
+	{
+		HostBoundCon = Me.conPlay.con;
+		class'CoopConPlay'.static.BindPlayer( HostBoundCon, Me );
+	}
+	else if ( Me!=None && Me.conPlay==None )
+		HostBoundCon = None;
+	// Remote players' inventory links (CoopPlayerCore.SendLinks).
+	if ( bCoop )
+		for ( P=Level.PawnList; P!=None; P=P.nextPawn )
+			if ( CoopPlayerCore(P)!=None && CoopPlayerCore(P).LinksAt>0 && Level.TimeSeconds>=CoopPlayerCore(P).LinksAt )
+				CoopPlayerCore(P).SendLinks();
 	if ( bStartup )
 	{
 		bStartup = false;
@@ -221,6 +249,22 @@ event Timer()
 	local PlayerPawn P;
 	local CoopSave Save;
 
+	// (Entry's game goes on ticking while the player is in a map: only its own wait, and
+	// only with the player still on Entry.)
+	if ( bEntryWait )
+	{
+		bEntryWait = false;
+		P = GetPlayerPawn();
+		if ( class'CoopLaunch'.default.bInGame && P!=None && P.Level==Level )
+		{
+			class'CoopLaunch'.default.bInGame = false;
+			class'CoopLaunch'.default.bFollowing = false;
+			Log( "RevNet: the connection to the host is gone (the host left the game): to the menu", 'RevNet' );
+			P.ConsoleCommand( "open DX" );
+		}
+		return;
+	}
+
 	if ( PendingOpen!="" )
 	{
 		P = GetPlayerPawn();
@@ -243,10 +287,12 @@ event Timer()
 		// (a continue brings the save's back).
 		if ( InStr( PendingOpen, "Listen" )>=0 && InStr( PendingOpen, "CoopLoad" )<0 )
 		{
+			default.bNewGame = true; // the host's starting kit (PostLogin)
 			class'CoopMapMemory'.static.Forget( Mode, false );
 			Save = class'CoopSave'.static.Get( Mode );
 			Save.ClearPlayers();
 			Save.SaveConfig();
+			ForgetLeavers();
 		}
 		P.ConsoleCommand( "open" @ PendingOpen );
 		PendingOpen = "";
@@ -437,6 +483,20 @@ event PostLogin( PlayerPawn NewPlayer )
 	LastLogin = Level.TimeSeconds;
 	if ( IsMenuMap() )
 		return;
+	// A client whose connection to the host failed: the engine puts it back on its Entry
+	// level (an empty map, no menu). Following the host to its next map (PreClientTravel),
+	// that's on the way: its next connection completes in the background and takes it
+	// there. Else the host left (playtest 2026-11-13 "when the host leaves, player 2 does
+	// not leave"): to the menu map (Timer). (Entry at start-up: bInGame unset.)
+	if ( Level.NetMode==NM_Standalone && IsEntry() )
+	{
+		bEntryWait = class'CoopLaunch'.default.bInGame;
+		if ( bEntryWait && class'CoopLaunch'.default.bFollowing )
+			SetTimer( 90.0, false ); // still here then: that failed too
+		else if ( bEntryWait )
+			SetTimer( 1.0, false );
+		return;
+	}
 	if ( bRestore && DeusExPlayer(NewPlayer)!=None )
 		RestoreFromSave( DeusExPlayer(NewPlayer) );
 	for ( i=0; i<ArrayCount(Managers); i++ )
@@ -449,6 +509,11 @@ event PostLogin( PlayerPawn NewPlayer )
 		// "PlayerTraveling" makes the mission script run its first frame (travel sets it too).
 		if ( !bLoadGame && DeusExPlayer(NewPlayer)!=None )
 			DeusExPlayer(NewPlayer).flagBase.SetBool( 'PlayerTraveling', true, true, 0 );
+		if ( default.bNewGame && !bRestore && DeusExPlayer(NewPlayer)!=None )
+		{
+			default.bNewGame = false;
+			GiveStartingKit( DeusExPlayer(NewPlayer) );
+		}
 	}
 	else
 	{
@@ -551,7 +616,7 @@ function DropOldSelf( DeusExPlayer P )
 			// connection closes, after this (and then saves nothing: bReplaced).
 			if ( Old.Health>0 )
 			{
-				Save = class'CoopSave'.static.Get( Mode );
+				Save = LeftStore();
 				Save.SavePlayer( DeusExPlayer(Old) );
 				Save.SaveConfig();
 			}
@@ -564,15 +629,102 @@ function DropOldSelf( DeusExPlayer P )
 function Rejoined( DeusExPlayer P )
 {
 	local CoopSave Save;
+	local int i;
 
+	// As they left (this game, since the last load).
+	Save = LeftStore();
+	i = Save.FindPlayer( P.PlayerReplicationInfo.PlayerName );
+	if ( i>=0 )
+	{
+		Save.LoadPlayer( P );
+		Save.DropPlayer( i );
+		Save.SaveConfig();
+		Log( "RevNet:" @ P.PlayerReplicationInfo.PlayerName @ "is back with their things as they left", 'RevNet' );
+		return;
+	}
 	Save = class'CoopSave'.static.Get( Mode );
 	if ( Save.FindPlayer( P.PlayerReplicationInfo.PlayerName )<0 )
 	{
 		Log( "RevNetTest:" @ P.PlayerReplicationInfo.PlayerName @ "is new to this game (records" @ Save.NumPlayers $ ", first" @ Save.PlayerName[0] $ ")", 'RevNet' );
-		return; // new to this game
+		GiveStartingKit( P ); // new to this game
+		return;
 	}
 	Save.LoadPlayer( P );
 	Log( "RevNet:" @ P.PlayerReplicationInfo.PlayerName @ "is back with their things", 'RevNet' );
+}
+
+// What one player finds, all get (CoopPlayerCore.HandleItemPickup): weapon mods and
+// augmentation upgrade canisters.
+static function bool IsSharedFind( Actor A )
+{
+	return A!=None && (A.IsA('WeaponMod') || A.IsA('AugmentationUpgradeCannister'));
+}
+
+// The others' copies, picked up as the finder's was (no room: at their feet).
+function ShareFind( DeusExPlayer Finder, class<Inventory> Found, int Copies )
+{
+	local Pawn P;
+	local Inventory Item;
+	local string What;
+
+	if ( bSharing || !bCoop )
+		return;
+	bSharing = true;
+	BeginSinglePlayerRules(); // (a weapon mod's pickup: as ParseRightClick's)
+	for ( P=Level.PawnList; P!=None; P=P.nextPawn )
+		if ( P!=Finder && CoopPlayerCore(P)!=None && !P.IsInState('Dying') )
+		{
+			Item = Spawn( Found,,, P.Location );
+			if ( Item==None )
+				continue;
+			if ( DeusExPickup(Item)!=None )
+			{
+				DeusExPickup(Item).NumCopies = Copies;
+				DeusExPickup(Item).bItemRefusalOverride = true;
+			}
+			What = Item.ItemName;
+			Item.Frob( P, None );
+			Log( "RevNet:" @ P.PlayerReplicationInfo.PlayerName @ "has" @ Found.Name @ "too (" $ Finder.PlayerReplicationInfo.PlayerName @ "found it)", 'RevNet' );
+			if ( Item!=None && !Item.bDeleteMe && Item.Owner!=P && P.FindInventoryType( Found )==None )
+				DeusExPlayer(P).ClientMessage( Finder.PlayerReplicationInfo.PlayerName @ SharedFindText @ What $ SharedFloorText );
+			else
+				DeusExPlayer(P).ClientMessage( Finder.PlayerReplicationInfo.PlayerName @ SharedFindText @ What $ SharedYoursText );
+		}
+	EndSinglePlayerRules();
+	bSharing = false;
+}
+
+// Single-player's new game kit (DeusExPlayer.ResetPlayer): a pistol, a prod and a medkit
+// in the belt's first places, not in its no-items modes (playtest 2026-11-13: co-op
+// players started with nothing).
+function GiveStartingKit( DeusExPlayer P )
+{
+	local Human H;
+
+	H = Human(P);
+	if ( H!=None && (H.bOneItemInventory || H.bNoItemsMode || H.bTransferWeapon || H.bNinjaMode) )
+		return;
+	GiveKitItem( P, class'WeaponPistol', 0 );
+	GiveKitItem( P, class'WeaponProd', 1 );
+	GiveKitItem( P, class'MedKit', 2 );
+	Log( "RevNet:" @ P.PlayerReplicationInfo.PlayerName @ "starts with a pistol, a prod and a medkit", 'RevNet' );
+}
+
+function GiveKitItem( DeusExPlayer P, class<Inventory> C, int X )
+{
+	local Inventory Item;
+
+	Item = Spawn( C,,, P.Location );
+	if ( Item==None )
+		return;
+	if ( DeusExWeapon(Item)!=None )
+		DeusExWeapon(Item).bItemRefusalOverride = true;
+	else if ( DeusExPickup(Item)!=None )
+		DeusExPickup(Item).bItemRefusalOverride = true;
+	Item.invPosX = X;
+	Item.invPosY = 0;
+	Item.Frob( P, None );
+	Item.bInObjectBelt = true;
 }
 
 // Co-op respawn (fire when dead): healed, with everything the player had, next to a
@@ -911,7 +1063,7 @@ function ProcessServerTravel( string URL, bool bItems )
 // The host's quick save, and each map once its story has started.
 function SaveCoopGame( bool bTell )
 {
-	local CoopSave Save;
+	local CoopSave Save, Left;
 	local DeusExPlayer Host;
 	local PlayerPawn P;
 	local int i;
@@ -922,6 +1074,10 @@ function SaveCoopGame( bool bTell )
 	Save = class'CoopSave'.static.Get( Mode );
 	Save.SaveWorld( Host );
 	Save.SavePlayers( Level );
+	// Players away: as they left (LeftStore), not as in the save before.
+	Left = LeftStore();
+	for ( i=0; i<Left.NumPlayers; i++ )
+		Save.CopyPlayer( Left, i );
 	Save.SaveConfig();
 	// The maps as they are (this one too), for a load (CoopMapMemory).
 	for ( i=0; i<ArrayCount(Managers); i++ )
@@ -1143,8 +1299,37 @@ function RestoreFromSave( DeusExPlayer P )
 
 	Save = class'CoopSave'.static.Get( Mode );
 	if ( P==GetPlayerPawn() )
+	{
 		Save.LoadWorld( P );
-	Save.LoadPlayer( P );
+		ForgetLeavers(); // a load: everyone as in the save
+	}
+	// Not in that save (joined after it, the checkpoint a few seconds into the map): as a
+	// player new to the game (it came back from the team's failure with nothing).
+	if ( !Save.LoadPlayer( P ) && P!=GetPlayerPawn() )
+		GiveStartingKit( P );
+}
+
+// Players who left this game (since its last load): their things as they left, for their
+// rejoin. Apart from the save's records, which a load gives back (a player who left as the
+// team was down came back from the team's load with what they had as they died, not what
+// they had in the save: playtest 2026-11-13).
+function CoopSave LeftStore()
+{
+	if ( Mode=="" )
+		return class'CoopSave'.static.Get( "RevisionLeft" );
+	return class'CoopSave'.static.Get( Mode $ "Left" );
+}
+
+function ForgetLeavers()
+{
+	local CoopSave L;
+
+	L = LeftStore();
+	if ( L.NumPlayers>0 )
+	{
+		L.ClearPlayers();
+		L.SaveConfig();
+	}
 }
 
 // A player who leaves: their state as they left (a load, or their coming back, gives
@@ -1162,13 +1347,10 @@ function PlayerLeaving( DeusExPlayer Leaver )
 		return;
 	if ( Leaver.Health>0 && !(CoopPlayerCore(Leaver)!=None && CoopPlayerCore(Leaver).bReplaced) )
 	{
-		Save = class'CoopSave'.static.Get( Mode );
-		if ( Save.SavedMap!="" )
-		{
-			Save.SavePlayer( Leaver );
-			Save.SaveConfig();
-			Log( "RevNet: kept" @ Leaver.PlayerReplicationInfo.PlayerName $ "'s things as they left", 'RevNet' );
-		}
+		Save = LeftStore();
+		Save.SavePlayer( Leaver );
+		Save.SaveConfig();
+		Log( "RevNet: kept" @ Leaver.PlayerReplicationInfo.PlayerName $ "'s things as they left", 'RevNet' );
 	}
 	// Then their augmentations and skills (single-player's player only goes with the
 	// map, so nothing else does it): left, an active one went on working for no one,
@@ -1212,6 +1394,9 @@ defaultproperties
 	FailedText="Mission failed: loading the last save..."
 	RevivedText="revived"
 	NeedMedkitText="You need a medkit to revive"
+	SharedFindText="found"
+	SharedYoursText=": you have one too."
+	SharedFloorText=": yours is at your feet (no room)."
 	NoQuickSaveText="Quick saves are off in this game: it saves a few seconds into every map."
 	ManagerClasses(0)=class'CoopProgress'
 	ManagerClasses(1)=class'CoopDevices'

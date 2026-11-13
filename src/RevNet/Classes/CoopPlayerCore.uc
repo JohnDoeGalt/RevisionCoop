@@ -42,12 +42,15 @@ var float HostUpkeepTime;       // (MultiplayerTick) the host's own player's ene
 var string CustomParts;         // (ClientCustomDifficulty) the host's values, as they come
 var localized string SemiAutoText, FullAutoText;
 
+var float LinksAt;   // (host) when this remote player's inventory links go to its machine (SendLinks)
+var int LinksLeft;
+
 replication
 {
 	reliable if ( Role==ROLE_Authority )
 		bDowned;
 	reliable if ( Role==ROLE_Authority )
-		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast, ClientCustomDifficulty;
+		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast, ClientCustomDifficulty, ClientLink;
 	reliable if ( Role<ROLE_Authority )
 		ServerAnswerTravel, ServerWeaponValues, ServerLook, ServerSelectFire, ServerCannonMode, ServerBladeMode;
 }
@@ -658,16 +661,32 @@ exec function ParseRightClick()
 // Deathmatch "restocks" a picked-up weapon that held no ammo so its respawned
 // copy comes with some; nothing respawns here, so dropping and taking it again
 // would make ammo. It keeps what it had.
+// A weapon mod or an augmentation upgrade one player finds, every player gets (the user,
+// 2026-11-13: "every mod and upgrade that gets found in the game by either player gets
+// added to all inventories"): CoopGameInfo.ShareFind gives the others theirs.
 function bool HandleItemPickup( Actor FrobTarget, optional bool bSearchOnly )
 {
 	local DeusExWeapon W;
 	local bool bEmpty, bResult;
+	local class<Inventory> Found;
+	local int Copies;
 
 	W = DeusExWeapon(FrobTarget);
 	bEmpty = W!=None && W.PickupAmmoCount==0;
+	// (A right click's pickup is a bSearchOnly one too: ParseRightClick.)
+	if ( CoopGameInfo(Level.Game)!=None && class'CoopGameInfo'.static.IsSharedFind( FrobTarget ) )
+	{
+		Found = Inventory(FrobTarget).Class;
+		Copies = 1;
+		if ( DeusExPickup(FrobTarget)!=None )
+			Copies = Max( 1, DeusExPickup(FrobTarget).NumCopies );
+	}
 	bResult = Super.HandleItemPickup( FrobTarget, bSearchOnly );
 	if ( bEmpty && W!=None && !W.bDeleteMe && W.Owner==Self )
 		W.PickupAmmoCount = 0;
+	// (Taken: the thing is this player's now, or gone into a stack of its own.)
+	if ( bResult && Found!=None && (FrobTarget==None || FrobTarget.bDeleteMe || FrobTarget.Owner==Self) )
+		CoopGameInfo(Level.Game).ShareFind( Self, Found, Copies );
 	return bResult;
 }
 
@@ -912,6 +931,65 @@ exec function ActivateBelt( int objectNum )
 {
 	if ( !bDowned )
 		Super.ActivateBelt( objectNum );
+}
+
+// ----------------------------------------------------------------------
+// A remote player's inventory, as a list on its machine: a thing placed in the map,
+// once picked up, never sends its link to the next thing there (the engine's own
+// replication of Inventory; things spawned later do). The client's list ended at it,
+// everything else gone from its belt and screens until a rejoin (playtest
+// 2026-11-13). Each link a change makes, sent.
+// ----------------------------------------------------------------------
+
+function bool AddInventory( Inventory NewItem )
+{
+	if ( !Super.AddInventory( NewItem ) )
+		return false;
+	LinksChanged();
+	return true;
+}
+
+function bool DeleteInventory( Inventory Item )
+{
+	if ( !Super.DeleteInventory( Item ) )
+		return false;
+	LinksChanged();
+	return true;
+}
+
+// (Sent a moment later, and again: a link to a thing spawned just now (a weapon's
+// ammo) reached the client as None, its thing not there yet. CoopGameInfo.Tick.)
+function LinksChanged()
+{
+	if ( NetConnection(Player)!=None )
+	{
+		LinksAt = Level.TimeSeconds + 0.5;
+		LinksLeft = 2;
+	}
+}
+
+function SendLinks()
+{
+	local Inventory I;
+	local int n;
+
+	LinksLeft--;
+	if ( LinksLeft>0 )
+		LinksAt = Level.TimeSeconds + 2.5;
+	else
+		LinksAt = 0;
+	for ( I=Inventory; I!=None; I=I.Inventory )
+	{
+		ClientLink( I, I.Inventory );
+		if ( ++n>200 )
+			break;
+	}
+}
+
+simulated function ClientLink( Inventory Item, Inventory Next )
+{
+	if ( Item!=None && Item!=Next )
+		Item.Inventory = Next;
 }
 
 // ----------------------------------------------------------------------

@@ -21,6 +21,8 @@ var config int Rejoins;     // tries left for AutoOpen
 var config string LastHost; // the host this client last played with
 var config string Agent;    // the launcher's class choice: "Mech", "LightMech" or "" (?RevClass=)
 var config string JoinPassword; // the host's game password from the launcher's join URL (its lobby's): rejoins take it too
+var bool bInGame;           // (default, this run) a client in a co-op game: its connection lost, the engine's Entry level takes it back to the menu (CoopGameInfo.PostLogin)
+var bool bFollowing;        // (default) the host sent this client on to its next map (PreClientTravel): Entry while that connects
 
 static function Remember( string Host )
 {
@@ -72,6 +74,8 @@ static function Rejoin( string URL, int Tries )
 
 static function Joined()
 {
+	default.bInGame = true;
+	default.bFollowing = false;
 	if ( default.AutoOpen=="" && default.Rejoins==0 )
 		return;
 	default.AutoOpen = "";

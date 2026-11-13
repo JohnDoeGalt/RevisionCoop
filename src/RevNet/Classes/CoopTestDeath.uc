@@ -17,6 +17,13 @@ function Run( int t )
 
 	if ( Stage==0 && t==5 )
 	{
+		// (The host's starting kit has one: the revive without one comes first.)
+		Kit = Host.FindInventoryType( class'MedKit' );
+		if ( Kit!=None )
+		{
+			Host.DeleteInventory( Kit );
+			Kit.Destroy();
+		}
 		Remote.TakeDamage( 500, None, Remote.Location, vect(0,0,0), 'Shot' );
 		Log( "RevNetTest: after lethal damage: client downed=" $ Remote.bDowned @ "health" @ Remote.Health @ "state" @ Remote.GetStateName() @ "detectable=" $ Remote.bDetectable, 'RevNet' );
 		Remote.TakeDamage( 500, None, Remote.Location, vect(0,0,0), 'Shot' );
@@ -42,6 +49,11 @@ function Run( int t )
 	}
 	else if ( Stage==0 && t==11 )
 	{
+		// Picked up after the checkpoint save: the team's failure (its load) takes it away.
+		Kit = Spawn( class'WeaponCrowbar',,, Remote.Location );
+		Remote.FrobTarget = Kit;
+		Remote.HandleItemPickup( Kit );
+		Log( "RevNetTest: client picked up a crowbar before the failure:" @ (Remote.FindInventoryType(class'WeaponCrowbar')!=None) @ "save on" @ class'CoopSave'.static.Get( CoopGameInfo(Level.Game).Mode ).SavedMap, 'RevNet' );
 		Remote.TakeDamage( 500, None, Remote.Location, vect(0,0,0), 'Shot' );
 		Remote.DownedUntil = Level.TimeSeconds + 3;
 		SetStage( 1 );
@@ -51,6 +63,15 @@ function Run( int t )
 	{
 		SetStage( 2 );
 		Log( "RevNetTest: after the team failed, on" @ Level.Outer.Name $ ": client downed=" $ Remote.bDowned @ "health" @ Remote.Health @ "host downed=" $ Host.bDowned, 'RevNet' );
+		Log( "RevNetTest: after the failure the client has" @ Things( Remote ) @ "things", 'RevNet' );
+		if ( Remote.FindInventoryType(class'WeaponPistol')!=None && Remote.FindInventoryType(class'MedKit')!=None )
+			Log( "RevNetTest: CHECK the client has its saved things or the starting kit after the failure ok", 'RevNet' );
+		else
+			Log( "RevNetTest: CHECK the client has its saved things or the starting kit after the failure BAD", 'RevNet' );
+		if ( Remote.FindInventoryType(class'WeaponCrowbar')==None )
+			Log( "RevNetTest: CHECK the failure's load took back what the client got after the save ok", 'RevNet' );
+		else
+			Log( "RevNetTest: CHECK the failure's load took back what the client got after the save BAD", 'RevNet' );
 		Remote.ClientTest( "state" );
 	}
 	else if ( Stage==2 && t==7 )

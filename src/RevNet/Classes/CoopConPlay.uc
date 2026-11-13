@@ -57,6 +57,45 @@ static function BindPlayer( Conversation Con, Actor Me )
 	}
 }
 
+// BindPlayer undone: the events it gave Me back to the host's player (they are the map's
+// conversation's, shared: left on Me, a later conversation of the host's gave Me its items).
+static function UnbindPlayer( Conversation Con, Actor Me, Actor Host )
+{
+	local ConEvent E;
+	local ConEventSpeech S;
+	local ConEventTransferObject T;
+
+	if ( Con==None || Me==None )
+		return;
+	for ( E=Con.eventList; E!=None; E=E.nextEvent )
+	{
+		S = ConEventSpeech(E);
+		T = ConEventTransferObject(E);
+		if ( S!=None )
+		{
+			if ( S.speaker==Me )
+				S.speaker = Host;
+			if ( S.speakingTo==Me )
+				S.speakingTo = Host;
+		}
+		else if ( T!=None )
+		{
+			if ( T.fromActor==Me )
+				T.fromActor = Host;
+			if ( T.toActor==Me )
+				T.toActor = Host;
+		}
+		else if ( ConEventAnimation(E)!=None && ConEventAnimation(E).eventOwner==Me )
+			ConEventAnimation(E).eventOwner = Host;
+	}
+}
+
+event Destroyed()
+{
+	UnbindPlayer( con, player, GetPlayerPawn() );
+	Super.Destroyed();
+}
+
 // ConPlayBase's and ConPlay's StartConversation without windows (and history: the
 // client keeps it).
 function bool StartConversation( DeusExPlayer NewPlayer, optional Actor NewInvokeActor, optional bool bForce )
@@ -114,6 +153,7 @@ function PlayerLeft()
 
 function JumpToConversation( Conversation jumpCon, string startLabel )
 {
+	UnbindPlayer( con, player, GetPlayerPawn() );
 	Super.JumpToConversation( jumpCon, startLabel );
 	if ( con!=None )
 		BindPlayer( con, player );

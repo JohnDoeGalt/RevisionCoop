@@ -28,6 +28,7 @@ $suite = [ordered]@{
 	NestDefense = @("-Seconds", 160, "-HostAgent", "Mech")
 	NestLate = @("-Seconds", 230, "-Clients", 2, "-ClientGap", 45)
 	NestTravel = @("-Seconds", 260)
+	Paul = @("-Seconds", 260); PaulB = @("-Seconds", 260); HostLeave = @("-Seconds", 100); Pickup = @("-Seconds", 120); Share = @("-Seconds", 90); Robot = @("-Seconds", 90); Wipe = @("-Seconds", 240); WipeB = @("-Seconds", 240)
 }
 $pass = 0; $fail = 0
 foreach ($name in $suite.Keys) {

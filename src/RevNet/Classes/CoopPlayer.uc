@@ -182,6 +182,7 @@ simulated function ClientTest( string Command )
 // ("arms"), its projectiles ("shots"), its items ("inv"), an aug ("aug <class>").
 simulated function ArmsTest( string Command )
 {
+	local int n;
 	local DeusExWeapon W;
 	local DeusExProjectile P;
 	local Augmentation A;
@@ -250,6 +251,16 @@ simulated function ArmsTest( string Command )
 			else if ( Ammo(Item)!=None )
 				S = S @ Item.Class.Name $ "x" $ Ammo(Item).AmmoAmount;
 		ServerTestReply( "client's items:" $ S );
+	}
+	else if ( Command=="invall" )
+	{
+		for ( Item=Inventory; Item!=None; Item=Item.Inventory )
+		{
+			if ( ++n>200 )
+				break;
+			S = S @ Item.Class.Name;
+		}
+		ServerTestReply( "chain " $ n $ ":" $ S );
 	}
 	else if ( Left( Command, 4 )=="aug " && AugmentationSystem!=None )
 	{

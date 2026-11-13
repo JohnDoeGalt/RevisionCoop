@@ -59,6 +59,17 @@ function bool CanStartConversation()
 // RFPlayer's StartConversation, but the conversation runs in a CoopConPlay and its
 // client is told before the pawn's conversation state can reach it.
 // ponytail: no Greasel costume conversations (GreasyConPlay) or cinematics for remote players.
+// A in a conversation another player is having (the host's or another remote player's).
+function bool InOthersConversation( Actor A )
+{
+	local ConPlay CP;
+
+	foreach AllActors( class'ConPlay', CP )
+		if ( CP!=conPlay && !CP.bDeleteMe && CP.con!=None && (CP.invokeActor==A || CP.startActor==A) )
+			return true;
+	return false;
+}
+
 function bool StartConversation( Actor invokeActor, EInvokeMethod invokeMethod, optional Conversation con, optional bool bAvoidState, optional bool bForcePlay )
 {
 	// Shifter's and Biomod's StartConversationByName pass a sixth argument (a string,
@@ -67,10 +78,15 @@ function bool StartConversation( Actor invokeActor, EInvokeMethod invokeMethod, 
 	local int Spare[2];
 
 	if ( !IsRemote() )
-		return Super.StartConversation( invokeActor, invokeMethod, con, bAvoidState, bForcePlay );
+		return Super.StartConversation( invokeActor, invokeMethod, con, bAvoidState, bForcePlay ); // (its binding: CoopGameInfo.Tick)
 	if ( bForcePlay || invokeActor.conListItems==None || !CanStartConversation() )
 		return false;
 	if ( ScriptedPawn(invokeActor)!=None && !ScriptedPawn(invokeActor).CanConverse() )
+		return false;
+	// Not while the character talks with another player: the two would share its
+	// conversation's events (BindPlayer), and the other's items came here (playtest
+	// 2026-11-13: Paul's weapon picked by the host went to this player, who got both).
+	if ( InOthersConversation( invokeActor ) )
 		return false;
 	if ( con==None )
 		con = GetActiveConversation( invokeActor, invokeMethod );
@@ -282,6 +298,8 @@ event PreClientTravel()
 		D.Cleanup();
 	ClientCon = None;
 	ClientInfolink = None;
+	if ( Level.NetMode==NM_Client )
+		class'CoopLaunch'.default.bFollowing = true; // (Entry meanwhile is no lost host: CoopGameInfo.PostLogin)
 	Super.PreClientTravel();
 	// The player's root window too: a client follows the host by way of the menu's
 	// level (its connection fails while the host loads; CoopLaunch rejoins), and the
