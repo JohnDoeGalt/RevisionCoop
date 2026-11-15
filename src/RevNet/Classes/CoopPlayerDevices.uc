@@ -19,7 +19,7 @@ class CoopPlayerDevices extends CoopPlayerProgress;
 
 var Actor OpenDevice;           // the device copy whose screen is open here (UseDevice)
 var ENetRole OpenDeviceRole;
-var Window MedScreen;           // the medical bot screen open here
+var transient Window MedScreen;           // (transient: a window) the medical bot screen open here
 var bool bLocalFromClient, bLocalFromListen;
 
 replication
@@ -68,9 +68,19 @@ function DoFrob( Actor Frobber, Inventory frobWith )
 	else if ( bRemote && ATM(T)!=None )
 		SendATM( ATM(T) );
 	Super.DoFrob( Frobber, frobWith );
-	// ATM.Frob opens the screen on the frobber's root window (the host has none for them).
-	if ( bRemote && ATM(T)!=None && !ATM(T).bLockedOut )
-		ClientOpenATM( ATM(T), ATM(T).bSuckedDryByHack );
+	// ATM.Frob opens its screen on the frobber's root window: for a remote player the one its pawn has here on the
+	// host, never drawn and never closed, so the ATM stayed in use for every other player (playtest 2026-11-15,
+	// CoopTestTurns). Closed here; the player's own machine opens its own.
+	if ( bRemote && ATM(T)!=None )
+	{
+		if ( ATM(T).atmwindow!=None && ATM(T).atmwindow.GetRootWindow()==rootWindow )
+		{
+			DeusExRootWindow(rootWindow).PopWindow();
+			ATM(T).atmwindow = None;
+		}
+		if ( !ATM(T).bLockedOut )
+			ClientOpenATM( ATM(T), ATM(T).bSuckedDryByHack );
+	}
 }
 
 // A datacube, book or newspaper: read on the reader's machine (its text window);

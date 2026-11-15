@@ -59,7 +59,7 @@ def server_packages(rev_ini):
 
 
 def build(rev_ini, mode):
-    out, section, engine = [], None, None
+    out, section, engine, console = [], None, None, []
     for line in open(rev_ini, encoding='latin1').read().splitlines():
         s = line.strip()
         if section == 'Engine.Engine' and s.startswith('GameEngine='):
@@ -99,15 +99,24 @@ def build(rev_ini, mode):
         if section == 'Engine.Engine' and s.startswith('Root='):
             out.append(f'Root={OURS}.CoopRootWindow')
             continue
+        # Revision's console with co-op's Talk (CoopConsole: no chat prompt over a screen); its settings under its own
+        # class's section too.
+        if section == 'Engine.Engine' and s.startswith('Console='):
+            out.append(f'Console={OURS}.CoopConsole')
+            continue
+        if section == 'Revision.RevConsole' and '=' in s:
+            console.append(s)
         out.append(line)
         if section == 'Editor.EditorEngine' and s == 'EditPackages=RevisionMission':
             out.append(f'EditPackages={OURS}')
     # The engine reads its config from its own class's section (Revision's ini has none).
     assert engine, 'GameEngine= not found'
     out += ['', f'[{engine}]'] + [f'ServerPackages={p}' for p in server_packages(rev_ini)]
+    out += ['', f'[{OURS}.CoopConsole]'] + console
     text = '\n'.join(out) + '\n'
     assert f'EditPackages={OURS}' in text, 'EditPackages anchor not found'
     assert f'Root={OURS}.CoopRootWindow' in text, 'Root= not found'
+    assert f'Console={OURS}.CoopConsole' in text, 'Console= not found'
     return text
 
 

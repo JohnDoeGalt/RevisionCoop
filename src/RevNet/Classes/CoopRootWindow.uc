@@ -24,4 +24,22 @@ event MutateNewChild( Window NewParent, out class<Window> DesignatedClass )
 		DesignatedClass = class'CoopScreenAugs';
 	else if ( DesignatedClass==class'RevPersonaScreenHealth' )
 		DesignatedClass = class'CoopScreenHealth';
+	else if ( DesignatedClass==class'RevAugmentationDisplayWindow' )
+		DesignatedClass = class'CoopAugDisplay'; // a turret's colour under the crosshair
+}
+
+// The key of the screen that is open closes it (asked, playtest 2026-11-15). A screen pauses single-player, so its own
+// key did nothing more there; here the game goes on and the key's binding asks for the screen again.
+function DeusExBaseWindow InvokeUIScreen( Class<DeusExBaseWindow> newScreen, optional bool bNoPause )
+{
+	local DeusExBaseWindow Top;
+
+	Top = GetTopWindow();
+	if ( PersonaScreenBaseWindow(Top)!=None && ClassIsChildOf( Top.Class, newScreen ) )
+	{
+		PersonaScreenBaseWindow(Top).SaveSettings();
+		PopWindow();
+		return None;
+	}
+	return Super.InvokeUIScreen( newScreen, bNoPause );
 }

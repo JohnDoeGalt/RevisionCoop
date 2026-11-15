@@ -251,6 +251,13 @@ simulated function ClientUITest( string Command, optional string Arg )
 		ConsoleCommand( Arg );
 		ServerUIReply( Arg @ "| top window" @ Root.GetTopWindow() @ "in hand" @ inHand @ "pending" @ inHandPending @ ClientInHandPending );
 	}
+	else if ( Command=="talk" ) // the chat key's command, as the console runs it (CoopConsole)
+	{
+		Player.Console.Talk();
+		ServerUIReply( "talk typing=" $ Player.Console.IsInState('Typing') @ "top window" @ Root.GetTopWindow() );
+		if ( Player.Console.IsInState('Typing') )
+			Player.Console.GotoState( '' );
+	}
 	else if ( Command=="close" )
 	{
 		Root.ClearWindowStack();
@@ -403,4 +410,6 @@ function ServerUIReply( string Reply )
 	if ( CoopGameInfo(Level.Game)==None || CoopGameInfo(Level.Game).Test==None )
 		return;                                 // (only while a test runs)
 	Log( "RevNetTest: reply from" @ PlayerReplicationInfo.PlayerName $ ":" @ Reply, 'RevNet' );
+	if ( CoopTestRound2(CoopGameInfo(Level.Game).Test)!=None )
+		CoopGameInfo(Level.Game).Test.Reply( CoopPlayer(Self), Reply );
 }

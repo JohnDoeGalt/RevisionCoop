@@ -524,6 +524,9 @@ event PostLogin( PlayerPawn NewPlayer )
 		{
 			DropOldSelf( DeusExPlayer(NewPlayer) );
 			Rejoined( DeusExPlayer(NewPlayer) );
+			// With the team, not back on the map's start (playtest 2026-11-15: "if you rejoin, the client spawns at
+			// the start of the map").
+			ToMate( DeusExPlayer(NewPlayer) );
 		}
 		// Travel set it (PreTravel); the mission script clears only the host's. It
 		// would keep blocking this player's frob, items and belt (RestrictInput).
@@ -655,6 +658,18 @@ function Rejoined( DeusExPlayer P )
 
 // What one player finds, all get (CoopPlayerCore.HandleItemPickup): weapon mods and
 // augmentation upgrade canisters.
+// A placed thing's twin, for a pickup (CoopMapMemory.Twin); A itself if it needs none.
+function Actor Twin( Actor A )
+{
+	local int i;
+
+	if ( Inventory(A)!=None )
+		for ( i=0; i<ArrayCount(Managers); i++ )
+			if ( CoopMapMemory(Managers[i])!=None )
+				return CoopMapMemory(Managers[i]).Twin( Inventory(A) );
+	return A;
+}
+
 static function bool IsSharedFind( Actor A )
 {
 	return A!=None && (A.IsA('WeaponMod') || A.IsA('AugmentationUpgradeCannister'));
@@ -727,6 +742,20 @@ function GiveKitItem( DeusExPlayer P, class<Inventory> C, int X )
 	Item.bInObjectBelt = true;
 }
 
+// P next to a teammate who is alive (none: where it is).
+function ToMate( DeusExPlayer P )
+{
+	local Pawn Mate;
+
+	for ( Mate=Level.PawnList; Mate!=None; Mate=Mate.NextPawn )
+		if ( Mate!=P && PlayerPawn(Mate)!=None && Mate.Health>0 && !Mate.IsInState('Dying') && P.SetLocation( Mate.Location ) )
+		{
+			StepAside( P );
+			P.ClientSetLocation( P.Location, Mate.Rotation );
+			return;
+		}
+}
+
 // Co-op respawn (fire when dead): healed, with everything the player had, next to a
 // teammate who is alive (else on the map's start).
 function bool RestartPlayer( Pawn aPlayer )
@@ -737,13 +766,7 @@ function bool RestartPlayer( Pawn aPlayer )
 	P = DeusExPlayer(aPlayer);
 	if ( P==None || IsMenuMap() || !Super.RestartPlayer( aPlayer ) )
 		return false;
-	for ( Mate=Level.PawnList; Mate!=None; Mate=Mate.NextPawn )
-		if ( Mate!=P && PlayerPawn(Mate)!=None && Mate.Health>0 && !Mate.IsInState('Dying') && P.SetLocation( Mate.Location ) )
-		{
-			StepAside( P );
-			P.ClientSetLocation( P.Location, Mate.Rotation );
-			break;
-		}
+	ToMate( P );
 	P.RestoreAllHealth();
 	P.StopPoison();
 	P.ExtinguishFire();

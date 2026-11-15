@@ -183,12 +183,28 @@ function Turrets()
 {
 	local AutoTurret T;
 	local Pawn Nobody;
+	local int Side;
 
 	Nobody = CoopGameInfo(Level.Game).Nobody;
 	foreach AllActors( class'AutoTurret', T )
 	{
-		if ( T.safeTarget==None )
+		// (Nobody too in place of a player a deathmatch screen made its safe target: the turret's own check would
+		// switch it off for that player's team not being the turret's.)
+		if ( T.safeTarget==None || DeusExPlayer(T.safeTarget)!=None )
 			T.safeTarget = Nobody;
+		// What it is to the players, for every machine's crosshair (the HUD's own reads team against one player's
+		// id: a map turret's 0 was the host's, green there and red for a client whatever it did, playtest
+		// 2026-11-15): -1 off (white), 99 it fires at players (red), 98 at their enemies only (CoopAugDisplay: green).
+		// (No player's team: the multitool is refused on a turret of the player's own.)
+		if ( !T.bActive || T.bDisabled )
+			Side = -1;
+		else if ( T.bTrackPlayersOnly || !T.bTrackPawnsOnly )
+			Side = 99;
+		else
+			Side = 98;
+		T.team = Side;
+		if ( T.gun!=None )
+			T.gun.team = Side;
 		if ( T.bActive && !T.bDisabled )
 		{
 			T.prevTarget = SinglePlayerTarget( T );

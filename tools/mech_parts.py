@@ -408,6 +408,7 @@ def main():
     # improvised quad was turned down by the user 2026-10-30, "way too modern... this is a retro future cyberpunk setting".)
     import flykit
     blade_meshes += flykit.game(out)
+    out_bind["payloads"] = list(flykit.PAYLOAD_BINDINGS)   # (the kits' payloads: the game's meshes, filled in at install)
     # The Corvane kit nests (tools/nest_game.py; docs/superpowers/specs/2026-11-03-kit-nests-design.md).
     import nest_game
     blade_meshes += nest_game.game(out)

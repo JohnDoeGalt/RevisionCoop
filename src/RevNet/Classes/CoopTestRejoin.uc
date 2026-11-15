@@ -15,6 +15,7 @@ function Run( int t )
 {
 	local Inventory Kit;
 	local Augmentation Aug;
+	local PathNode Node;
 
 	if ( Stage==0 && t==5 )
 	{
@@ -26,6 +27,13 @@ function Run( int t )
 		for ( Aug=class'CoopRules'.static.FirstAug( Remote ); Aug!=None; Aug=Aug.next )
 			if ( Aug.IsA('AugLight') && Aug.bHasIt && !Aug.bIsActive )
 				Aug.Activate();
+		Host.ReducedDamageType = 'All';
+		// The host well away from the map's start: the client must come back to it, not to the start.
+		foreach AllActors( class'PathNode', Node )
+			if ( VSize(Node.Location - Remote.Location)>2000 && VSize(Node.Location - Remote.Location)<3500 && !Node.Region.Zone.bWaterZone
+				&& Host.SetLocation( Node.Location + vect(0,0,10) ) )
+				break;
+		Log( "RevNetTest: the host is" @ int(VSize(Host.Location - Remote.Location)) @ "from the client and the map's start", 'RevNet' );
 		Stage = 1;
 	}
 	else if ( Stage==1 && t==7 )
@@ -39,6 +47,10 @@ function Run( int t )
 	{
 		Log( "RevNetTest: after coming back: credits" @ Remote.Credits @ "medkit=" $ (Remote.FindInventoryType(class'MedKit')!=None) @ "things" @ Things( Remote ), 'RevNet' );
 		Log( "RevNetTest: after coming back:" @ Leftovers() @ "| weather:" @ Weather(), 'RevNet' );
+		if ( VSize(Remote.Location - Host.Location)<400 )
+			Log( "RevNetTest: CHECK the client came back beside the host (" $ int(VSize(Remote.Location - Host.Location)) @ "off) ok", 'RevNet' );
+		else
+			Log( "RevNetTest: CHECK the client came back beside the host (" $ int(VSize(Remote.Location - Host.Location)) @ "off) BAD", 'RevNet' );
 		Done();
 	}
 }

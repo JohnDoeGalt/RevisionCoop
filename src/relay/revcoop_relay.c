@@ -1628,7 +1628,30 @@ static int run_window(void)
     RECT r = { 0, 0, (LONG)(460 * g_scale), (LONG)(684 * g_scale) };
     AdjustWindowRect(&r, style, FALSE);
     int w = r.right - r.left, h = r.bottom - r.top;
-    CreateWindowExW(0, L"RevCoopWindow", L"Deus Ex: Revision Co-op", style,
+    /* The mod's version in the title (asked, playtest 2026-11-15): version.txt beside the exe, the release's
+       (tools/make_net_release.py); none: the plain title. */
+    wchar_t title[96] = L"Deus Ex: Revision Co-op";
+    {
+        char path[MAX_PATH], ver[32] = "";
+        GetModuleFileNameA(NULL, path, sizeof(path));
+        char *slash = strrchr(path, '\\');
+        if (slash && strlen(path) + 12 < sizeof(path)) {
+            strcpy(slash + 1, "version.txt");
+            FILE *f = fopen(path, "r");
+            if (f) {
+                if (fgets(ver, sizeof(ver), f)) ver[strcspn(ver, "\r\n")] = 0;
+                fclose(f);
+            }
+        }
+        if (ver[0]) {
+            size_t n = wcslen(title);
+            title[n++] = L' ';
+            for (const char *c = ver; *c && n < 95; c++)
+                if (*c >= ' ' && *c < 127) title[n++] = (wchar_t)*c;
+            title[n] = 0;
+        }
+    }
+    CreateWindowExW(0, L"RevCoopWindow", title, style,
                     (GetSystemMetrics(SM_CXSCREEN) - w) / 2, (GetSystemMetrics(SM_CYSCREEN) - h) / 2, w, h,
                     NULL, NULL, wc.hInstance, NULL);
     if (!g_wnd) return 1;

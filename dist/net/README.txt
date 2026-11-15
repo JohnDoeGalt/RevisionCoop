@@ -87,10 +87,13 @@ The Mech
       Arsenal: Arm Blades (up to killing an unaware target in one cut), Arm Cannon,
                Active Protection (F5 on/off: fires 20 mm charges at rockets and
                grenades coming in, and at enemies that come close; uses the assault
-               rifle's 20 mm rounds), FPV Drones (F7: explosive drones; first one you
-               fly yourself, then ones that fly to the crosshair, lock on, and at the
-               top a swarm of four sent one per press; hold F7 to fly one by hand, the
-               swarm's lead at the top; the reload key while flying steps slow, medium
+               rifle's 20 mm rounds), Fly Kits (F7: small drones that each carry one
+               explosive from your inventory - a LAM, GEP rocket, 20 mm round, gas, EMP
+               or scramble grenade - and set it off where they hit; with none they fly
+               as an unarmed scout. First one you fly yourself, then ones that fly to
+               the crosshair and lock on, and at the top a swarm of four sent one per
+               press; hold F7 to fly one by hand, the swarm's lead at the top; the ammo
+               key while flying picks the explosive, the reload key steps slow, medium
                and fast, up to 100 mph).
       Chassis: Dermal Plating, Hydraulic Legs (landings that knock enemies back, higher
                jumps, full speed), Bulwark (F6: a shell that takes most of the damage),

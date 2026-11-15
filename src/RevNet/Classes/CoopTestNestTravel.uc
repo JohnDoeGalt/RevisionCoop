@@ -12,6 +12,7 @@ class CoopTestNestTravel extends CoopTestNests;
 var config int Stage;       // 0 fresh, 1 left the Island, 2 back, 3 done (a new map has a new test actor)
 var config int Had[3];      // the kits docked in the Quiver, the Perch and the Trellis when they left
 var config int HadAll;      // the kits in the level then
+var config vector InertAt, BurrAt;   // a kit fallen inert, a Burr set, when they left
 
 function SetStage( int S )
 {
@@ -56,6 +57,8 @@ function Run( int t )
 	local CoopNestTrellis Tr;
 	local CoopNest N;
 	local int Count;
+	local CoopBurr B, Bu;
+	local CoopFPVGuided Inert;
 
 	if ( Stage==0 && Level.Outer.Name=='01_NYC_UNATCOIsland' )
 	{
@@ -76,16 +79,41 @@ function Run( int t )
 		else if ( t==5 )
 		{
 			Check( Q!=None && Perch!=None && Trellis!=None, "travel: the three nests set down" );
+			// Out of its place as they leave (back in it on their return); a kit fallen inert; a Burr set.
+			K = Trellis.Undock( 0 );
+			if ( K!=None )
+				K.Hold( Trellis.Location + vect(0,0,120) );
+			K = Spawn( class'CoopFPVGuided',,, Host.Location + vector(Host.Rotation) * 300 + vect(0,0,40) );
+			if ( K!=None )
+			{
+				K.Kind = 1;
+				K.Inert();
+			}
+			B = Spawn( class'CoopBurr',,, Host.Location + vector(Host.Rotation + rot(0,16384,0)) * 200 - vect(0,0,1) * (Host.CollisionHeight - 4) );
+			if ( B!=None )
+				B.Set( vect(0,0,1) );
 			Had[0] = Q.Free();
 			Had[1] = Perch.Free();
 			Had[2] = Trellis.Free();
 			HadAll = Kits();
 			Log( "RevNetTest: nests: leaving with" @ Had[0] @ Had[1] @ Had[2] @ "docked," @ HadAll @ "kits in the level", 'RevNet' );
+			foreach AllActors( class'CoopFPVGuided', K )
+				if ( K.bInert )
+					InertAt = K.Location;
+			foreach AllActors( class'CoopBurr', B )
+				BurrAt = B.Location;
 			SetStage( 1 );
 		}
 	}
 	else if ( Stage==1 && Level.Outer.Name=='01_NYC_UNATCOIsland' && t==7 )
+	{
+		// (Where it lies as they leave: it fell from where it was set down.)
+		foreach AllActors( class'CoopFPVGuided', K )
+			if ( K.bInert )
+				InertAt = K.Location;
+		SaveConfig();
 		Level.Game.SendPlayer( Host, "01_NYC_UNATCOHQ" );
+	}
 	else if ( Stage==1 && Level.Outer.Name=='01_NYC_UNATCOHQ' && t==5 )
 	{
 		Log( "RevNetTest: nests: on HQ with the client, going back", 'RevNet' );
@@ -108,8 +136,18 @@ function Run( int t )
 			}
 			Check( Count==3 && Qv!=None && P!=None && Tr!=None, "travel: back: the three nests there (" $ Count $ ")" );
 			if ( Qv!=None && P!=None && Tr!=None )
-				Check( Qv.Free()==Had[0] && P.Free()==Had[1] && Tr.Free()==Had[2], "travel: each nest has the kits it had ("
-					$ Qv.Free() @ P.Free() @ Tr.Free() @ "docked, they left with" @ Had[0] @ Had[1] @ Had[2] $ ")" );
+				Check( Qv.Free()==Had[0] && P.Free()==Had[1] && Tr.Free()==Had[2] + 1, "travel: each nest has the kits it had, the one out of its place back in it ("
+					$ Qv.Free() @ P.Free() @ Tr.Free() @ "docked, they left with" @ Had[0] @ Had[1] @ Had[2] @ "and one out" $ ")" );
+			Inert = None;
+			foreach AllActors( class'CoopFPVGuided', K )
+				if ( K.bInert )
+					Inert = K;
+			Check( Inert!=None && VSize(Inert.Location - InertAt)<48 && Inert.Kind==1, "travel: the inert kit where it fell, its payload aboard" );
+			B = None;
+			foreach AllActors( class'CoopBurr', Bu )
+				if ( Bu.bSet )
+					B = Bu;
+			Check( B!=None && VSize(B.Location - BurrAt)<8, "travel: the Burr set where it was" );
 			Check( Kits()==HadAll && Paired(), "travel: no more kits in the level (" $ Kits() @ "of" @ HadAll $ "), each in its own place" );
 			Want = Truth( "nests" );
 			bReplied = false;

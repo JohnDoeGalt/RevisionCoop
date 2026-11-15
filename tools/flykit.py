@@ -34,8 +34,19 @@ COLOURS = {"hull": (0.24, 0.26, 0.29), "panel": (0.32, 0.34, 0.38), "duct": (0.1
 # MultiSkins[1]), and how it lies under the kit (degrees about x, then y, then z, after the mirror).
 PAYLOADS = {"LAM": ("HDTPItems", "HDTPLAMPickup", 1.0, {1: "HDTPLAMTex0"}, (90, 0, 90)),
             "GEP rocket": ("HDTPItems", "HDTPRocket", 0.25, {}, (0, 0, -90)),       # (its point forward)
-            "20 mm HE": ("HDTPItems", "HDTPHECannister", 1.0, {}, (0, 0, 0))}       # (a cased telescoped round, flat
+            "20 mm HE": ("HDTPItems", "HDTPHECannister", 1.0, {}, (0, 0, 0)),       # (a cased telescoped round, flat
                                                                                  # ends; ROUND20: a rounded one, if wanted)
+            # The rest a kit carries in the game (the user, 2026-11-13: every payload its own kit, as these three):
+            # the WP rocket along it as the GEP's, the grenades laid flat as the LAM.
+            "GEP WP rocket": ("HDTPItems", "HDTPRocketHE", 1.0, {}, (0, 0, -90)),
+            "gas grenade": ("HDTPItems", "HDTPGasGrenadePickup", 1.0, {}, (90, 0, 90)),
+            "EMP grenade": ("HDTPItems", "HDTPEMPGrenadePickup", 1.0, {}, (90, 0, 90)),
+            "scramble grenade": ("HDTPItems", "HDTPNanoVirusGrenadePickup", 1.0, {}, (90, 0, 90))}
+# The payload packages' places under Revision's folder (the installer fills the payloads from the player's own).
+PACKAGE_PATHS = {"HDTPItems": "HDTP/System/HDTPItems.u", "DeusExItems": "System/DeusExItems.u"}
+PAYLOAD_BINDINGS = []        # (game: filled by _load) each load's payload: its game vertices and how they sit in the kit
+# The game's kinds (CoopMechAugDrones.Payloads, 1 up): LAM, Rocket, RocketWP, HECannister20mm, Gas, EMP, NanoVirus.
+GAME_KINDS = ("LAM", "GEP rocket", "GEP WP rocket", "20 mm HE", "gas grenade", "EMP grenade", "scramble grenade")
 # The 20 mm round on a kit, ours (the user, 2026-10-30: "round the end... that's how normal grenade launcher grenades
 # work"; the game's, HDTP's too, is a plain cylinder, flown side-on): turned on a lathe, the size of the game's (6.1
 # long, 3.6 across): a bevelled base, the body, an ogive from there into a small rounded fuze tip. (x along it, r.)
@@ -84,8 +95,31 @@ def texture(pkg, i):
         while o < 0:
             outer = pkg.imports[-o - 1]
             o = outer[2]
-        src = package(outer[3]) if outer[3] in PACKAGES else pkg
+        if outer[3] not in PACKAGES:            # (another package's: an effect, the game loads it; a stand-in here)
+            return name, np.full((8, 8, 3), (60, 170, 255), np.uint8)
+        src = package(outer[3])
     return name, pixels(src, name)
+
+
+def texpath(pkgname, i):
+    """A mesh's texture's full name in the game (Package.Group.Name), for DynamicLoadObject."""
+    pkg = package(pkgname)
+    names = []
+    if i > 0:
+        e = pkg.exports[i - 1]
+        names.append(e["name"])
+        o = e["pkg"]
+        while o > 0:
+            names.append(pkg.exports[o - 1]["name"])
+            o = pkg.exports[o - 1]["pkg"]
+        names.append(pkgname)
+    else:
+        o = i
+        while o < 0:
+            imp = pkg.imports[-o - 1]
+            names.append(imp[3])
+            o = imp[2]
+    return ".".join(reversed(names))
 
 
 def pixels(pkg, name):
@@ -705,6 +739,7 @@ def build(name, out):
     size = V.max(0) - V.min(0)
     p, under = kit(size)
     V = seat(V, tris, under)
+    nkit = len(p.faces)
     clamps(p, V, under, tris)
     dens = layout_kit(p)
     slug = name.lower().replace(" ", "_")
@@ -732,7 +767,8 @@ def build(name, out):
     span = np.ptp(np.array([q for pts, r in p.faces for q in pts if r != "blur"]), axis=0)
     print("%s: kit %.1f x %.1f x %.1f units (%.0f x %.0f cm), payload %.1f x %.1f x %.1f" % (
         name, *span, span[0] * 1.9, span[1] * 1.9, *size))
-    return dict(name=name, p=p, own=own, V=V, tris=tris, uvs=uvs, tnames=tnames, skins=skins, slug=slug, mtl=mtl)
+    return dict(name=name, p=p, own=own, V=V, tris=tris, uvs=uvs, tnames=tnames, skins=skins, slug=slug, mtl=mtl,
+                nkit=nkit)
 
 
 def obj(path, st, faces=None, body=None, blur=False):
@@ -975,6 +1011,7 @@ def game(out):
     os.makedirs(os.path.join(out, "Models"), exist_ok=True)
     work = os.path.join(out, "flykit")
     os.makedirs(work, exist_ok=True)
+    del PAYLOAD_BINDINGS[:]
     st = build("LAM", work)
     p = st["p"]
     for s in (0, 1):
@@ -999,8 +1036,149 @@ def game(out):
         lines += ["// %s: about its own centre, at %.3f %.3f %.3f from the kit's middle (the game's frame)." % (name, c[0], -c[1], c[2])]
         lines += _mesh(p, name, range(j0, j1), out, pivot=c)
         print("%s pivot (game frame): %.3f %.3f %.3f" % (name, c[0], -c[1], c[2]))
-    lines += _mesh(p, "FlyKitBody", [f for f in range(len(p.faces)) if f not in in_duct], out)
+    # The body without its clamps: each payload's own clamps ride on it with the payload (FlyKitLoad<kind>).
+    lines += _mesh(p, "FlyKitBody", [f for f in range(st["nkit"]) if f not in in_duct], out)
+    lines += ["// Each kind's load (CoopKitCargo, the kit's frame): its clamps telescoped onto its payload, the payload as built here."]
+    for k in range(len(GAME_KINDS) + 1):
+        lines += _load(st if k <= 1 else build(GAME_KINDS[k - 1], work), k, out)
     return lines
+
+
+def _clamp_skin(p, nkit, png):
+    """The clamps' own 512 skin (sheet 4): their faces (nkit on) laid out and painted, the rest of the kit occluding."""
+    global SKIN
+    from mech_parts import face_size, shelf_pack
+    idx = list(range(nkit, len(p.faces)))
+    for f in idx:
+        p.sheets[f] = 4
+    density = 120.0
+    while True:
+        rects = [(max(2, int(round(face_size(p.faces[f][0])[0] * density))),
+                  max(2, int(round(face_size(p.faces[f][0])[1] * density)))) for f in idx]
+        placed = shelf_pack(rects, 255)
+        if placed:
+            break
+        density *= 0.95
+    for f, (x, y, w, h) in zip(idx, placed):
+        p.cells[f] = (x, y, x + w, y + h)
+    old, SKIN = SKIN, 512
+    try:
+        bake_kit(p, 4, png)
+    finally:
+        SKIN = old
+    return idx
+
+
+def _tex_type(flags):
+    """A .3d triangle type from a game material's poly flags (translucent, masked, modulated, two-sided; unlit)."""
+    t = 2 if flags & 4 else 3 if flags & 2 else 4 if flags & 0x40 else 1 if flags & 0x100 else 0
+    return t | (16 if flags & 0x400000 else 0)
+
+
+def _load(st, k, out):
+    """FlyKitLoad<k> (k 0: an empty kit's, the LAM's clamps alone): the clamps (skin 0, their own) and the payload (skins
+    1 up: ours, repainted, else the game's own, put on in the game: CoopKitCargo.LoadSkins), about the kit's middle."""
+    from PIL import Image
+    p, name = st["p"], "FlyKitLoad%d" % k
+    work, tex = os.path.join(out, "flykit"), os.path.join(out, "Textures")
+    png = os.path.join(work, "flykit_%s_clamps.png" % st["slug"])
+    idx = _clamp_skin(p, st["nkit"], png)
+    texs = ["FlyKitClamp%d" % k]
+    mech_bake.save_pcx(np.asarray(Image.open(png).convert("RGB"), float), os.path.join(tex, texs[0] + ".pcx"))
+    verts, src, tris, skins, types, runtime = [], [], [], [], [], []
+    for f in idx:
+        (pts, region), (u0, v0, u1, v1) = p.faces[f], p.cells[f]
+        i = len(verts)
+        verts += [np.asarray(q, float) for q in pts]
+        src += [-1] * len(pts)
+        uv = [(u0, v1), (u1, v1), (u1, v0), (u0, v0)] if len(pts) == 4 else [(u0, v1), (u1, v1), (u0, v0)]
+        for a, b, c in ([(0, 1, 2)] if len(pts) == 3 else [(0, 1, 2), (0, 2, 3)]):
+            tris.append((i + a, i + c, i + b, uv[a], uv[c], uv[b]))     # wound back for the mirror
+            skins.append(0)
+            types.append(0)
+    if k and st["own"] is not None:                                     # ours, repainted
+        q = st["own"]
+        at = {tuple(np.round(v, 5)): j for j, v in enumerate(st["V"])}
+        for s in range(ROUND_SKINS[st["name"]]):
+            texs.append("FlyKitPay%d_%d" % (k, s))
+            im = Image.open(os.path.join(work, "flykit_%s_payload%d.png" % (st["slug"], s))).convert("RGB")
+            mech_bake.save_pcx(np.asarray(im, float), os.path.join(tex, texs[-1] + ".pcx"))
+        for (pts, _), (u0, v0, u1, v1), s in zip(q.faces, q.cells, q.sheets):
+            i = len(verts)
+            verts += [np.asarray(v, float) for v in pts]
+            src += [at[tuple(np.round(v, 5))] for v in pts]
+            uv = [(u0, v1), (u1, v1), (u0, v0)]
+            tris.append((i, i + 2, i + 1, uv[0], uv[2], uv[1]))
+            skins.append(1 + s)
+            types.append(0)
+    elif k:                                                             # the game's own mesh and skins (HDTP's)
+        pkgname, mesh, _, over, _ = PAYLOADS[st["name"]]
+        pkg = package(pkgname)
+        m = pkg.read_mesh(mesh)
+        for slot, t in enumerate(m["textures"]):
+            if slot in over:
+                t = next(j + 1 for j, e in enumerate(pkg.exports) if e["name"] == over[slot])
+            texs.append(texs[0])                                        # (a stand-in till the game puts it on)
+            runtime.append("%d=%s" % (1 + slot, texpath(pkgname, t)))
+        base = len(verts)
+        verts += list(st["V"])
+        src += list(range(len(st["V"])))
+        byte = lambda u, v: (min(255, max(0, int(round(u * 256)))), min(255, max(0, int(round((1 - v) * 256)))))
+        for (_, _, _, mat), (a, b, c), uv in zip(m["faces"], st["tris"], st["uvs"]):
+            flags, tidx = m["materials"][mat]
+            ub = [byte(*w) for w in uv]
+            tris.append((base + a, base + c, base + b, ub[0], ub[2], ub[1]))
+            skins.append(1 + tidx)
+            types.append(_tex_type(flags))
+    # Shared corners once (the engine's vertex limit), each triangle keeping its own UVs: the clamps' first, then the
+    # payload's, each its game vertex (the payload is the game's mesh: shipped empty, filled in at install from the
+    # player's own copy, PAYLOAD_BINDINGS: mech_art.fill, MechParts.cs).
+    keys, remap, V, VS = {}, [], [], []
+    for v, j in zip(verts, src):
+        key = ("c",) + tuple(np.round(v, 4)) if j < 0 else ("p", j)
+        if key not in keys:
+            keys[key] = len(V)
+            V.append(v)
+            VS.append(j)
+        remap.append(keys[key])
+    tris = [(remap[a], remap[b], remap[c], ua, ub, uc) for a, b, c, ua, ub, uc in tris]
+    Q = np.array(V, float)
+    Q[:, 1] *= -1                               # into the game's frame: y to the right
+    assert len(Q) < 8192, (name, len(Q))
+    if k:
+        pkgname, mesh = PAYLOADS[st["name"]][:2]
+        m = package(pkgname).read_mesh(mesh)
+        first = VS.index(next(j for j in VS if j >= 0))
+        idxs = VS[first:]
+        assert all(j >= 0 for j in idxs) and all(j < 0 for j in VS[:first])
+        g = (np.array(package(pkgname).frames(m)[0], float)[idxs] - np.array(m["origin"])) * np.array(m["scale"])
+        G = np.hstack([g, np.ones((len(g), 1))])
+        A = np.linalg.lstsq(G, Q[first:], rcond=None)[0]
+        err = np.abs(G @ A - Q[first:]).max()
+        assert err < 1e-3, (name, err)
+        A = np.array([[round(float(x), 6) for x in row] for row in A])
+        Q[first:] = G @ A                       # (as the fill makes them: byte for byte)
+        PAYLOAD_BINDINGS.append(dict(mesh=name, package=PACKAGE_PATHS[pkgname], source=mesh, frame_verts=m["frame_verts"],
+                                     scale=list(m["scale"]), origin=list(m["origin"]), first=first, map=idxs,
+                                     affine=A.tolist()))
+    mech_parts_write(out, name, Q[None], tris, skins, types)
+    print("%s: %s, %d verts, %d tris%s" % (name, st["name"] if k else "empty", len(Q), len(tris),
+                                         ", skins " + " ".join(runtime) if runtime else ""))
+    if runtime:
+        print("CoopKitCargo LoadSkins(%d)=\"%s\"" % (k, ",".join(runtime)))
+    lines = ["#exec TEXTURE IMPORT NAME=%s FILE=Textures\\%s.pcx GROUP=Skins" % (t, t) for t in dict.fromkeys(texs)]
+    return lines + [
+        "#exec MESH IMPORT MESH=%s ANIVFILE=Models\\%s_a.3d DATAFILE=Models\\%s_d.3d X=0 Y=0 Z=0 MLOD=0" % (name, name, name),
+        "#exec MESH ORIGIN MESH=%s X=0 Y=0 Z=0 PITCH=0 YAW=0 ROLL=0" % name,
+        "#exec MESH SEQUENCE MESH=%s SEQ=All STARTFRAME=0 NUMFRAMES=1" % name,
+        "#exec MESHMAP SCALE MESHMAP=%s X=0.00390625 Y=0.00390625 Z=0.00390625" % name] + [
+        "#exec MESHMAP SETTEXTURE MESHMAP=%s NUM=%d TEXTURE=%s" % (name, i, t) for i, t in enumerate(texs)]
+
+
+def mech_parts_write(out, name, F, tris, skins, types):
+    import mech_parts
+    mech_parts.write_d3d(os.path.join(out, "Models", name + "_d.3d"), F.shape[1], tris, skins, types)
+    mech_parts.write_a3d(os.path.join(out, "Models", name + "_a.3d"), np.rint(F * 256).astype(np.int16))
 
 
 def main():

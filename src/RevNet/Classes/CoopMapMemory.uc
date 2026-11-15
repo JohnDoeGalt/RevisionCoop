@@ -18,6 +18,8 @@
 //   B|<class>|<location>|<rotation>|<items>|<property=value;...>   a body
 //   I|<class>|<location>|<rotation>|<count>    a thing lying around
 //   K|<placed name or ->|<class>|<location>|<rotation>|<CoopNest.Remembered>   a kit nest: its kits, the player it's for
+//   F|<payload>|<location>|<rotation>          a fly kit fallen inert (its nest gone), its payload aboard
+//   U|<location>|<rotation>                    an SP-2 Burr stuck where it was set
 //=============================================================================
 class CoopMapMemory extends CoopManager;
 
@@ -34,6 +36,7 @@ var byte DoorLocked[256], DoorKey[256];
 var int NumDoors;
 var Inventory PlacedItem[512]; // to tell things dropped later from placed ones
 var int NumItems;
+var bool bNoTwin;              // (default; CoopTestRound2's B run) placed things picked up as themselves, as before the twins
 
 // What a body is, besides its class and place (by name: every gameplay mode's
 // DeusExCarcass has them).
@@ -119,6 +122,8 @@ function Capture()
 	local DeusExMover D;
 	local Actor A;
 	local CoopNest Nest;
+	local CoopFPVGuided Kit;
+	local CoopBurr Burr;
 	local string Gone;
 	local int i;
 
@@ -153,6 +158,12 @@ function Capture()
 	foreach AllActors( class'Inventory', Item )
 		if ( Item.Owner==None && !Item.bDeleteMe && !Item.bHidden && !IsPlacedItem( Item ) )
 			S.Add( "I|" $ class'CoopSave'.static.ClassStr( Item.Class ) $ "|" $ Item.Location $ "|" $ Item.Rotation $ "|" $ Count( Item ) );
+	foreach AllActors( class'CoopFPVGuided', Kit )
+		if ( Kit.bInert && !Kit.bDeleteMe )
+			S.Add( "F|" $ Kit.Kind $ "|" $ Kit.Location $ "|" $ Kit.Rotation );
+	foreach AllActors( class'CoopBurr', Burr )
+		if ( Burr.bSet && !Burr.bDeleteMe )
+			S.Add( "U|" $ Burr.Location $ "|" $ Burr.Rotation );
 	foreach AllActors( class'CoopNest', Nest )
 		if ( !Nest.bDeleteMe )
 			S.Add( "K|" $ PlacedNameOf( Nest ) $ "|" $ class'CoopSave'.static.ClassStr( Nest.Class ) $ "|" $ Nest.Location $ "|"
@@ -199,6 +210,47 @@ function bool IsPlacedItem( Inventory Item )
 		if ( PlacedItem[i]==Item )
 			return true;
 	return false;
+}
+
+// A weapon or item placed in the map, about to be picked up: a twin made now takes its place. The map's own, once a
+// player's, never sends a client what the engine sends an owner only (its place in the inventory's list, its grid
+// place, its belt slot), nor where it lies once dropped again: picked up by a client it was missing from its screens
+// until a rejoin, dropped by the host it stayed at its old place for a client (playtest 2026-11-15; things made later
+// are fine, and deathmatch only ever hands out made copies: Inventory.SpawnCopy).
+// ponytail: copies what a placed thing can differ in (count, charge, tag, event), not a weapon's fitted mods.
+function Inventory Twin( Inventory Item )
+{
+	local Inventory T;
+	local int i;
+
+	if ( default.bNoTwin || Item==None || Item.bDeleteMe || Item.Owner!=None || (DeusExWeapon(Item)==None && DeusExPickup(Item)==None)
+		|| Item.IsA('NanoKey') || Item.IsA('DataVaultImage') || Item.IsA('Credits') || !IsPlacedItem( Item ) )
+		return Item;
+	Item.SetCollision( false, false, false );
+	T = Spawn( Item.Class,,, Item.Location, Item.Rotation );
+	if ( T==None )
+	{
+		Item.SetCollision( Item.default.bCollideActors, Item.default.bBlockActors, Item.default.bBlockPlayers );
+		return Item;
+	}
+	T.Tag = Item.Tag;
+	T.Event = Item.Event;
+	T.Charge = Item.Charge;
+	// Its look as the map's had it (Revision's HDTP model: a thing made in a net game gets the old one).
+	T.Mesh = Item.Mesh;
+	T.PickupViewMesh = Item.PickupViewMesh;
+	T.PlayerViewMesh = Item.PlayerViewMesh;
+	T.ThirdPersonMesh = Item.ThirdPersonMesh;
+	T.Skin = Item.Skin;
+	T.Texture = Item.Texture;
+	for ( i=0; i<ArrayCount(Item.MultiSkins); i++ )
+		T.MultiSkins[i] = Item.MultiSkins[i];
+	if ( DeusExWeapon(Item)!=None )
+		DeusExWeapon(T).PickupAmmoCount = DeusExWeapon(Item).PickupAmmoCount;
+	else
+		DeusExPickup(T).NumCopies = DeusExPickup(Item).NumCopies;
+	Item.Destroy();
+	return T;
 }
 
 // Ammo's rounds, a weapon's ammo, a pickup's copies.
@@ -291,6 +343,10 @@ function Apply( CoopMapState S )
 			SpawnThing( L );
 		else if ( Kind=="K" )
 			RecallNest( L );
+		else if ( Kind=="F" )
+			RecallInertKit( L );
+		else if ( Kind=="U" )
+			RecallBurr( L );
 	}
 	Log( "RevNet: map memory put back on" @ Level.Outer.Name $ ":" @ S.NumLines @ "lines", 'RevNet' );
 }
@@ -323,6 +379,30 @@ function RecallNest( string L )
 			return;
 	}
 	Nest.Recall( class'CoopSave'.static.Rest( L, 5, "|" ) );
+}
+
+// A fly kit fallen inert as it was left (an F line): down there, harmless, its payload aboard.
+function RecallInertKit( string L )
+{
+	local CoopFPVGuided K;
+
+	K = Spawn( class'CoopFPVGuided',,, vector(class'CoopSave'.static.Part( L, 2, "|" )), rotator(class'CoopSave'.static.Part( L, 3, "|" )) );
+	if ( K==None )
+		return;
+	K.Kind = byte( class'CoopSave'.static.Part( L, 1, "|" ) );
+	K.Inert();
+}
+
+// An SP-2 Burr stuck where it was set (a U line): marking for every player again.
+function RecallBurr( string L )
+{
+	local CoopBurr B;
+	local rotator R;
+
+	R = rotator(class'CoopSave'.static.Part( L, 2, "|" ));
+	B = Spawn( class'CoopBurr',,, vector(class'CoopSave'.static.Part( L, 1, "|" )), R );
+	if ( B!=None )
+		B.Set( vector(R) );
 }
 
 // A moved thing back where it was. Where it collides there, SetLocation finds it room

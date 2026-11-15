@@ -223,11 +223,7 @@ function DeviceRules()
 		}
 		if ( H.bHacking && H.hackPlayer!=None && H.hackPlayer!=GetPlayerPawn() )
 			AddCulprit( H.hackPlayer, H.Location, 1.0 );
-		// A turret on the players' team (0, a map turret's) refuses their multitool
-		// (DeusExPlayer.ParseLeftClick, team games): on no team. (The gun copies its
-		// turret's team every 2 s.)
-		if ( AutoTurretGun(H)!=None && AutoTurretGun(H).team!=-1 )
-			AutoTurretGun(H).team = -1;
+		// (A turret's team: CoopClient.Turrets, never the players' own, which refuses their multitool.)
 		// A camera or turret hacked just now, under deathmatch rules: they reset its
 		// strength (hack again to switch it again), never switch it on, and switch
 		// off the one linked to it on a security computer. As single-player: strength
@@ -597,6 +593,8 @@ function NearRemotes()
 {
 	local ScriptedPawn SP;
 	local int i;
+	local LaserEmitter Beam;
+	local Pawn P;
 
 	for ( i=0; i<NumWoken; i++ )
 		if ( Woken[i]==None || Woken[i].bDeleteMe || !NearRemote( Woken[i], 300 ) )
@@ -619,6 +617,17 @@ function NearRemotes()
 	for ( i=0; i<NumWoken; i++ )
 		if ( SeenByRemote( Woken[i] ) )
 			Woken[i].LastRenderTime = Level.TimeSeconds;
+	// A laser or electricity emitter by a remote player: kept going as if the host's view had drawn its beam. It
+	// freezes (no beam traced, no damage done, no flicker) unless the host is within 960 or saw it in the last 2 s
+	// (LaserEmitter.Tick): a client alone by one saw its sparks stop (playtest 2026-11-15, CoopTestSparks).
+	foreach AllActors( class'LaserEmitter', Beam )
+		if ( Beam.proxy!=None )
+			for ( P=Level.PawnList; P!=None; P=P.nextPawn )
+				if ( CoopPlayerCore(P)!=None && NetConnection(PlayerPawn(P).Player)!=None && VSize(P.Location - Beam.Location)<1500 )
+				{
+					Beam.proxy.LastRenderTime = Level.TimeSeconds;
+					break;
+				}
 }
 
 // Every tick: the distance to the nearest player, not the host's (the native AI

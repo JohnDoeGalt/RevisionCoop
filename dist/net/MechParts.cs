@@ -207,6 +207,8 @@ public static class MechParts
 				string why0 = FillBody(body, b, tpl, outData, out bm, out F);
 				if (why0 != null) return why0;
 			}
+			string why1 = FillPayloads(B, tpl, outData, Path.GetDirectoryName(Path.GetDirectoryName(bodyPackage)));
+			if (why1 != null) LastError = why1;    // (not fatal: the kits carry their clamps without the payload's shape)
 			File.WriteAllBytes(outPath, outData);
 			return null;
 		}
@@ -215,6 +217,59 @@ public static class MechParts
 			LastError = e.ToString();
 			return e.Message;
 		}
+	}
+
+	// The fly kits' payloads (bindings "payloads": tools/flykit.py, the game's own meshes in the kits' loads): each mapped
+	// vertex of this PC's own mesh (frame 0, game units) through its affine into the load's frame (256 raw a unit).
+	static string FillPayloads(Dictionary<string, object> B, Package tpl, byte[] outData, string rev)
+	{
+		if (!B.ContainsKey("payloads"))
+			return null;
+		var pkgs = new Dictionary<string, Package>();
+		foreach (object o in (object[])B["payloads"])
+		{
+			var pb = (Dictionary<string, object>)o;
+			string path = Path.Combine(rev, (string)pb["package"]);
+			if (!pkgs.ContainsKey(path))
+				pkgs[path] = new Package(path);
+			Package pk = pkgs[path];
+			Mesh m = pk.ReadMesh((string)pb["source"]);
+			var ps = (object[])pb["scale"];
+			var po = (object[])pb["origin"];
+			bool same = m.FrameVerts == Convert.ToInt32(pb["frame_verts"]);
+			for (int a = 0; a < 3; a++)
+				same = same && Math.Abs(m.Scale[a] - D(ps[a])) <= 1e-9 * Math.Abs(m.Scale[a])    // (the JSON reader's last bit)
+					&& Math.Abs(m.Origin[a] - D(po[a])) <= 1e-6;
+			if (!same)
+				return "this game's " + pb["source"] + " differs from the one the fly kits were made for (" + m.FrameVerts + " vertices, scale "
+					+ m.Scale[0] + " " + m.Scale[1] + " " + m.Scale[2] + ", origin " + m.Origin[0] + " " + m.Origin[1] + " " + m.Origin[2] + ")";
+			var map = (object[])pb["map"];
+			var rows = (object[])pb["affine"];
+			var A = new double[4, 3];
+			for (int r = 0; r < 4; r++)
+				for (int c = 0; c < 3; c++)
+					A[r, c] = D(((object[])rows[r])[c]);
+			Mesh tm = tpl.ReadMesh((string)pb["mesh"]);
+			int first = Convert.ToInt32(pb["first"]);
+			for (int q = 0; q < map.Length; q++)
+			{
+				int v = Convert.ToInt32(map[q]);
+				var g = new double[3];
+				for (int a = 0; a < 3; a++)
+					g[a] = (BitConverter.ToInt16(pk.D, m.VertsOffset + v * 8 + a * 2) - m.Origin[a]) * m.Scale[a];
+				int at = tm.VertsOffset + (first + q) * 8;
+				for (int c = 0; c < 3; c++)
+				{
+					double x = g[0] * A[0, c] + g[1] * A[1, c] + g[2] * A[2, c] + A[3, c];
+					short s = (short)Math.Max(-32768, Math.Min(32767, Math.Round(x * 256)));
+					outData[at + c * 2] = (byte)(s & 0xFF);
+					outData[at + c * 2 + 1] = (byte)((s >> 8) & 0xFF);
+				}
+				outData[at + 6] = 0;
+				outData[at + 7] = 0;
+			}
+		}
+		return null;
 	}
 
 	// One body's parts (B: its name, the shape of its animation, its meshes): their frames from this PC's body.

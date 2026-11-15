@@ -14,6 +14,8 @@
 //=============================================================================
 class CoopKitLook extends Actor;
 
+#exec AUDIO IMPORT FILE="Sounds\FPVRush.wav" NAME="FPVRush" GROUP="MechDrone"
+
 var Actor Kit;
 var CoopKitDuct Duct[2];        // 0 left, 1 right
 var vector DuctAt[2];           // their pivots from the kit's middle (tools/flykit.py game, the game's frame)
@@ -171,6 +173,27 @@ simulated function Tick( float DeltaTime )
 			Duct[i].SetLocation( Location + (DuctAt[i] >> R) );
 			Duct[i].SetRotation( D );
 		}
+	Rush( bMine );
+}
+
+// The rush (tools/fpv_rush.py: the air of a quadcopter fly-past), this machine's own: louder with the kit's speed,
+// pitched by its speed and its closing speed on this machine's player (Doppler, sound at 18000 units a second: a
+// 100 mph pass drops about 4.5 semitones). None for a kit nearly still, nor for its pilot looking through it.
+simulated function Rush( bool bMine )
+{
+	local float Thr, Closing, Dop;
+
+	Thr = FClamp( VSize(Vel) / 2347.0, 0, 1 );
+	if ( bMine || Viewer==None || Thr<0.05 )
+	{
+		AmbientSound = None;
+		return;
+	}
+	AmbientSound = Sound'FPVRush';
+	Closing = Vel dot Normal( Viewer.Location - Kit.Location );
+	Dop = FClamp( 18000.0 / (18000.0 - Closing), 0.5, 2.0 );
+	SoundPitch = Clamp( int(64 * (0.85 + 0.4 * Thr) * Dop), 1, 255 );
+	SoundVolume = Clamp( int(255 * (0.08 + 0.85 * (Thr ** 1.6))), 1, 255 );
 }
 
 defaultproperties
@@ -184,6 +207,7 @@ defaultproperties
 	bBlockActors=False
 	bBlockPlayers=False
 	bTravel=False
+	SoundRadius=64
 	DuctAt(0)=(X=0.000000,Y=-5.160000,Z=0.660000)
 	DuctAt(1)=(X=0.000000,Y=5.160000,Z=0.660000)
 }

@@ -41,7 +41,7 @@ var travel byte InvPage;            // which page is on show (0, 1): for the scr
 var CoopDroneKey DroneKey;      // the FPV Drones key just pressed: a tap or a hold (ActivateAugmentation)
 var travel byte DroneGear;      // (host) the FPV drone's speed, kept for the next: 0 slow, 1 medium, 2 fast (CoopFPV.SetGear)
 var CoopFPV MyFPV;             // (its own machine) the FPV drone it flies, and that drone's gun-cam overlay
-var CoopFPVView FPVView;
+var transient CoopFPVView FPVView;   // (transient: a window, never in a map's save)
 var float NextFPVLook;
 var transient bool bWideGrid;       // (FindInventorySlot) both pages searched
 
@@ -638,9 +638,9 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation, Vector m
 	if ( Mult<=0 )
 		return; // hydraulic legs, an immune circuit
 	// The arm blades out all the way, a guard (the user, 2026-10-30: "you're more likely to like be able to fend off
-	// attacks"): a melee hit (its weapon a hand-to-hand one: knives, batons, swords, claws and bites) does a quarter.
+	// attacks"): a melee hit (IsMelee: knives, batons, swords, claws, bites, a dog's leap) does a quarter.
 	if ( CoopMechBlade(Weapon)!=None && CoopMechBlade(Weapon).Mode==1 && instigatedBy!=None
-		&& DeusExWeapon(instigatedBy.Weapon)!=None && DeusExWeapon(instigatedBy.Weapon).bHandToHand )
+		&& IsMelee( DeusExWeapon(instigatedBy.Weapon) ) )
 		Mult *= CoopMechBlade(Weapon).GuardMult;
 	if ( bLogHits )         // (a test's: CoopTestCreatureGuard) each hit as it lands
 		Log( "RevNet: hit on the Mech:" @ Damage @ damageType @ "by" @ instigatedBy @ "weapon" @ instigatedBy.Weapon
@@ -698,6 +698,14 @@ function float GetCurrentGroundSpeed()
 	if ( ModActive( class'CoopMechAugBulwark' ) )
 		Speed *= 0.6;
 	return Speed;
+}
+
+// What the blades' guard fends off: a weapon that strikes, not one that shoots. The game's hand-to-hand ones, and a
+// dog's leap (WeaponDogJump: not hand-to-hand in the game, a pounce); not a spit (a hand-to-hand weapon with a
+// projectile: the greasel's). Measured in CoopTestCreatureGuard (2026-11-13).
+static function bool IsMelee( DeusExWeapon W )
+{
+	return W!=None && W.ProjectileClass==None && (W.bHandToHand || W.IsA('WeaponDogJump'));
 }
 
 // Hydraulic Legs 3: jumps a quarter higher (on the jump's own speed: each mode sets

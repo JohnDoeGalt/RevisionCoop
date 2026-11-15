@@ -229,13 +229,22 @@ function string Remembered()
 {
 	local string S, Who;
 	local int i;
+	local CoopFPVGuided K, Out;
 
 	for ( i=0; i<nKits; i++ )
 	{
 		if ( i>0 )
 			S = S $ ",";
+		// Out of its place (flying, held aside, on its way home) as the players leave: back in it on their return.
+		Out = None;
+		if ( Docked[i]==None || Docked[i].bDeleteMe )
+			foreach AllActors( class'CoopFPVGuided', K )
+				if ( K.Home==Self && K.HomeSlot==i && !K.bDeleteMe && !K.bInert && !K.bSettingOff )
+					Out = K;
 		if ( Docked[i]!=None && !Docked[i].bDeleteMe )
 			S = S $ Docked[i].Kind;
+		else if ( Out!=None )
+			S = S $ Out.Kind;
 		else
 			S = S $ "-1";
 	}

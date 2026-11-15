@@ -50,7 +50,7 @@ replication
 	reliable if ( Role==ROLE_Authority )
 		bDowned;
 	reliable if ( Role==ROLE_Authority )
-		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast, ClientCustomDifficulty, ClientLink;
+		ClientSettle, ClientAskTravel, ClientWeaponValues, ClientRifleRework, ClientBlast, ClientCustomDifficulty, ClientLink, ClientWeaponTrack;
 	reliable if ( Role<ROLE_Authority )
 		ServerAnswerTravel, ServerWeaponValues, ServerLook, ServerSelectFire, ServerCannonMode, ServerBladeMode;
 }
@@ -168,6 +168,7 @@ function ServerWeaponValues( DeusExWeapon W )
 		return;
 	class'CoopRules'.static.SinglePlayerItem( W ); // (if asked before the host's next tick)
 	ClientWeaponValues( W, W.ReloadCount, W.ReloadTime, W.HitDamage, W.BaseAccuracy, W.AccurateRange, W.MaxRange, W.recoilStrength );
+	ClientWeaponTrack( W, W.bCanTrack, W.LockTime );
 	// Its fire mode and shot time as the host has them (a rifle's select fire, RifleRework).
 	W.SetClientAmmoParams( W.bInstantHit, W.bAutomatic, W.ShotTime, W.FireSound, W.ProjectileClass, W.ProjectileSpeed );
 }
@@ -183,6 +184,17 @@ simulated function ClientWeaponValues( DeusExWeapon W, int Count, float Reload, 
 	W.AccurateRange = Range;
 	W.MaxRange = MaxRange;
 	W.recoilStrength = Recoil;
+}
+
+// Whether it locks on (the GEP gun: Revision switches that on as a player takes it, WeaponGEPGun.SetupTracking, on the
+// host only; a net game's lock runs on the firing player's own machine, DeusExWeapon.Tick, where it stayed off:
+// "guidance of the GEP gun does not work on the client", playtest 2026-11-15).
+simulated function ClientWeaponTrack( DeusExWeapon W, bool bTrack, float Time )
+{
+	if ( W==None || Level.NetMode!=NM_Client )
+		return;
+	W.bCanTrack = bTrack;
+	W.LockTime = Time;
 }
 
 // ----------------------------------------------------------------------
@@ -641,6 +653,8 @@ exec function ParseRightClick()
 	G = CoopGameInfo(Level.Game);
 	if ( bDowned )
 		return;
+	if ( G!=None )
+		FrobTarget = G.Twin( FrobTarget ); // (a thing placed in the map: its twin is what is picked up)
 	if ( G!=None && CoopPlayerCore(FrobTarget)!=None && CoopPlayerCore(FrobTarget).bDowned )
 		TryRevive( CoopPlayerCore(FrobTarget) );
 	else if ( G!=None && MedKit(inHand)!=None && ScriptedPawn(FrobTarget)!=None )
@@ -664,6 +678,20 @@ exec function ParseRightClick()
 // A weapon mod or an augmentation upgrade one player finds, every player gets (the user,
 // 2026-11-13: "every mod and upgrade that gets found in the game by either player gets
 // added to all inventories"): CoopGameInfo.ShareFind gives the others theirs.
+// A's twin if it is a thing placed in the map (CoopMapMemory.Twin), this player's frob target with it (the game's
+// pickup goes on to frob that; HandleItemPickup's own parameter hides it there).
+function Actor TwinTarget( Actor A )
+{
+	local Actor T;
+
+	if ( CoopGameInfo(Level.Game)==None )
+		return A;
+	T = CoopGameInfo(Level.Game).Twin( A );
+	if ( FrobTarget==A )
+		FrobTarget = T;
+	return T;
+}
+
 function bool HandleItemPickup( Actor FrobTarget, optional bool bSearchOnly )
 {
 	local DeusExWeapon W;
@@ -671,6 +699,7 @@ function bool HandleItemPickup( Actor FrobTarget, optional bool bSearchOnly )
 	local class<Inventory> Found;
 	local int Copies;
 
+	FrobTarget = TwinTarget( FrobTarget ); // (called straight: ParseRightClick's is twinned already)
 	W = DeusExWeapon(FrobTarget);
 	bEmpty = W!=None && W.PickupAmmoCount==0;
 	// (A right click's pickup is a bSearchOnly one too: ParseRightClick.)
@@ -697,6 +726,14 @@ function bool HandleItemPickup( Actor FrobTarget, optional bool bSearchOnly )
 // once. A downed player crawls, can't fight, use things or be hurt, and the
 // characters stop seeing them.
 // ----------------------------------------------------------------------
+
+// A teammate put where this player stands (joining on the map's start, a respawn or a rejoin beside it) doesn't
+// kill it (the engine's telefrag: the host went down as a client joined on its spot, measured 2026-11-15).
+event EncroachedBy( actor Other )
+{
+	if ( CoopPlayerCore(Other)==None )
+		Super.EncroachedBy( Other );
+}
 
 function Died( pawn Killer, name damageType, vector HitLocation )
 {

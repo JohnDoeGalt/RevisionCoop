@@ -94,13 +94,20 @@ NEST_MESHES = ("CorvanePerch", "CorvaneTrellisBox", "CorvaneTrellisCells", "Corv
                "CorvaneValiseBase", "CorvaneValiseLid", "CorvaneValiseLegs", "CorvaneArgusTier", "CorvaneArgusTripod",
                "CorvaneBurr")
 # Meshes made here with no game data in them (tools/mech_storm.py, tools/blade_arms.py, tools/flykit.py): kept whole.
-WHOLE = ("StormView", "MechBladeView", "JensenBladeView", "MechBladeViewA", "JensenBladeViewA", "FPVDrone", "FlyKit", "FlyKitBody", "FlyKitDuctL", "FlyKitDuctR") + NEST_MESHES
+WHOLE = ("StormView", "MechBladeView", "JensenBladeView", "MechBladeViewA", "JensenBladeViewA", "FPVDrone", "FlyKit", "FlyKitBody", "FlyKitDuctL", "FlyKitDuctR") + NEST_MESHES +     tuple("FlyKitLoad%d" % k for k in range(8))   # (the kits' loads: their payloads' vertices emptied, bindings "payloads")
 FROM_BODY = ()   # meshes of the body's own faces, their triangles emptied too (none now: the views carry their own arms)
 
 
-def template(full, out):
+def template(full, out, bindings=None):
     pkg = ue1mesh.Package(full)
     d = bytearray(pkg.d)
+    # The kits' payloads (tools/flykit.py: the game's own meshes in our loads): those vertices emptied.
+    bindings = bindings or os.path.join(os.path.dirname(full), "art", "bindings.json")
+    for pb in (json.load(open(bindings)).get("payloads", []) if os.path.exists(bindings) else []):
+        m = pkg.read_mesh(pb["mesh"])
+        a = m["verts_off"] + 8 * pb["first"]
+        d[a:a + 8 * len(pb["map"])] = bytes(8 * len(pb["map"]))
+        print("emptied", pb["mesh"], "payload", len(pb["map"]), "vertices")
     for e in pkg.exports:
         if pkg.class_name(e["cls"]) != "Mesh" or e["name"] in WHOLE:
             continue
@@ -139,8 +146,29 @@ def fill(template_path, bindings, out, body_package=None):
             out4 = np.zeros(raw.shape[:2] + (4,), "<i2")
             out4[:, :, :3] = raw
             d[tm["verts_off"]:tm["verts_off"] + out4.nbytes] = out4.tobytes()
+    fill_payloads(B, t, d, os.path.dirname(os.path.dirname(os.path.abspath(body_package or BODY_PACKAGE))))
     open(out, "wb").write(bytes(d))
     print("filled", out)
+
+
+def fill_payloads(B, t, d, rev):
+    """The kits' payloads (bindings "payloads": tools/flykit.py) from this PC's own packages: each mapped game vertex
+    (frame 0, game units) through its affine into the load's frame (raw: 256 a unit)."""
+    import numpy as np
+    pkgs = {}
+    for pb in B.get("payloads", []):
+        path = os.path.join(rev, pb["package"])
+        if path not in pkgs:
+            pkgs[path] = ue1mesh.Package(path)
+        m = pkgs[path].read_mesh(pb["source"])
+        if m["frame_verts"] != pb["frame_verts"] or list(m["scale"]) != pb["scale"] or list(m["origin"]) != pb["origin"]:
+            raise ValueError("this game's %s differs from the one the kits were made for" % pb["source"])
+        g = (np.array(pkgs[path].frames(m)[0], float)[pb["map"]] - np.array(m["origin"])) * np.array(m["scale"])
+        Q = np.hstack([g, np.ones((len(g), 1))]) @ np.array(pb["affine"])
+        out4 = np.zeros((len(Q), 4), "<i2")
+        out4[:, :3] = np.clip(np.rint(Q * 256), -32768, 32767)
+        a = t.read_mesh(pb["mesh"])["verts_off"] + 8 * pb["first"]
+        d[a:a + out4.nbytes] = out4.tobytes()
 
 
 def triangles(m, V):

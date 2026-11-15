@@ -42,7 +42,7 @@ var float LeadGear[3];      // ... and a lead's top speed (on its pilot's keys)
 var byte GearPitch[3];      // its buzz's pitch at each (64: as recorded)
 var string GearNames[3];
 var float FullBattery, NextLook;
-var CoopFPVView View;       // the overlay, on its pilot's own machine
+var transient CoopFPVView View;       // (transient: a window) the overlay, on its pilot's own machine
 var Mesh Quad;              // (the class's) the Mech's drones' own quad, once looked for
 var bool bNoQuad;
 var byte Kind;              // its payload (CoopMechAugDrones.Payloads, 1 up; 0 none: an empty kit), for every machine's look

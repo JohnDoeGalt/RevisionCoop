@@ -11,7 +11,7 @@ class CoopPlayer extends CoopPlayerUI;
 var float TestWalkUntil;
 var string MemLevels;      // (MemLine)
 var bool bTestStall;       // (ClientTest "stall") this game sends the host no more moves
-var CoopBurrMarks BurrMarks; // the Burrs' marks over this player's view (CoopBurr.Tick), on its own machine
+var transient CoopBurrMarks BurrMarks; // (transient: a window, never in a map's save: it crashed the host's level change) the Burrs' marks over this player's view (CoopBurr.Tick), on its own machine
 var CoopTestSeen Watch;    // (ClientTest "watch", "seen": CoopTestFlyKit) what this machine saw
 
 replication
@@ -149,7 +149,13 @@ simulated function ClientTest( string Command )
 	else if ( Command=="inhand" )
 		ServerTestReply( "in hand" @ inHand @ "pending" @ inHandPending );
 	else if ( Command=="exit" )
+	{
+		// No screen left open: the engine's shutdown runs an open screen's closing event on objects it has freed
+		// already (a "General protection fault" box at PersonaInventoryObjectBelt.DestroyWindow, 2026-11-15).
+		if ( DeusExRootWindow(rootWindow)!=None )
+			DeusExRootWindow(rootWindow).ClearWindowStack();
 		ConsoleCommand( "exit" );
+	}
 	else if ( Command=="reconnect" )
 		ConsoleCommand( "reconnect" );
 	else if ( Command=="disconnect" )
@@ -183,6 +189,7 @@ simulated function ClientTest( string Command )
 simulated function ArmsTest( string Command )
 {
 	local int n;
+	local CoopKitLook L;
 	local DeusExWeapon W;
 	local DeusExProjectile P;
 	local Augmentation A;
@@ -218,7 +225,8 @@ simulated function ArmsTest( string Command )
 			S = W.Class.Name @ "clip" @ W.ClipCount $ "/" $ W.ReloadCount @ "reload" @ W.ReloadTime @ "damage" @ W.HitDamage
 				@ "accuracy" @ W.BaseAccuracy @ "range" @ W.AccurateRange $ "/" $ W.MaxRange @ "recoil" @ W.recoilStrength
 				@ "ammo" @ W.AmmoType @ W.AmmoType.AmmoAmount @ "state" @ W.GetStateName() @ "auto" @ W.bAutomatic @ "shot" @ W.ShotTime
-				@ "ready" @ W.bClientReadyToFire @ "busy" @ W.bInProcess @ "anim" @ W.AnimSequence @ "immune" @ NintendoImmunityTimeLeft;
+				@ "ready" @ W.bClientReadyToFire @ "busy" @ W.bInProcess @ "anim" @ W.AnimSequence @ "immune" @ NintendoImmunityTimeLeft
+				@ "track" @ W.bCanTrack @ "locktime" @ W.LockTime;
 		ServerTestReply( "client's weapon:" @ S @ "| energy" @ int(Energy) @ "| water speed" @ WaterSpeed );
 	}
 	else if ( Command=="fx" ) // the effects on this machine (a Mech's burst)
@@ -251,6 +259,12 @@ simulated function ArmsTest( string Command )
 			else if ( Ammo(Item)!=None )
 				S = S @ Item.Class.Name $ "x" $ Ammo(Item).AmmoAmount;
 		ServerTestReply( "client's items:" $ S );
+	}
+	else if ( Command=="rush" )
+	{
+		foreach AllActors( class'CoopKitLook', L )
+			S = S @ L.AmbientSound @ L.SoundPitch @ L.SoundVolume;
+		ServerTestReply( "rush" $ S );
 	}
 	else if ( Command=="invall" )
 	{

@@ -80,6 +80,7 @@ def main(version):
     shutil.copy(os.path.join(here, 'src', 'relay', 'RevCoop.exe'), relay)
     shutil.copy(os.path.join(DL, 'coop', 'HXCoop', 'steam_api.dll'), relay)
     open(os.path.join(relay, 'steam_appid.txt'), 'w').write('480')
+    open(os.path.join(relay, 'version.txt'), 'w').write(version + '\n')   # (for the launcher's window title)
 
     lines = [f'{f}|{os.path.getsize(os.path.join(REV, f))}' for f in CHECKED]
     write(os.path.join(pay, 'versions.txt'), '\n'.join(lines) + '\n')

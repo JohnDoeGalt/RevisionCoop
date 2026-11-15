@@ -19,6 +19,9 @@ var int Cuts;
 var Mesh BladesWere;
 var bool bBladesHidden;
 
+var float DrawAt;     // when the client's Mech began drawing its cannon (the draw's shots: Tick)
+var int DrawShots;
+
 function Run( int t )
 {
 	M = CoopMechPlayer(Remote);
@@ -86,6 +89,7 @@ function Tick( float DeltaTime )
 	Super.Tick( DeltaTime );
 	if ( M!=None )
 		BladeSteps();
+	DrawSteps();
 	if ( NextAt==0 || Level.TimeSeconds<NextAt )
 		return;
 	NextAt = Level.TimeSeconds + 2;
@@ -106,6 +110,7 @@ function Tick( float DeltaTime )
 			Host.ConsoleCommand( "shot" );
 			Log( "RevNetTest: mechlook shot 0 nothing in hand", 'RevNet' );
 			M.PutInHand( M.FindInventoryType( class'CoopMechCannon' ) );
+			DrawAt = Level.TimeSeconds; // the draw, as the host sees it (Tick)
 			Host.PutInHand( Host.FindInventoryType( class'CoopMechBlade' ) );
 			break;
 		case 1:
@@ -211,5 +216,23 @@ function Tick( float DeltaTime )
 		default:
 			NextAt = 0;
 			Done();
+	}
+}
+
+// The client's cannon coming out from behind its collarbone (CoopMechParts.MountPath, 0.7 s), as the host
+// sees it: four shots through the draw.
+function DrawSteps()
+{
+	local float When[4];
+
+	When[0] = 0.1;
+	When[1] = 0.3;
+	When[2] = 0.5;
+	When[3] = 0.75;
+	if ( DrawAt>0 && DrawShots<4 && Level.TimeSeconds>=DrawAt + When[DrawShots] )
+	{
+		Host.ConsoleCommand( "shot" );
+		Log( "RevNetTest: mechlook draw shot" @ DrawShots @ "at" @ (Level.TimeSeconds - DrawAt) @ "s", 'RevNet' );
+		DrawShots++;
 	}
 }

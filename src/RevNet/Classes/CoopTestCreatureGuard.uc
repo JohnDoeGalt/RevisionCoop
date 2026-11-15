@@ -49,6 +49,7 @@ function Direct()
 	local Inventory Inv;
 	local DeusExWeapon D;
 	local string S;
+	local int Tendon, Guard;
 
 	if ( SP==None )
 		return;
@@ -60,8 +61,17 @@ function Direct()
 	{
 		D = DeusExWeapon(Inv);
 		if ( D!=None )
+		{
+			Tendon = Hit( D, 0 );
+			Guard = Hit( D, 1 );
 			Log( "RevNetTest: creatureguard:" @ Kinds[Who].Name @ D.Class.Name @ "(" $ D.WeaponDamageType() $ ") 40 on the Mech: tendon"
-				@ Hit( D, 0 ) @ "guard" @ Hit( D, 1 ), 'RevNet' );
+				@ Tendon @ "guard" @ Guard, 'RevNet' );
+			// A pounce, a bite, a claw: the guard takes it. A spit (a projectile): not.
+			if ( D.ProjectileClass!=None )
+				Verdict( D.Class.Name @ "(a spit) not guarded", Guard==Tendon );
+			else
+				Verdict( D.Class.Name @ "(melee) guarded", Guard<Tendon );
+		}
 	}
 	W.Mode = 0;
 	SP.SwitchToBestWeapon();
@@ -172,4 +182,12 @@ defaultproperties
 	Kinds(1)=Class'DeusEx.Mutt'
 	Kinds(2)=Class'DeusEx.Greasel'
 	Kinds(3)=Class'DeusEx.Karkian'
+}
+
+function Verdict( string What, bool bOk )
+{
+	if ( bOk )
+		Log( "RevNetTest: CHECK" @ What @ "ok", 'RevNet' );
+	else
+		Log( "RevNetTest: CHECK" @ What @ "BAD", 'RevNet' );
 }
