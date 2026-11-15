@@ -48,7 +48,7 @@ Done (unreleased, on the dev branch; CoopTestRound2, CoopTestTurns, CoopTestRejo
   and after what (a hack, a log-in)?
 - P11 a turret's crosshair colour is its side for every machine (CoopClient.Turrets, CoopAugDisplay).
 - P13 a persona screen's own key closes it (CoopRootWindow.InvokeUIScreen).
-- P14 the mod's version in the launcher's title (version.txt; not seen running here).
+- P14 the mod's version in the launcher's title (version.txt beside RevCoop.exe; seen: 'Deus Ex: Revision Co-op 0.6.4'; 0.6.4, a new launcher build).
 - P15 weapon mods to everyone: kept (the user, 2026-11-15: "let's keep that").
 
 - P8 (second half) the rocket that flew on for a client after it went off: the client's gun with its lock off fired
