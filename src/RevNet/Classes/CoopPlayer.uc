@@ -188,8 +188,9 @@ simulated function ClientTest( string Command )
 // ("arms"), its projectiles ("shots"), its items ("inv"), an aug ("aug <class>").
 simulated function ArmsTest( string Command )
 {
-	local int n;
+	local int n, Lit;
 	local CoopKitLook L;
+	local DataVaultImage Pic;
 	local DeusExWeapon W;
 	local DeusExProjectile P;
 	local Augmentation A;
@@ -259,6 +260,19 @@ simulated function ArmsTest( string Command )
 			else if ( Ammo(Item)!=None )
 				S = S @ Item.Class.Name $ "x" $ Ammo(Item).AmmoAmount;
 		ServerTestReply( "client's items:" $ S );
+	}
+	else if ( Command=="images" ) // (CoopTestRound2) this machine's picture items: all, and those that can be seen
+	{
+		foreach AllActors( class'DataVaultImage', Pic )
+		{
+			n++;
+			if ( !Pic.bHidden )
+			{
+				Lit++;
+				S = S @ Pic.Class.Name @ Pic.GetStateName();
+			}
+		}
+		ServerTestReply( "images" @ n @ "seen" @ Lit $ S );
 	}
 	else if ( Command=="rush" )
 	{

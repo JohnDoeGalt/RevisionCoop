@@ -231,8 +231,11 @@ simulated function PutImage( class<DataVaultImage> ImageClass, bool bLive )
 	}
 	if ( Level.NetMode==NM_Client )
 	{
-		// Only for the Images screen (the host's copy is the one that's carried).
+		// Only for the Images screen (the host's copy is the one that's carried). Out of its pickup state, as a thing
+		// given is (Inventory.GiveTo): left in it, that state's own start showed it again a moment later, a "DO NOT
+		// PLACE" cube lying where the player stood (playtest 2026-11-15: every picture, on clients).
 		Image.BecomeItem();
+		Image.GotoState( 'Idle2' );
 		Image.SetPhysics( PHYS_None );
 		Image.SetBase( Self );
 	}

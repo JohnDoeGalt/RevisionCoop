@@ -14,7 +14,8 @@ var DeusExWeapon Nade;
 var bool bPong, bGrid, bThrown;
 var class<Inventory> PlacedClass, NadeClass;
 var vector GunAt, PlacedAt;
-var string Tops, Talks, Track;
+var string Tops, Talks, Track, Pics;
+var bool bPics;
 var int Rockets;
 var bool bShot;
 var Rocket Shot;
@@ -164,6 +165,18 @@ function Run( int t )
 		Remote.ClientUITest( "console", "ShowInventoryWindow" ); // P13: the screen's own key opens it, then closes it
 	else if ( t==56 || t==58 )
 		Remote.ClientUITest( "talk" );                          // P7: no chat prompt over a screen
+	else if ( t==44 )
+	{
+		// The game's pictures (given in a conversation, read off a datacube): shared to every player; on a client's
+		// own machine none may be seen (a "DO NOT PLACE" cube lay there: playtest 2026-11-15).
+		Host.PutImage( class'Image01_LibertyIsland', true );
+		Remote.PutImage( class'Image01_TerroristCommander', true );
+	}
+	else if ( t==48 )
+	{
+		bPics = true;
+		Remote.ClientTest( "images" );
+	}
 	else if ( t==54 )
 	{
 		// P8: the GEP gun locks on for a client (its own copy's bCanTrack, the host's: ClientWeaponTrack).
@@ -203,6 +216,7 @@ function Run( int t )
 		Verdict( "the client's unlocked rocket is the host's alone: none of its own flying on a second later (" $ Rockets @ "there)", bShot && Rockets==0 );
 		Verdict( "a placed thing the client picked up has its place in the client's own inventory grid", bGrid );
 		Verdict( "the client's grenade was thrown", bThrown );
+		Verdict( "the client has its pictures and sees none lying about (" $ Pics $ ")", InStr( Pics, "images " )==0 && int( Mid( Pics, 7 ) )>=2 && InStr( Pics, " seen 0" )>0 );
 		Verdict( "the GEP gun locks on for the client (its own copy: " $ Track $ ")", InStr( Track, "track True" )>=0 );
 		Verdict( "the inventory key opens the screen, then closes it (" $ Tops $ ")", InStr( Tops, "CoopScreenInventory" )>=0 && Right( Tops, 5 )==" None" );
 		Verdict( "the chat key does nothing over a screen, and opens the chat without one (" $ Talks $ ")", Talks==" False True" );
@@ -243,6 +257,11 @@ function Reply( CoopPlayer From, string Text )
 			Rockets++;
 			Text = Mid( Text, i + 7 );
 		}
+	}
+	if ( bPics && Left( Text, 7 )=="images " )
+	{
+		bPics = false;
+		Pics = Text;
 	}
 	if ( Left( Text, 12 )=="talk typing=" )
 		Talks = Talks @ Mid( Text, 12, InStr( Text, " top" ) - 12 );
