@@ -72,6 +72,11 @@ function Use( Conversation C )
 	}
 	con = C;
 	saveRadiusDistance = con.radiusDistance;
+	// A conversation is its package's object and outlives the map: its events may still hold the actors of a map
+	// since left (Speech writes the host's speakers into them; a conversation the map change cut short was never
+	// unbound). BindPlayer reads them: a crash (playtest 2026-11-20: "UObject::execClassContext ...
+	// CoopConClient.Use", in UNATCO HQ after the island). Unbound first.
+	con.ClearBindEvents();
 	con.BindEvents( ConActorsBound, invokeActor );
 	if ( con.ownerRefCount>1 && invokeActor!=None )
 		con.BindActorEvents( invokeActor );

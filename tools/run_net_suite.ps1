@@ -28,7 +28,7 @@ $suite = [ordered]@{
 	NestDefense = @("-Seconds", 160, "-HostAgent", "Mech")
 	NestLate = @("-Seconds", 230, "-Clients", 2, "-ClientGap", 45)
 	NestTravel = @("-Seconds", 260)
-	Paul = @("-Seconds", 260); PaulB = @("-Seconds", 260); HostLeave = @("-Seconds", 100); Pickup = @("-Seconds", 120); Share = @("-Seconds", 90); Robot = @("-Seconds", 90); Wipe = @("-Seconds", 240); WipeB = @("-Seconds", 240); CreatureGuard = @("-Seconds", 140, "-ClientAgent", "Mech"); Rush = @("-Seconds", 60); Payloads = @("-Seconds", 40); Round2 = @("-Seconds", 120); Round2B = @("-Seconds", 110); Turns = @("-Seconds", 80); Revive = @("-Seconds", 50); Sparks = @("-Seconds", 50)
+	Paul = @("-Seconds", 260); PaulB = @("-Seconds", 260); HostLeave = @("-Seconds", 100); Pickup = @("-Seconds", 120); Share = @("-Seconds", 90); Robot = @("-Seconds", 90); Wipe = @("-Seconds", 240); WipeB = @("-Seconds", 240); CreatureGuard = @("-Seconds", 140, "-ClientAgent", "Mech"); Rush = @("-Seconds", 60); Payloads = @("-Seconds", 40); Round2 = @("-Seconds", 120); Round2B = @("-Seconds", 110); Turns = @("-Seconds", 80); Revive = @("-Seconds", 50); Sparks = @("-Seconds", 50); DropAway = @("-Seconds", 60)
 }
 $pass = 0; $fail = 0
 foreach ($name in $suite.Keys) {

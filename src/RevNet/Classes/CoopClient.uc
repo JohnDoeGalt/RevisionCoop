@@ -15,7 +15,7 @@
 //=============================================================================
 class CoopClient extends Info;
 
-var bool bWeatherOff;
+var bool bWeatherOff, bDropsLocal, bSelfLogged;
 var float NextBodyCheck;
 var string PatchedClasses;  // weapon classes given single-player values here (CoopRules)
 var DeusExWeapon Held[128]; // characters' weapons a second ago (DroppedWeapons)
@@ -56,6 +56,23 @@ simulated event Tick( float DeltaTime )
 	}
 	if ( Role==ROLE_Authority )
 	{
+		// The weather's particles are born local: a precipitator spawned after this actor ticks after it, and its
+		// drops went out before the loop below reached them. On a client such a drop has no owner, fails twice a
+		// tick and cannot be deleted there (playtest 2026-11-20: a 4 GB log of "RevRaindrop ... Raindrop.Tick
+		// Accessed None", then a crash).
+		if ( !bDropsLocal )
+		{
+			bDropsLocal = true;
+			foreach AllActors( class'PrecipitationZone', Rain )
+			{
+				if ( Rain.PrecipClass!=None )
+					Rain.PrecipClass.default.RemoteRole = ROLE_None;
+				if ( Rain.AltPrecipClass!=None )
+					Rain.AltPrecipClass.default.RemoteRole = ROLE_None;
+				if ( Rain.WaterImpactClass!=None )
+					Rain.WaterImpactClass.default.RemoteRole = ROLE_None;
+			}
+		}
 		KeepWeather( Level.TimeSeconds>=NextSettleCheck ); // first: what it spawns stays here (below)
 		foreach AllActors( class'Raindrop', Drop )
 			Drop.RemoteRole = ROLE_None;
@@ -96,6 +113,14 @@ simulated event Tick( float DeltaTime )
 		}
 		return;
 	}
+	// (What this machine's own player is like a few seconds in: the testers' "spawns drunk", 2026-11-20.)
+	if ( !bSelfLogged && Level.TimeSeconds>6 && DeusExPlayer(GetPlayerPawn())!=None )
+	{
+		bSelfLogged = true;
+		Log( "RevNetTest: this machine's player at" @ GetPlayerPawn().Location @ "drug" @ DeusExPlayer(GetPlayerPawn()).drugEffectTimer
+			@ "poison" @ DeusExPlayer(GetPlayerPawn()).poisonCounter @ "fov" @ GetPlayerPawn().DesiredFOV @ "of" @ GetPlayerPawn().default.DesiredFOV
+			@ "health" @ GetPlayerPawn().Health @ "state" @ GetPlayerPawn().GetStateName(), 'RevNet' );
+	}
 	// Weather here is set up half (a zone starts a precipitator for the local player,
 	// the shelter nodes and what the host sent before CoopClient kept it back have no
 	// zone): its particles fail every tick. Off: the zones, then what they started.
@@ -117,7 +142,12 @@ simulated event Tick( float DeltaTime )
 			P.Destroy();
 	}
 	foreach AllActors( class'Raindrop', Drop )
-		Drop.Destroy();
+		if ( !Drop.Destroy() )
+		{
+			// (The host's, which only the host can delete: still and unseen until it does.)
+			Drop.Disable( 'Tick' );
+			Drop.bHidden = true;
+		}
 	// Things the host moves (a box carried, thrown, pushed) only go where the host
 	// puts them: a copy's own physics would drop a carried box to the floor here.
 	foreach AllActors( class'DeusExDecoration', D )
@@ -184,8 +214,15 @@ function Turrets()
 	local AutoTurret T;
 	local Pawn Nobody;
 	local int Side;
+	local ComputerSecurity C;
 
 	Nobody = CoopGameInfo(Level.Game).Nobody;
+	// A security terminal is no team's: a login gives it the player's team, and the player's own right click then
+	// refuses a terminal of its team unless a turret has that very player as its safe target (deathmatch's rule,
+	// DeusExPlayer.ParseRightClick): after one player logged in, no other could (playtest 2026-11-20: "That
+	// computer already belongs to your team").
+	foreach AllActors( class'ComputerSecurity', C )
+		C.team = -1;
 	foreach AllActors( class'AutoTurret', T )
 	{
 		// (Nobody too in place of a player a deathmatch screen made its safe target: the turret's own check would

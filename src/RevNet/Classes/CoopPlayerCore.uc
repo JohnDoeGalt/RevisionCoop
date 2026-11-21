@@ -821,6 +821,10 @@ function TakeDamage( int Damage, Pawn instigatedBy, Vector hitlocation, Vector m
 {
 	if ( bDowned )
 		return;
+	// A teammate standing on this player's head (PlayerPawn.BaseChange: "stomped"; playtest 2026-11-20: "standing
+	// on top of one another deals damage to the bottom player"): none.
+	if ( damageType=='stomped' && PlayerPawn(instigatedBy)!=None && CoopGameInfo(Level.Game)!=None )
+		return;
 	bTakingDamage = CoopGameInfo(Level.Game)!=None;
 	Super.TakeDamage( Damage, instigatedBy, hitlocation, momentum, damageType );
 	bTakingDamage = false;

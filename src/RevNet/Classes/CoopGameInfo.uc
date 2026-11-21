@@ -70,6 +70,8 @@ var bool bSharing;              // ShareFind giving the others theirs (their pic
 var localized string SharedFindText, SharedYoursText, SharedFloorText;
 var bool bEntryWait;            // (Entry) waiting to see if a client that lost its host is still here (Timer)
 var Conversation HostBoundCon;  // the host's conversation its player's parts are bound to the host in (Tick)
+var string ArrivalPortal;      // where this map's first player came in (Login)
+var bool bArrivalSet;
 
 event InitGame( string Options, out string Error )
 {
@@ -424,6 +426,17 @@ event PlayerPawn Login( string Portal, string Options, out string Error, class<P
 
 	if ( IsMenuMap() )
 		return Super.Login( Portal, Options, Error, SpawnClass );
+
+	// Every player comes in where the first did (the host, by the way the team took: "map#place"). A client that
+	// joins through the launcher's relay reconnects by its own address, without the place, and came in on the
+	// map's plain start: HQ's armory, the island's dock, far from the host (playtest 2026-11-20; CoopTestRevisit
+	// through tools/run_relay_test.ps1: 3782 and 8565 apart).
+	if ( !bArrivalSet )
+	{
+		bArrivalSet = true;
+		ArrivalPortal = Portal;
+	}
+	Portal = ArrivalPortal;
 
 	// A saved game keeps its players, waiting for them (GameInfo.Login takes an
 	// unoccupied one; under single-player rules any of them): this player gets back

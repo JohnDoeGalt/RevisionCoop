@@ -16,4 +16,15 @@ function GetTargetReticleColor( Actor target, out Color xColor )
 		xColor = colGreen;
 		targetPlayerColor = xColor;
 	}
+	// Another player is a teammate (the HUD's own: green only under team deathmatch, else red; playtest 2026-11-20:
+	// "players get a red enemy crosshair instead of green"). A camera a player hacked is the team's (its own: red
+	// outside deathmatch; "hacked cameras are red").
+	else if ( DeusExPlayer(target)!=None && target!=player && player.Level.NetMode!=NM_Standalone )
+	{
+		xColor = colGreen;
+		targetPlayerColor = xColor;
+	}
+	else if ( SecurityCamera(target)!=None && SecurityCamera(target).bActive && SecurityCamera(target).team!=-1
+		&& player.Level.NetMode!=NM_Standalone )
+		xColor = colGreen;
 }

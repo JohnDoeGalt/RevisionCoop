@@ -31,6 +31,23 @@ function Copy-IniSections($From, $To, $Sections) {
 	return $true
 }
 
+# The player's values for keys of $Sections that the new ini has too (its new keys and the rest of it stay).
+function Merge-IniKeys($From, $To, $Sections) {
+	if (-not (Test-Path $From)) { return }
+	$old = @{}; $cur = $null
+	foreach ($l in Get-Content $From) {
+		if ($l -match '^\[(.+)\]\s*$') { $cur = $Matches[1] }
+		elseif ($cur -and ($Sections -contains $cur) -and $l -match '^([^=;]+)=(.*)$') { $old["$cur|$($Matches[1])"] = $l }
+	}
+	$out = New-Object System.Collections.Generic.List[string]; $cur = $null
+	foreach ($l in Get-Content $To) {
+		if ($l -match '^\[(.+)\]\s*$') { $cur = $Matches[1] }
+		elseif ($cur -and $l -match '^([^=;]+)=' -and $old.ContainsKey("$cur|$($Matches[1])")) { $l = $old["$cur|$($Matches[1])"] }
+		$out.Add($l)
+	}
+	Set-Content $To $out -Encoding Default
+}
+
 function Find-DeusEx {
 	$steam = (Get-ItemProperty "HKCU:\Software\Valve\Steam" -ErrorAction SilentlyContinue).SteamPath
 	$libs = @()
@@ -111,6 +128,9 @@ if (Test-Path $ini) { Copy-Item $ini $oldIni -Force }
 Copy-Item (Join-Path $pay "RevNet.ini"), (Join-Path $pay "RevNetDefault.ini"), (Join-Path $pay "RevNetDefUser.ini") $net -Force
 if (Copy-IniSections $oldIni $ini $display) { Write-Host "Kept your display and sound settings." }
 elseif (Copy-IniSections (Join-Path $revSys "Revision.ini") $ini $display) { Write-Host "Using your Revision display and sound settings." }
+# And the game options kept in this ini: weather, loading screens and hints, the detail settings (the testers, 2026-11-20:
+# "options reset ... on new version").
+Merge-IniKeys $oldIni $ini @("precipitation.Precipitator", "RevNet.CoopConsole", "Revision.RevConsole", "RF.RFConsole", "RenderExt.RenderExt", "Engine.Player", "DeusEx.DeusExGameEngine")
 Remove-Item $oldIni -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $pay "Modes\*.mode") (Join-Path $net "Modes") -Force
 

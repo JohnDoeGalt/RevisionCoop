@@ -148,6 +148,8 @@ simulated function ClientTest( string Command )
 		TestWalkUntil = Level.TimeSeconds + float( Mid( Command, 5 ) );
 	else if ( Command=="inhand" )
 		ServerTestReply( "in hand" @ inHand @ "pending" @ inHandPending );
+	else if ( Command=="near" )
+		ArmsTest( Command );
 	else if ( Command=="exit" )
 	{
 		// No screen left open: the engine's shutdown runs an open screen's closing event on objects it has freed
@@ -251,6 +253,13 @@ simulated function ArmsTest( string Command )
 		foreach AllActors( class'DeusExProjectile', P )
 			S = S @ P.Class.Name $ "(speed" @ int(VSize(P.Velocity)) @ "timer" @ P.TimerRate @ "stuck" @ P.bStuck $ ")";
 		ServerTestReply( "client's projectiles:" $ S );
+	}
+	else if ( Command=="near" ) // (CoopTestDropAway) the things lying near this machine's player
+	{
+		foreach RadiusActors( class'Inventory', Item, 600 )
+			if ( Item.Owner==None && !Item.bHidden )
+				S = S @ Item.Class.Name;
+		ServerTestReply( "near:" $ S );
 	}
 	else if ( Command=="inv" )
 	{

@@ -46,19 +46,26 @@ function Run( int t )
 		if ( Kit!=None )
 			KitAt = Kit.Location;
 		Log( "RevNetTest: killed" @ P @ "moved box" @ BoxName @ "left a medkit:" @ (Kit!=None), 'RevNet' );
+		// (Playtest 2026-11-20: on a map change the client "spawns drunk", in the wrong place, "reverts to old
+		// state": what it has when it leaves, and where the map's own way leads.)
+		Remote.Credits = 777;
+		Arrival( "leaving the Island" );
 		SetStage( 1 );
 	}
 	else if ( Stage==1 && Level.Outer.Name=='01_NYC_UNATCOIsland' && t==9 )
-		Level.Game.SendPlayer( Host, "01_NYC_UNATCOHQ" ); // (the body has fallen by now)
+		Level.Game.SendPlayer( Host, WayTo("UNATCOHQ", "01_NYC_UNATCOHQ") ); // (the body has fallen by now)
 	else if ( Stage==1 && Level.Outer.Name=='01_NYC_UNATCOHQ' && t==5 )
 	{
 		Log( "RevNetTest: on HQ with the client, going back", 'RevNet' );
+		Arrival( "on HQ" );
+		Remote.Credits = 888;
 		SetStage( 2 );
-		Level.Game.SendPlayer( Host, "01_NYC_UNATCOIsland" );
+		Level.Game.SendPlayer( Host, WayTo("UNATCOIsland", "01_NYC_UNATCOIsland") );
 	}
 	else if ( Stage==2 && Level.Outer.Name=='01_NYC_UNATCOIsland' && t==5 )
 	{
 		SetStage( 3 );
+		Arrival( "back on the Island" );
 		Log( "RevNetTest: revisit: client in the game health=" $ Remote.Health
 			@ "removed NPC back=" $ (FindNPC('UNATCOTroop1')!=None)
 			@ "killed NPC back=" $ (FindNPC(Victim)!=None)
@@ -67,6 +74,40 @@ function Run( int t )
 			@ "medkit on the ground=" $ KitNear( KitAt ), 'RevNet' );
 		Done();
 	}
+}
+
+// Where the client is and what it has, on a map just reached.
+function Arrival( string Where )
+{
+	local Inventory I;
+	local int n;
+
+	for ( I=Remote.Inventory; I!=None; I=I.Inventory )
+		n++;
+	Log( "RevNetTest: arrival" @ Where $ ": host at" @ Host.Location @ "client at" @ Remote.Location
+		@ "apart" @ int(VSize(Host.Location - Remote.Location)) @ "drug" @ Remote.drugEffectTimer
+		@ "credits" @ Remote.Credits @ "items" @ n @ "health" @ Remote.Health @ "state" @ Remote.GetStateName(), 'RevNet' );
+}
+
+// The map's own way to another map (its exit's destination, with the place it leads to), else Plain.
+function string WayTo( string MapPart, string Plain )
+{
+	local MapExit E;
+	local Teleporter T;
+
+	foreach AllActors( class'MapExit', E )
+		if ( InStr(Caps(E.DestMap), Caps(MapPart))>=0 )
+		{
+			Log( "RevNetTest: the map's way:" @ E.DestMap, 'RevNet' );
+			return E.DestMap;
+		}
+	foreach AllActors( class'Teleporter', T )
+		if ( InStr(Caps(T.URL), Caps(MapPart))>=0 )
+		{
+			Log( "RevNetTest: the map's way:" @ T.URL, 'RevNet' );
+			return T.URL;
+		}
+	return Plain;
 }
 
 function ScriptedPawn FindNPC( name N )
